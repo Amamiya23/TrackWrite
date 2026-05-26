@@ -1,0 +1,9 @@
+{"file": ".trellis/tasks/05-26-trackwrite-android-mvp/prd.md", "reason": "Check source of truth: verify implementation against MVP requirements, acceptance criteria, defaults, and out-of-scope boundaries."}
+{"file": "DESIGN.md", "reason": "Verify UI/UX against TrackWrite design constraints: calm native Android feel, accessible states, no decorative gradients/glassmorphism/cyberpunk dashboard patterns."}
+{"file": "PRODUCT.md", "reason": "Verify user workflow, safety expectations, accessibility principles, and photography-first product behavior."}
+{"file": "docs/maps.md", "reason": "Verify AMap setup, key/permission/privacy configuration, ProGuard notes, and provider-boundary implementation details."}
+{"file": ".trellis/tasks/05-26-trackwrite-android-mvp/research/android-location-recording.md", "reason": "Verify foreground-service recording behavior, permission handling, process-recovery scope, and power-conscious location strategy."}
+{"file": ".trellis/tasks/05-26-trackwrite-android-mvp/research/android-exif-storage.md", "reason": "Verify photo source handling, scoped-storage safety, original-preserving export path, explicit in-place mutation grants, per-photo failures, and post-write EXIF verification."}
+{"file": ".trellis/tasks/05-26-trackwrite-android-mvp/research/map-search-providers.md", "reason": "Verify AMap provider decision, search/map scope, and coordinate/provider boundary assumptions."}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "Check data flow across UI, services, storage, GPX, matching, EXIF, and map provider adapters for boundary drift and format mismatches."}
+{"file": ".trellis/spec/guides/code-reuse-thinking-guide.md", "reason": "Check for unnecessary duplicated constants/utilities/configuration and ensure implementation searched existing project patterns first."}

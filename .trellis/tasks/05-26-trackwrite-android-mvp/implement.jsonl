@@ -1,0 +1,9 @@
+{"file": ".trellis/tasks/05-26-trackwrite-android-mvp/prd.md", "reason": "Implementation source of truth: MVP scope, requirements, acceptance criteria, and technical decisions."}
+{"file": "DESIGN.md", "reason": "Design source of truth: quiet Android product direction, visual constraints, accessibility, and anti-references."}
+{"file": "PRODUCT.md", "reason": "Product source of truth: target users, primary photography workflow, safety expectations, and accessibility principles."}
+{"file": "docs/maps.md", "reason": "AMap integration reference for map display, location blue dot, overlays, permissions, key metadata, search/location SDK notes, and provider constraints."}
+{"file": ".trellis/tasks/05-26-trackwrite-android-mvp/research/android-location-recording.md", "reason": "Research for foreground service recording, permissions, process recovery boundaries, and power-conscious location updates."}
+{"file": ".trellis/tasks/05-26-trackwrite-android-mvp/research/android-exif-storage.md", "reason": "Research for Android photo selection, scoped storage, EXIF read/write, copy-export safety, in-place mutation grants, and verification."}
+{"file": ".trellis/tasks/05-26-trackwrite-android-mvp/research/map-search-providers.md", "reason": "Research and decision record for choosing AMap as the MVP map/search provider and keeping provider boundaries explicit."}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "Implementation spans Android UI, foreground service, persistence, MediaStore/SAF, EXIF writes, GPX import/export, and provider adapters; use this to keep data flow boundaries explicit."}
+{"file": ".trellis/spec/guides/code-reuse-thinking-guide.md", "reason": "Bootstrap and feature work will create shared utilities/configuration; search before adding constants or duplicate helpers."}

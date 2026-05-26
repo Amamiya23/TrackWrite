@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="trackwrite_background">#F7F8F5</color>
+    <color name="trackwrite_text">#18201C</color>
+    <color name="trackwrite_accent">#1D6B57</color>
+</resources>
