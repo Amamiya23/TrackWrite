@@ -21,6 +21,9 @@ UI, services, storage, MediaStore, EXIF, or AMap.
   `TRACKWRITE_AMAP_API_KEY` Gradle property through manifest placeholders.
 - Do not parse user-supplied GPX XML with external entity or external DTD loading
   enabled.
+- Do not claim AMap map/search is implemented unless the AMap SDK artifacts are
+  present in the Gradle build and the UI can perform search-result and map-tap
+  binding. Until then, keep direct-coordinate manual fallback explicit.
 
 ---
 
@@ -33,6 +36,12 @@ UI, services, storage, MediaStore, EXIF, or AMap.
 - Photo matching defaults must stay aligned with the PRD: camera offset `0`,
   max time difference `5 minutes`, and start/end endpoint fallback enabled.
 - GPX import/export and domain matching must operate on WGS84 coordinates.
+- Active recording uses a foreground service with `foregroundServiceType="location"`
+  and an ongoing notification. Recovery scope is app/process recovery only;
+  reboot and user force-stop auto-resume are out of scope for the MVP baseline.
+- Photo EXIF writes must be reported per photo. Exported copies are the safer
+  default; in-place original mutation is a separate confirmed action and may fail
+  if Android write grants are unavailable.
 
 ---
 

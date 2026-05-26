@@ -2,6 +2,7 @@ package com.trackwrite.app.domain
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
+import org.junit.Assert.fail
 import org.junit.Test
 import java.time.Instant
 
@@ -34,5 +35,23 @@ class GpxCodecTest {
         assertEquals(2, decoded.points.size)
         assertEquals(30.1, decoded.points[0].position.latitude, 0.0)
         assertEquals(15.0, decoded.points[0].position.altitudeMeters ?: -1.0, 0.0)
+    }
+
+    @Test
+    fun rejectsDoctypeDeclarations() {
+        val xml = """
+            <?xml version="1.0"?>
+            <!DOCTYPE gpx [ <!ENTITY xxe SYSTEM "file:///etc/passwd"> ]>
+            <gpx version="1.1" creator="test">
+                <trk><name>&xxe;</name><trkseg></trkseg></trk>
+            </gpx>
+        """.trimIndent()
+
+        try {
+            codec.decode("bad", xml)
+            fail("Expected GPX parser to reject DOCTYPE declarations.")
+        } catch (_: Exception) {
+            // Expected: GPX imports are user-supplied XML and must not allow DTD/XXE.
+        }
     }
 }

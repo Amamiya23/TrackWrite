@@ -24,7 +24,11 @@ app/
     │   ├── AndroidManifest.xml
     │   ├── java/com/trackwrite/app/
     │   │   ├── MainActivity.kt
+    │   │   ├── data/
     │   │   └── domain/
+    │   │   ├── io/
+    │   │   ├── media/
+    │   │   └── recording/
     │   └── res/
     └── test/java/com/trackwrite/app/domain/
 ```
@@ -35,6 +39,13 @@ app/
 
 - `domain/`: platform-independent models and algorithms (`Track`, `TrackPoint`,
   `GeoPoint`, photo-to-track matching, GPX import/export, track statistics).
+- `data/`: local app persistence and repository code. Keep Android storage APIs
+  here or in lower integration layers, not in `domain/`.
+- `recording/`: foreground-service recording state, notifications, and Android
+  location provider integration.
+- `media/`: Android photo/document selection, EXIF read/write, copy export, and
+  per-photo geotagging results.
+- `io/`: share/export adapters for external file formats such as GPX.
 - Android integration code should be added outside `domain/` in focused packages
   such as recording, storage, media, map, or UI.
 - Keep provider-specific coordinate conversions at integration boundaries. Domain
