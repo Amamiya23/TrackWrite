@@ -39,6 +39,8 @@ UI, services, storage, MediaStore, EXIF, or AMap.
 - Active recording uses a foreground service with `foregroundServiceType="location"`
   and an ongoing notification. Recovery scope is app/process recovery only;
   reboot and user force-stop auto-resume are out of scope for the MVP baseline.
+- Track history persists through Room. If legacy `tracks.json` exists, migrate it
+  once into `trackwrite.db` and keep the old file as `tracks.migrated.json`.
 - Photo EXIF writes must be reported per photo. Exported copies are the safer
   default; in-place original mutation is a separate confirmed action and may fail
   if Android write grants are unavailable.
