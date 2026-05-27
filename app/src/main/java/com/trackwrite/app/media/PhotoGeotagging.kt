@@ -35,6 +35,18 @@ data class PhotoMatchResult(
         get() = photo.manualLocation ?: (match as? PhotoMatch.Matched)?.position
 }
 
+data class PhotoWriteOutcome(
+    val fileName: String,
+    val status: Status,
+    val reason: String? = null,
+) {
+    enum class Status {
+        Written,
+        Skipped,
+        Failed,
+    }
+}
+
 class PhotoGeotagging(private val context: Context) {
     private val resolver: ContentResolver = context.contentResolver
     private val matcher = PhotoTrackMatcher()
@@ -69,14 +81,14 @@ class PhotoGeotagging(private val context: Context) {
             )
         }
 
-    fun exportCopies(results: List<PhotoMatchResult>, targetFolderUri: Uri): List<String> {
+    fun exportCopies(results: List<PhotoMatchResult>, targetFolderUri: Uri): List<PhotoWriteOutcome> {
         val folder = DocumentFile.fromTreeUri(context, targetFolderUri)
-            ?: return listOf("Export folder is not available.")
+            ?: return listOf(PhotoWriteOutcome("Export folder", PhotoWriteOutcome.Status.Failed, "Export folder is not available."))
 
         return results.map { result ->
             val position = result.selectedPosition
             if (position == null) {
-                "${result.photo.displayName}: no location"
+                PhotoWriteOutcome(result.photo.displayName, PhotoWriteOutcome.Status.Skipped, "no location")
             } else {
                 runCatching {
                     val output = folder.createFile("image/jpeg", result.photo.displayName)
@@ -89,25 +101,25 @@ class PhotoGeotagging(private val context: Context) {
                         }
                     }
                     writeGps(output.uri, position)
-                    "${result.photo.displayName}: exported"
+                    PhotoWriteOutcome(result.photo.displayName, PhotoWriteOutcome.Status.Written)
                 }.getOrElse { error ->
-                    "${result.photo.displayName}: ${error.message ?: "export failed"}"
+                    PhotoWriteOutcome(result.photo.displayName, PhotoWriteOutcome.Status.Failed, error.message ?: "export failed")
                 }
             }
         }
     }
 
-    fun writeInPlace(results: List<PhotoMatchResult>): List<String> =
+    fun writeInPlace(results: List<PhotoMatchResult>): List<PhotoWriteOutcome> =
         results.map { result ->
             val position = result.selectedPosition
             if (position == null) {
-                "${result.photo.displayName}: no location"
+                PhotoWriteOutcome(result.photo.displayName, PhotoWriteOutcome.Status.Skipped, "no location")
             } else {
                 runCatching {
                     writeGps(result.photo.uri, position)
-                    "${result.photo.displayName}: written"
+                    PhotoWriteOutcome(result.photo.displayName, PhotoWriteOutcome.Status.Written)
                 }.getOrElse { error ->
-                    "${result.photo.displayName}: ${error.message ?: "write failed"}"
+                    PhotoWriteOutcome(result.photo.displayName, PhotoWriteOutcome.Status.Failed, error.message ?: "write failed")
                 }
             }
         }

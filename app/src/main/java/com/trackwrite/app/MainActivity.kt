@@ -10,7 +10,9 @@ import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.documentfile.provider.DocumentFile
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -31,6 +33,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
@@ -51,6 +54,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -93,6 +97,7 @@ import com.trackwrite.app.map.ManualLocationActivity
 import com.trackwrite.app.media.PhotoCandidate
 import com.trackwrite.app.media.PhotoGeotagging
 import com.trackwrite.app.media.PhotoMatchResult
+import com.trackwrite.app.media.PhotoWriteOutcome
 import com.trackwrite.app.recording.RecordingSnapshot
 import com.trackwrite.app.recording.RecordingStateStore
 import com.trackwrite.app.recording.RecordingStatus
@@ -102,6 +107,7 @@ import com.trackwrite.app.settings.AppSettingsStore
 import com.trackwrite.app.settings.AppearanceMode
 import com.trackwrite.app.settings.RecordingFrequency
 import com.trackwrite.app.ui.TrackWriteTheme
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.time.Duration
@@ -115,10 +121,12 @@ class MainActivity : ComponentActivity() {
     private lateinit var gpx: GpxFileActions
     private lateinit var settingsStore: AppSettingsStore
 
-    private var selectedTrackId: String? = null
+    private var recordTrackId: String? = null
+    private var matchTrackId: String? = null
     private var selectedPhotos: List<PhotoCandidate> = emptyList()
     private var matchResults: List<PhotoMatchResult> = emptyList()
     private var pendingManualPhotoIndex: Int? = null
+    private var pendingExportMode: ExportFolderMode? = null
     private var uiState by mutableStateOf(MainUiState())
 
     private val permissionLauncher = registerForActivityResult(
@@ -142,7 +150,7 @@ class MainActivity : ComponentActivity() {
     ) { uris ->
         persistPhotoPermissions(uris)
         selectedPhotos = geotagging.loadPhotos(uris)
-        uiState = uiState.copy(selectedTab = MainTab.Match)
+        uiState = uiState.copy(selectedTab = MainTab.Match, photoBatchExpanded = false)
         matchSelectedPhotos()
     }
 
@@ -155,7 +163,7 @@ class MainActivity : ComponentActivity() {
                 Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION,
             )
             selectedPhotos = geotagging.loadPhotosFromFolder(uri)
-            uiState = uiState.copy(selectedTab = MainTab.Match)
+            uiState = uiState.copy(selectedTab = MainTab.Match, photoBatchExpanded = false)
             matchSelectedPhotos()
         }
     }
@@ -163,13 +171,25 @@ class MainActivity : ComponentActivity() {
     private val exportFolderLauncher = registerForActivityResult(
         ActivityResultContracts.OpenDocumentTree(),
     ) { uri ->
-        if (uri != null) {
+        val mode = pendingExportMode
+        pendingExportMode = null
+        if (uri != null && mode != null) {
             contentResolver.takePersistableUriPermission(
                 uri,
                 Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION,
             )
-            log(geotagging.exportCopies(matchResults, uri).joinToString("\n"))
-            refresh()
+            settingsStore.setDefaultExportFolderUri(uri.toString())
+            when (mode) {
+                ExportFolderMode.SaveDefault -> {
+                    uiState = uiState.copy(
+                        settings = settingsStore.current(),
+                        logMessage = getString(R.string.export_folder_saved),
+                    )
+                }
+                ExportFolderMode.WriteCopies -> writeCopies(uri)
+            }
+        } else if (mode == ExportFolderMode.WriteCopies) {
+            log(getString(R.string.export_folder_required))
         }
     }
 
@@ -195,12 +215,13 @@ class MainActivity : ComponentActivity() {
             if (photoIndex == index) photo.copy(manualLocation = point) else photo
         }
         log("Manual location bound to photo ${index + 1}${if (label.isBlank()) "" else ": $label"}")
-        uiState = uiState.copy(selectedTab = MainTab.Match)
+        uiState = uiState.copy(selectedTab = MainTab.Match, photoBatchExpanded = true, highlightedPhotoIndex = index)
         matchSelectedPhotos()
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        enableEdgeToEdge()
         repository = TrackRepository(this)
         stateStore = RecordingStateStore(this)
         geotagging = PhotoGeotagging(this)
@@ -220,13 +241,18 @@ class MainActivity : ComponentActivity() {
                     onStop = { command(TrackingService.ACTION_STOP) },
                     onImportGpx = { gpxImportLauncher.launch(arrayOf("application/gpx+xml", "text/xml", "*/*")) },
                     onExportGpx = { promptExport() },
-                    onShareTrack = { shareSelectedTrack() },
-                    onRenameTrack = { selectedTrack()?.let { uiState = uiState.copy(renameDialog = RenameDialogState(it.id, it.name)) } },
-                    onDeleteTrack = { selectedTrack()?.let { uiState = uiState.copy(deleteDialog = it) } },
-                    onTrackSelected = {
-                        selectedTrackId = it
+                    onRenameTrack = { recordTrack()?.let { uiState = uiState.copy(renameDialog = RenameDialogState(it.id, it.name)) } },
+                    onDeleteTrack = { recordTrack()?.let { uiState = uiState.copy(deleteDialog = it) } },
+                    onRecordTrackSelected = { recordTrackId = it; refresh() },
+                    onMatchTrackSelected = {
+                        matchTrackId = it
+                        uiState = uiState.copy(trackSourceExpanded = false)
                         matchSelectedPhotos()
                     },
+                    onToggleTrackHistory = { uiState = uiState.copy(trackHistoryExpanded = !uiState.trackHistoryExpanded) },
+                    onToggleTrackSource = { uiState = uiState.copy(trackSourceExpanded = !uiState.trackSourceExpanded) },
+                    onTogglePhotoBatch = { uiState = uiState.copy(photoBatchExpanded = !uiState.photoBatchExpanded) },
+                    onHighlightConsumed = { uiState = uiState.copy(highlightedPhotoIndex = null) },
                     onSelectPhotos = { photoPickerLauncher.launch(arrayOf("image/*")) },
                     onSelectFolder = { folderPickerLauncher.launch(null) },
                     onSetManualLocation = { index ->
@@ -240,18 +266,20 @@ class MainActivity : ComponentActivity() {
                         log("Manual location cleared for photo ${index + 1}.")
                         matchSelectedPhotos()
                     },
-                    onExportCopies = { exportFolderLauncher.launch(null) },
-                    onWriteOriginals = {
-                        if (uiState.settings.confirmOriginalWrites) {
-                            uiState = uiState.copy(showWriteDialog = true)
-                        } else {
-                            writeOriginals()
-                        }
-                    },
+                    onWriteDefault = { writeDefault() },
                     onSettingsChanged = { newSettings ->
                         persistSettings(newSettings)
                     },
+                    onChooseExportFolder = {
+                        pendingExportMode = ExportFolderMode.SaveDefault
+                        exportFolderLauncher.launch(null)
+                    },
+                    onClearExportFolder = {
+                        settingsStore.setDefaultExportFolderUri(null)
+                        uiState = uiState.copy(settings = settingsStore.current(), logMessage = getString(R.string.export_folder_cleared))
+                    },
                     onDismissDialog = { dismissDialogs() },
+                    onDismissWriteResult = { uiState = uiState.copy(writeResult = null) },
                     onConfirmStart = { name ->
                         uiState = uiState.copy(startDialogName = null)
                         requestRecordingPermissionsThen { command(TrackingService.ACTION_START, name) }
@@ -263,7 +291,8 @@ class MainActivity : ComponentActivity() {
                     },
                     onConfirmDelete = { track ->
                         repository.deleteTrack(track.id)
-                        selectedTrackId = null
+                        if (recordTrackId == track.id) recordTrackId = null
+                        if (matchTrackId == track.id) matchTrackId = null
                         uiState = uiState.copy(deleteDialog = null)
                         refresh()
                     },
@@ -278,8 +307,12 @@ class MainActivity : ComponentActivity() {
 
     private fun refresh() {
         val tracks = repository.listTracks()
-        if (selectedTrackId == null || tracks.none { it.id == selectedTrackId }) {
-            selectedTrackId = tracks.firstOrNull()?.id
+        if (recordTrackId == null || tracks.none { it.id == recordTrackId }) {
+            recordTrackId = stateStore.current().trackId?.takeIf { id -> tracks.any { it.id == id } }
+                ?: tracks.firstOrNull()?.id
+        }
+        if (matchTrackId != null && tracks.none { it.id == matchTrackId }) {
+            matchTrackId = null
         }
         val settings = settingsStore.current()
         matchResults = matchResults.ifEmpty {
@@ -288,7 +321,8 @@ class MainActivity : ComponentActivity() {
         uiState = uiState.copy(
             recording = stateStore.current(),
             tracks = tracks,
-            selectedTrackId = selectedTrackId,
+            recordTrackId = recordTrackId,
+            matchTrackId = matchTrackId,
             photos = selectedPhotos,
             matches = matchResults,
             settings = settings,
@@ -303,7 +337,6 @@ class MainActivity : ComponentActivity() {
         settingsStore.setAllowStartFallback(settings.allowStartFallback)
         settingsStore.setAllowEndFallback(settings.allowEndFallback)
         settingsStore.setPreferExportCopies(settings.preferExportCopies)
-        settingsStore.setConfirmOriginalWrites(settings.confirmOriginalWrites)
         uiState = uiState.copy(settings = settings, logMessage = getString(R.string.settings_saved))
         matchSelectedPhotos()
     }
@@ -321,8 +354,14 @@ class MainActivity : ComponentActivity() {
         "${getString(R.string.track_name_default)} ${Instant.now()}"
 
     private fun command(action: String, name: String? = null) {
+        val stoppedTrackId = if (action == TrackingService.ACTION_STOP) stateStore.current().trackId else null
         ContextCompat.startForegroundService(this, TrackingService.command(this, action, name))
-        window.decorView.postDelayed({ refresh() }, 500)
+        window.decorView.postDelayed({
+            if (action == TrackingService.ACTION_STOP && matchTrackId == null) {
+                matchTrackId = stoppedTrackId?.takeIf { repository.getTrack(it) != null }
+            }
+            refresh()
+        }, 500)
     }
 
     private fun importGpx(uri: Uri) {
@@ -331,32 +370,28 @@ class MainActivity : ComponentActivity() {
                 ?: error("Could not read GPX")
             val track = gpx.importTrack(UUID.randomUUID().toString(), xml)
             repository.saveTrack(track)
-            selectedTrackId = track.id
+            matchTrackId = track.id
+            uiState = uiState.copy(trackSourceExpanded = false)
             log("Imported ${track.name}")
             refresh()
         }.onFailure { log("Import failed: ${it.message}") }
     }
 
     private fun promptExport() {
-        val track = selectedTrack() ?: return log("Select or create a track first.")
+        val track = recordTrack() ?: return log(getString(R.string.select_track_first))
         gpxExportLauncher.launch("${track.name}.gpx")
     }
 
     private fun exportSelectedTrack(uri: Uri) {
-        val track = selectedTrack() ?: return
+        val track = recordTrack() ?: return
         contentResolver.openOutputStream(uri, "w").use { output ->
             requireNotNull(output).write(gpx.encode(track).toByteArray())
         }
         log("Exported ${track.name}")
     }
 
-    private fun shareSelectedTrack() {
-        val track = selectedTrack() ?: return log("Select or create a track first.")
-        startActivity(Intent.createChooser(gpx.shareIntent(track), getString(R.string.share)))
-    }
-
     private fun matchSelectedPhotos() {
-        val track = selectedTrack()
+        val track = matchTrack()
         val options = uiState.settings.toMatchOptions()
         matchResults = if (track == null) {
             selectedPhotos.map { PhotoMatchResult(it, null) }
@@ -366,13 +401,49 @@ class MainActivity : ComponentActivity() {
         refresh()
     }
 
-    private fun writeOriginals() {
-        log(geotagging.writeInPlace(matchResults).joinToString("\n"))
+    private fun writeDefault() {
+        val summary = writeReadiness(matchResults)
+        if (summary.writeable == 0) {
+            log(getString(R.string.write_missing_location_prompt))
+            return
+        }
+        if (uiState.settings.preferExportCopies) {
+            writeCopiesUsingDefaultFolder()
+        } else {
+            uiState = uiState.copy(showWriteDialog = true)
+        }
+    }
+
+    private fun writeCopiesUsingDefaultFolder() {
+        val folderUri = uiState.settings.defaultExportFolderUri?.let(Uri::parse)
+        if (folderUri != null && isUsableTreeUri(folderUri)) {
+            writeCopies(folderUri)
+            return
+        }
+        pendingExportMode = ExportFolderMode.WriteCopies
+        exportFolderLauncher.launch(null)
+    }
+
+    private fun writeCopies(uri: Uri) {
+        val outcomes = geotagging.exportCopies(matchResults, uri)
+        uiState = uiState.copy(writeResult = WriteResultState.from(outcomes, WriteMode.Copies))
         refresh()
     }
 
-    private fun selectedTrack(): Track? =
-        selectedTrackId?.let(repository::getTrack) ?: repository.listTracks().firstOrNull()
+    private fun writeOriginals() {
+        val outcomes = geotagging.writeInPlace(matchResults)
+        uiState = uiState.copy(writeResult = WriteResultState.from(outcomes, WriteMode.Originals))
+        refresh()
+    }
+
+    private fun isUsableTreeUri(uri: Uri): Boolean =
+        DocumentFile.fromTreeUri(this, uri)?.canWrite() == true
+
+    private fun recordTrack(): Track? =
+        recordTrackId?.let(repository::getTrack) ?: stateStore.current().trackId?.let(repository::getTrack)
+
+    private fun matchTrack(): Track? =
+        matchTrackId?.let(repository::getTrack)
 
     private fun requestRecordingPermissionsThen(block: () -> Unit) {
         val permissions = buildList {
@@ -412,11 +483,17 @@ private data class MainUiState(
     val showSettings: Boolean = false,
     val recording: RecordingSnapshot = RecordingSnapshot(null, RecordingStatus.Stopped),
     val tracks: List<Track> = emptyList(),
-    val selectedTrackId: String? = null,
+    val recordTrackId: String? = null,
+    val matchTrackId: String? = null,
     val photos: List<PhotoCandidate> = emptyList(),
     val matches: List<PhotoMatchResult> = emptyList(),
     val settings: AppSettings = AppSettings(),
     val logMessage: String = "",
+    val trackHistoryExpanded: Boolean = false,
+    val trackSourceExpanded: Boolean = true,
+    val photoBatchExpanded: Boolean = false,
+    val highlightedPhotoIndex: Int? = null,
+    val writeResult: WriteResultState? = null,
     val startDialogName: String? = null,
     val renameDialog: RenameDialogState? = null,
     val deleteDialog: Track? = null,
@@ -428,10 +505,41 @@ private data class RenameDialogState(
     val name: String,
 )
 
+private data class WriteReadiness(
+    val writeable: Int,
+    val skipped: Int,
+)
+
+private data class WriteResultState(
+    val mode: WriteMode,
+    val written: Int,
+    val skipped: Int,
+    val failed: List<PhotoWriteOutcome>,
+) {
+    companion object {
+        fun from(outcomes: List<PhotoWriteOutcome>, mode: WriteMode): WriteResultState =
+            WriteResultState(
+                mode = mode,
+                written = outcomes.count { it.status == PhotoWriteOutcome.Status.Written },
+                skipped = outcomes.count { it.status == PhotoWriteOutcome.Status.Skipped },
+                failed = outcomes.filter { it.status == PhotoWriteOutcome.Status.Failed },
+            )
+    }
+}
+
 private enum class MainTab {
     Record,
     Match,
-    Library,
+}
+
+private enum class ExportFolderMode {
+    SaveDefault,
+    WriteCopies,
+}
+
+private enum class WriteMode {
+    Copies,
+    Originals,
 }
 
 private fun AppSettings.toMatchOptions(): MatchOptions =
@@ -455,18 +563,24 @@ private fun TrackWriteApp(
     onStop: () -> Unit,
     onImportGpx: () -> Unit,
     onExportGpx: () -> Unit,
-    onShareTrack: () -> Unit,
     onRenameTrack: () -> Unit,
     onDeleteTrack: () -> Unit,
-    onTrackSelected: (String) -> Unit,
+    onRecordTrackSelected: (String) -> Unit,
+    onMatchTrackSelected: (String) -> Unit,
+    onToggleTrackHistory: () -> Unit,
+    onToggleTrackSource: () -> Unit,
+    onTogglePhotoBatch: () -> Unit,
+    onHighlightConsumed: () -> Unit,
     onSelectPhotos: () -> Unit,
     onSelectFolder: () -> Unit,
     onSetManualLocation: (Int) -> Unit,
     onClearManualLocation: (Int) -> Unit,
-    onExportCopies: () -> Unit,
-    onWriteOriginals: () -> Unit,
+    onWriteDefault: () -> Unit,
     onSettingsChanged: (AppSettings) -> Unit,
+    onChooseExportFolder: () -> Unit,
+    onClearExportFolder: () -> Unit,
     onDismissDialog: () -> Unit,
+    onDismissWriteResult: () -> Unit,
     onConfirmStart: (String) -> Unit,
     onConfirmRename: (String, String) -> Unit,
     onConfirmDelete: (Track) -> Unit,
@@ -478,7 +592,13 @@ private fun TrackWriteApp(
                 title = {
                     Column {
                         Text(
-                            text = stringResource(if (state.showSettings) R.string.settings else R.string.app_name),
+                            text = stringResource(
+                                when {
+                                    state.showSettings -> R.string.settings
+                                    state.selectedTab == MainTab.Record -> R.string.tab_record
+                                    else -> R.string.tab_match
+                                },
+                            ),
                             style = MaterialTheme.typography.titleLarge,
                             fontWeight = FontWeight.SemiBold,
                         )
@@ -522,12 +642,6 @@ private fun TrackWriteApp(
                         label = stringResource(R.string.tab_match),
                         onClick = { onTabSelected(MainTab.Match) },
                     )
-                    NavigationItem(
-                        selected = state.selectedTab == MainTab.Library,
-                        icon = Icons.Default.Edit,
-                        label = stringResource(R.string.tab_library),
-                        onClick = { onTabSelected(MainTab.Library) },
-                    )
                 }
             }
         },
@@ -539,6 +653,8 @@ private fun TrackWriteApp(
                     .fillMaxSize(),
                 settings = state.settings,
                 onSettingsChanged = onSettingsChanged,
+                onChooseExportFolder = onChooseExportFolder,
+                onClearExportFolder = onClearExportFolder,
             )
         } else {
             when (state.selectedTab) {
@@ -549,28 +665,25 @@ private fun TrackWriteApp(
                     onPause = onPause,
                     onResume = onResume,
                     onStop = onStop,
-                    onImportGpx = onImportGpx,
                     onExportGpx = onExportGpx,
-                    onTrackSelected = onTrackSelected,
+                    onRenameTrack = onRenameTrack,
+                    onDeleteTrack = onDeleteTrack,
+                    onRecordTrackSelected = onRecordTrackSelected,
+                    onToggleTrackHistory = onToggleTrackHistory,
                 )
                 MainTab.Match -> MatchScreen(
                     modifier = Modifier.padding(padding),
                     state = state,
+                    onImportGpx = onImportGpx,
+                    onMatchTrackSelected = onMatchTrackSelected,
+                    onToggleTrackSource = onToggleTrackSource,
+                    onTogglePhotoBatch = onTogglePhotoBatch,
+                    onHighlightConsumed = onHighlightConsumed,
                     onSelectPhotos = onSelectPhotos,
                     onSelectFolder = onSelectFolder,
                     onSetManualLocation = onSetManualLocation,
                     onClearManualLocation = onClearManualLocation,
-                    onExportCopies = onExportCopies,
-                    onWriteOriginals = onWriteOriginals,
-                )
-                MainTab.Library -> LibraryScreen(
-                    modifier = Modifier.padding(padding),
-                    state = state,
-                    onTrackSelected = onTrackSelected,
-                    onExportGpx = onExportGpx,
-                    onShareTrack = onShareTrack,
-                    onRenameTrack = onRenameTrack,
-                    onDeleteTrack = onDeleteTrack,
+                    onWriteDefault = onWriteDefault,
                 )
             }
         }
@@ -580,6 +693,7 @@ private fun TrackWriteApp(
     RenameTrackDialog(state.renameDialog, onDismissDialog, onConfirmRename)
     DeleteTrackDialog(state.deleteDialog, onDismissDialog, onConfirmDelete)
     WriteOriginalsDialog(state.showWriteDialog, onDismissDialog, onConfirmWrite)
+    WriteResultSheet(state.writeResult, onDismissWriteResult)
 }
 
 @Composable
@@ -619,11 +733,14 @@ private fun RecordScreen(
     onPause: () -> Unit,
     onResume: () -> Unit,
     onStop: () -> Unit,
-    onImportGpx: () -> Unit,
     onExportGpx: () -> Unit,
-    onTrackSelected: (String) -> Unit,
+    onRenameTrack: () -> Unit,
+    onDeleteTrack: () -> Unit,
+    onRecordTrackSelected: (String) -> Unit,
+    onToggleTrackHistory: () -> Unit,
 ) {
-    val selectedTrack = state.tracks.firstOrNull { it.id == state.selectedTrackId }
+    val activeTrack = state.recording.trackId?.let { id -> state.tracks.firstOrNull { it.id == id } }
+    val selectedTrack = state.tracks.firstOrNull { it.id == state.recordTrackId }
     LazyColumn(
         modifier = modifier
             .fillMaxSize()
@@ -632,22 +749,19 @@ private fun RecordScreen(
         verticalArrangement = Arrangement.spacedBy(18.dp),
     ) {
         item {
-            RecordingPanel(state, selectedTrack, onStartRecording, onPause, onResume, onStop)
+            RecordingPanel(state, activeTrack, onStartRecording, onPause, onResume, onStop)
         }
         item {
-            SectionHeader(stringResource(R.string.track_source), Icons.Default.LocationOn)
-            Spacer(Modifier.height(10.dp))
-            ActionRow {
-                PrimaryActionButton(stringResource(R.string.import_gpx), Icons.Default.Share, onImportGpx)
-                SecondaryActionButton(stringResource(R.string.export_gpx), Icons.Default.Share, onExportGpx)
-            }
-        }
-        item {
-            TrackList(
+            TrackHistoryPanel(
                 tracks = state.tracks,
-                selectedTrackId = state.selectedTrackId,
-                onTrackSelected = onTrackSelected,
-                compact = true,
+                selectedTrackId = state.recordTrackId,
+                expanded = state.trackHistoryExpanded || state.tracks.isEmpty(),
+                selectedTrack = selectedTrack,
+                onToggle = onToggleTrackHistory,
+                onTrackSelected = onRecordTrackSelected,
+                onExportGpx = onExportGpx,
+                onRenameTrack = onRenameTrack,
+                onDeleteTrack = onDeleteTrack,
             )
         }
     }
@@ -690,14 +804,88 @@ private fun RecordingPanel(
             ),
         )
         Spacer(Modifier.height(18.dp))
-        ActionRow {
-            PrimaryActionButton(stringResource(R.string.start_recording), Icons.Default.PlayArrow, onStartRecording)
-            SecondaryActionButton(stringResource(R.string.pause), Icons.Default.Warning, onPause)
+        when (state.recording.status) {
+            RecordingStatus.Stopped -> {
+                ActionRow {
+                    PrimaryActionButton(stringResource(R.string.start_recording), Icons.Default.PlayArrow, onStartRecording)
+                }
+            }
+            RecordingStatus.Recording -> {
+                ActionRow {
+                    SecondaryActionButton(stringResource(R.string.pause), Icons.Default.Warning, onPause)
+                    DangerActionButton(stringResource(R.string.stop), Icons.Default.Warning, onStop)
+                }
+            }
+            RecordingStatus.Paused -> {
+                ActionRow {
+                    PrimaryActionButton(stringResource(R.string.resume), Icons.Default.PlayArrow, onResume)
+                    DangerActionButton(stringResource(R.string.stop), Icons.Default.Warning, onStop)
+                }
+            }
         }
-        Spacer(Modifier.height(10.dp))
-        ActionRow {
-            SecondaryActionButton(stringResource(R.string.resume), Icons.Default.PlayArrow, onResume)
-            DangerActionButton(stringResource(R.string.stop), Icons.Default.Warning, onStop)
+    }
+}
+
+@Composable
+private fun TrackHistoryPanel(
+    tracks: List<Track>,
+    selectedTrackId: String?,
+    expanded: Boolean,
+    selectedTrack: Track?,
+    onToggle: () -> Unit,
+    onTrackSelected: (String) -> Unit,
+    onExportGpx: () -> Unit,
+    onRenameTrack: () -> Unit,
+    onDeleteTrack: () -> Unit,
+) {
+    SurfaceCard {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable(onClick = onToggle),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            SectionHeader(
+                text = stringResource(R.string.track_history_count, tracks.size),
+                icon = Icons.Default.LocationOn,
+            )
+            Spacer(Modifier.weight(1f))
+            Text(
+                text = stringResource(if (expanded) R.string.collapse else R.string.expand),
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.primary,
+            )
+        }
+        if (!expanded) {
+            if (selectedTrack != null) {
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    text = selectedTrack.name,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+            return@SurfaceCard
+        }
+        Spacer(Modifier.height(12.dp))
+        TrackList(
+            tracks = tracks,
+            selectedTrackId = selectedTrackId,
+            onTrackSelected = onTrackSelected,
+            compact = true,
+        )
+        if (tracks.isNotEmpty()) {
+            Spacer(Modifier.height(12.dp))
+            ActionRow {
+                SecondaryActionButton(stringResource(R.string.export_gpx), Icons.Default.Share, onExportGpx)
+                SecondaryActionButton(stringResource(R.string.rename), Icons.Default.Edit, onRenameTrack)
+            }
+            Spacer(Modifier.height(10.dp))
+            ActionRow {
+                DangerActionButton(stringResource(R.string.delete), Icons.Default.Delete, onDeleteTrack)
+            }
         }
     }
 }
@@ -706,20 +894,44 @@ private fun RecordingPanel(
 private fun MatchScreen(
     modifier: Modifier,
     state: MainUiState,
+    onImportGpx: () -> Unit,
+    onMatchTrackSelected: (String) -> Unit,
+    onToggleTrackSource: () -> Unit,
+    onTogglePhotoBatch: () -> Unit,
+    onHighlightConsumed: () -> Unit,
     onSelectPhotos: () -> Unit,
     onSelectFolder: () -> Unit,
     onSetManualLocation: (Int) -> Unit,
     onClearManualLocation: (Int) -> Unit,
-    onExportCopies: () -> Unit,
-    onWriteOriginals: () -> Unit,
+    onWriteDefault: () -> Unit,
 ) {
+    val listState = rememberLazyListState()
+    LaunchedEffect(state.highlightedPhotoIndex) {
+        val index = state.highlightedPhotoIndex ?: return@LaunchedEffect
+        if (state.photoBatchExpanded) {
+            listState.animateScrollToItem(index + 3)
+            delay(1_200)
+            onHighlightConsumed()
+        }
+    }
     LazyColumn(
+        state = listState,
         modifier = modifier
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background),
         contentPadding = androidx.compose.foundation.layout.PaddingValues(20.dp),
         verticalArrangement = Arrangement.spacedBy(18.dp),
     ) {
+        item {
+            MatchTrackSourcePanel(
+                tracks = state.tracks,
+                selectedTrack = state.matchTrackId?.let { id -> state.tracks.firstOrNull { it.id == id } },
+                expanded = state.trackSourceExpanded || state.matchTrackId == null,
+                onToggle = onToggleTrackSource,
+                onImportGpx = onImportGpx,
+                onTrackSelected = onMatchTrackSelected,
+            )
+        }
         item {
             SectionHeader(stringResource(R.string.photo_matching), Icons.Default.Search)
             Spacer(Modifier.height(10.dp))
@@ -733,19 +945,29 @@ private fun MatchScreen(
         if (state.matches.isEmpty()) {
             item { EmptyPanel(stringResource(R.string.no_photos)) }
         } else {
-            itemsIndexed(state.matches) { index, result ->
-                PhotoMatchRow(
-                    index = index,
-                    result = result,
-                    onSetManualLocation = { onSetManualLocation(index) },
-                    onClearManualLocation = { onClearManualLocation(index) },
+            item {
+                PhotoBatchSummary(
+                    matches = state.matches,
+                    expanded = state.photoBatchExpanded,
+                    onToggle = onTogglePhotoBatch,
                 )
+            }
+            if (state.photoBatchExpanded) {
+                itemsIndexed(state.matches) { index, result ->
+                    PhotoMatchRow(
+                        index = index,
+                        result = result,
+                        highlighted = index == state.highlightedPhotoIndex,
+                        onSetManualLocation = { onSetManualLocation(index) },
+                        onClearManualLocation = { onClearManualLocation(index) },
+                    )
+                }
             }
             item {
                 ReviewWritePanel(
                     settings = state.settings,
-                    onExportCopies = onExportCopies,
-                    onWriteOriginals = onWriteOriginals,
+                    readiness = writeReadiness(state.matches),
+                    onWriteDefault = onWriteDefault,
                 )
             }
         }
@@ -753,51 +975,111 @@ private fun MatchScreen(
 }
 
 @Composable
-private fun LibraryScreen(
-    modifier: Modifier,
-    state: MainUiState,
+private fun MatchTrackSourcePanel(
+    tracks: List<Track>,
+    selectedTrack: Track?,
+    expanded: Boolean,
+    onToggle: () -> Unit,
+    onImportGpx: () -> Unit,
     onTrackSelected: (String) -> Unit,
-    onExportGpx: () -> Unit,
-    onShareTrack: () -> Unit,
-    onRenameTrack: () -> Unit,
-    onDeleteTrack: () -> Unit,
 ) {
-    LazyColumn(
-        modifier = modifier
-            .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background),
-        contentPadding = androidx.compose.foundation.layout.PaddingValues(20.dp),
-        verticalArrangement = Arrangement.spacedBy(18.dp),
-    ) {
-        item {
-            TrackList(
-                tracks = state.tracks,
-                selectedTrackId = state.selectedTrackId,
-                onTrackSelected = onTrackSelected,
-                compact = false,
+    SurfaceCard {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable(onClick = onToggle),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            SectionHeader(stringResource(R.string.match_track_source), Icons.Default.LocationOn)
+            Spacer(Modifier.weight(1f))
+            Text(
+                text = stringResource(if (expanded) R.string.collapse else R.string.expand),
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.primary,
             )
         }
-        item {
-            ActionRow {
-                SecondaryActionButton(stringResource(R.string.export_gpx), Icons.Default.Share, onExportGpx)
-                SecondaryActionButton(stringResource(R.string.share), Icons.Default.Share, onShareTrack)
-            }
-            Spacer(Modifier.height(10.dp))
-            ActionRow {
-                SecondaryActionButton(stringResource(R.string.rename), Icons.Default.Edit, onRenameTrack)
-                DangerActionButton(stringResource(R.string.delete), Icons.Default.Delete, onDeleteTrack)
-            }
+        if (selectedTrack != null) {
+            Spacer(Modifier.height(8.dp))
+            val stats = selectedTrack.stats()
+            Text(
+                text = selectedTrack.name,
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.SemiBold,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Text(
+                text = "${selectedTrack.points.size} ${stringResource(R.string.points_short)} · ${formatDuration(stats.duration)} · ${formatDistance(stats.distanceMeters)}",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        } else {
+            Spacer(Modifier.height(8.dp))
+            Text(
+                text = stringResource(R.string.no_match_track_help),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
-        item {
-            SurfaceCard {
-                SectionHeader(stringResource(R.string.system_log), Icons.Default.Settings)
-                Spacer(Modifier.height(8.dp))
+        if (!expanded) return@SurfaceCard
+        Spacer(Modifier.height(12.dp))
+        ActionRow {
+            PrimaryActionButton(stringResource(R.string.import_gpx), Icons.Default.Share, onImportGpx)
+        }
+        Spacer(Modifier.height(12.dp))
+        Text(
+            text = stringResource(R.string.choose_existing_track),
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Spacer(Modifier.height(8.dp))
+        TrackList(
+            tracks = tracks,
+            selectedTrackId = selectedTrack?.id,
+            onTrackSelected = onTrackSelected,
+            compact = true,
+        )
+    }
+}
+
+@Composable
+private fun PhotoBatchSummary(
+    matches: List<PhotoMatchResult>,
+    expanded: Boolean,
+    onToggle: () -> Unit,
+) {
+    val manualCount = matches.count { it.photo.manualLocation != null }
+    val matchedCount = matches.count { it.selectedPosition != null }
+    val unmatchedCount = matches.size - matchedCount
+    SurfaceCard {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable(onClick = onToggle),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(Modifier.weight(1f)) {
                 Text(
-                    text = state.logMessage.ifBlank { stringResource(R.string.ready) },
+                    text = stringResource(R.string.photo_batch_count, matches.size),
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold,
+                )
+                Spacer(Modifier.height(6.dp))
+                Text(
+                    text = stringResource(R.string.photo_batch_stats, matchedCount, unmatchedCount, manualCount),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
+            Text(
+                text = stringResource(if (expanded) R.string.collapse else R.string.expand),
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.primary,
+            )
+        }
+        if (unmatchedCount > 0) {
+            Spacer(Modifier.height(10.dp))
+            StatusPill(stringResource(R.string.photos_need_attention, unmatchedCount), PillTone.Warning)
         }
     }
 }
@@ -880,12 +1162,15 @@ private fun TrackRow(
 private fun PhotoMatchRow(
     index: Int,
     result: PhotoMatchResult,
+    highlighted: Boolean,
     onSetManualLocation: () -> Unit,
     onClearManualLocation: () -> Unit,
 ) {
     val photo = result.photo
     val match = result.match
-    SurfaceCard {
+    SurfaceCard(
+        containerColor = if (highlighted) MaterialTheme.colorScheme.tertiaryContainer else MaterialTheme.colorScheme.surface,
+    ) {
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             PhotoThumbnail(photo.uri)
             Column(modifier = Modifier.weight(1f)) {
@@ -978,27 +1263,23 @@ private fun MatchPill(photo: PhotoCandidate, match: PhotoMatch?) {
 @Composable
 private fun ReviewWritePanel(
     settings: AppSettings,
-    onExportCopies: () -> Unit,
-    onWriteOriginals: () -> Unit,
+    readiness: WriteReadiness,
+    onWriteDefault: () -> Unit,
 ) {
     SurfaceCard {
         SectionHeader(stringResource(R.string.review_write), Icons.Default.Check)
         Spacer(Modifier.height(10.dp))
         Text(
-            text = stringResource(R.string.write_originals_message),
+            text = stringResource(R.string.write_readiness, readiness.writeable, readiness.skipped),
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         Spacer(Modifier.height(14.dp))
-        if (settings.preferExportCopies) {
-            ActionRow {
-                PrimaryActionButton(stringResource(R.string.export_copies), Icons.Default.Share, onExportCopies)
-                DangerActionButton(stringResource(R.string.write_originals), Icons.Default.Warning, onWriteOriginals)
-            }
-        } else {
-            ActionRow {
-                DangerFilledButton(stringResource(R.string.write_originals), Icons.Default.Warning, onWriteOriginals)
-                SecondaryActionButton(stringResource(R.string.export_copies), Icons.Default.Share, onExportCopies)
+        ActionRow {
+            if (settings.preferExportCopies) {
+                PrimaryActionButton(stringResource(R.string.write_copies), Icons.Default.Share, onWriteDefault)
+            } else {
+                DangerFilledButton(stringResource(R.string.write_originals), Icons.Default.Warning, onWriteDefault)
             }
         }
     }
@@ -1061,11 +1342,14 @@ private fun DangerFilledButton(text: String, icon: ImageVector, onClick: () -> U
 }
 
 @Composable
-private fun SurfaceCard(content: @Composable ColumnScope.() -> Unit) {
+private fun SurfaceCard(
+    containerColor: androidx.compose.ui.graphics.Color = MaterialTheme.colorScheme.surface,
+    content: @Composable ColumnScope.() -> Unit,
+) {
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(8.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        colors = CardDefaults.cardColors(containerColor = containerColor),
         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
         border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
     ) {
@@ -1158,6 +1442,8 @@ private fun SettingsScreen(
     modifier: Modifier,
     settings: AppSettings,
     onSettingsChanged: (AppSettings) -> Unit,
+    onChooseExportFolder: () -> Unit,
+    onClearExportFolder: () -> Unit,
 ) {
     LazyColumn(
         modifier = modifier.background(MaterialTheme.colorScheme.background),
@@ -1217,15 +1503,23 @@ private fun SettingsScreen(
         }
         item {
             SettingsSection(title = stringResource(R.string.export_settings)) {
-                SettingSwitchRow(
-                    title = stringResource(R.string.prefer_export_copies),
-                    checked = settings.preferExportCopies,
-                    onCheckedChange = { onSettingsChanged(settings.copy(preferExportCopies = it)) },
+                SettingChoiceRow(
+                    title = stringResource(R.string.write_copies),
+                    subtitle = stringResource(R.string.write_copies_default_desc),
+                    selected = settings.preferExportCopies,
+                    onClick = { onSettingsChanged(settings.copy(preferExportCopies = true)) },
                 )
-                SettingSwitchRow(
-                    title = stringResource(R.string.confirm_original_writes),
-                    checked = settings.confirmOriginalWrites,
-                    onCheckedChange = { onSettingsChanged(settings.copy(confirmOriginalWrites = it)) },
+                SettingChoiceRow(
+                    title = stringResource(R.string.write_originals),
+                    subtitle = stringResource(R.string.write_originals_default_desc),
+                    selected = !settings.preferExportCopies,
+                    onClick = { onSettingsChanged(settings.copy(preferExportCopies = false)) },
+                )
+                HorizontalDivider()
+                ExportFolderSetting(
+                    folderUri = settings.defaultExportFolderUri,
+                    onChooseExportFolder = onChooseExportFolder,
+                    onClearExportFolder = onClearExportFolder,
                 )
             }
         }
@@ -1285,6 +1579,37 @@ private fun SettingSwitchRow(
     ) {
         Text(title, modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodyLarge)
         Switch(checked = checked, onCheckedChange = onCheckedChange)
+    }
+}
+
+@Composable
+private fun ExportFolderSetting(
+    folderUri: String?,
+    onChooseExportFolder: () -> Unit,
+    onClearExportFolder: () -> Unit,
+) {
+    Column(Modifier.padding(vertical = 10.dp)) {
+        Text(
+            text = stringResource(R.string.default_export_folder),
+            style = MaterialTheme.typography.bodyLarge,
+        )
+        Spacer(Modifier.height(4.dp))
+        Text(
+            text = if (folderUri.isNullOrBlank()) {
+                stringResource(R.string.export_folder_unconfigured)
+            } else {
+                stringResource(R.string.export_folder_configured)
+            },
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Spacer(Modifier.height(10.dp))
+        ActionRow {
+            SecondaryActionButton(stringResource(R.string.choose_folder), Icons.Default.Search, onChooseExportFolder)
+            if (!folderUri.isNullOrBlank()) {
+                DangerActionButton(stringResource(R.string.clear), Icons.Default.Delete, onClearExportFolder)
+            }
+        }
     }
 }
 
@@ -1458,6 +1783,60 @@ private fun WriteOriginalsDialog(
     )
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun WriteResultSheet(
+    result: WriteResultState?,
+    onDismiss: () -> Unit,
+) {
+    if (result == null) return
+    ModalBottomSheet(onDismissRequest = onDismiss) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 20.dp, vertical = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Text(
+                text = stringResource(
+                    if (result.mode == WriteMode.Copies) R.string.write_copies_result else R.string.write_originals_result,
+                ),
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.SemiBold,
+            )
+            MetricGrid(
+                listOf(
+                    stringResource(R.string.written_count) to result.written.toString(),
+                    stringResource(R.string.skipped_count) to result.skipped.toString(),
+                    stringResource(R.string.failed_count) to result.failed.size.toString(),
+                ),
+            )
+            if (result.failed.isNotEmpty()) {
+                Text(
+                    text = stringResource(R.string.failed_items),
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.SemiBold,
+                )
+                result.failed.forEach { item ->
+                    Text(
+                        text = "${item.fileName}: ${item.reason.orEmpty()}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                }
+            }
+            Button(
+                onClick = onDismiss,
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(8.dp),
+            ) {
+                Text(stringResource(R.string.close))
+            }
+            Spacer(Modifier.height(12.dp))
+        }
+    }
+}
+
 @Composable
 private fun appearanceLabel(mode: AppearanceMode): String =
     when (mode) {
@@ -1520,6 +1899,12 @@ private fun sourceLabel(source: MatchSource): String =
         MatchSource.StartFallback -> stringResource(R.string.source_start_fallback)
         MatchSource.EndFallback -> stringResource(R.string.source_end_fallback)
     }
+
+private fun writeReadiness(matches: List<PhotoMatchResult>): WriteReadiness =
+    WriteReadiness(
+        writeable = matches.count { it.selectedPosition != null },
+        skipped = matches.count { it.selectedPosition == null },
+    )
 
 private fun formatDuration(duration: Duration): String {
     val hours = duration.toHours()

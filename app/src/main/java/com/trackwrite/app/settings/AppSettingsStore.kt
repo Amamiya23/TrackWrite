@@ -17,7 +17,7 @@ class AppSettingsStore(context: Context) {
             allowStartFallback = preferences.getBoolean(KEY_ALLOW_START_FALLBACK, true),
             allowEndFallback = preferences.getBoolean(KEY_ALLOW_END_FALLBACK, true),
             preferExportCopies = preferences.getBoolean(KEY_PREFER_EXPORT_COPIES, true),
-            confirmOriginalWrites = preferences.getBoolean(KEY_CONFIRM_ORIGINAL_WRITES, true),
+            defaultExportFolderUri = preferences.getString(KEY_DEFAULT_EXPORT_FOLDER_URI, null),
         )
 
     fun setAppearance(value: AppearanceMode) {
@@ -50,8 +50,14 @@ class AppSettingsStore(context: Context) {
         preferences.edit().putBoolean(KEY_PREFER_EXPORT_COPIES, value).apply()
     }
 
-    fun setConfirmOriginalWrites(value: Boolean) {
-        preferences.edit().putBoolean(KEY_CONFIRM_ORIGINAL_WRITES, value).apply()
+    fun setDefaultExportFolderUri(value: String?) {
+        preferences.edit().apply {
+            if (value.isNullOrBlank()) {
+                remove(KEY_DEFAULT_EXPORT_FOLDER_URI)
+            } else {
+                putString(KEY_DEFAULT_EXPORT_FOLDER_URI, value)
+            }
+        }.apply()
     }
 
     companion object {
@@ -68,7 +74,7 @@ class AppSettingsStore(context: Context) {
         private const val KEY_ALLOW_START_FALLBACK = "allow_start_fallback"
         private const val KEY_ALLOW_END_FALLBACK = "allow_end_fallback"
         private const val KEY_PREFER_EXPORT_COPIES = "prefer_export_copies"
-        private const val KEY_CONFIRM_ORIGINAL_WRITES = "confirm_original_writes"
+        private const val KEY_DEFAULT_EXPORT_FOLDER_URI = "default_export_folder_uri"
     }
 }
 
@@ -80,7 +86,7 @@ data class AppSettings(
     val allowStartFallback: Boolean = true,
     val allowEndFallback: Boolean = true,
     val preferExportCopies: Boolean = true,
-    val confirmOriginalWrites: Boolean = true,
+    val defaultExportFolderUri: String? = null,
 )
 
 enum class AppearanceMode(val storageValue: String) {
