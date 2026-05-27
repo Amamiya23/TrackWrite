@@ -18,6 +18,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
@@ -87,6 +88,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import com.trackwrite.app.data.TrackRepository
 import com.trackwrite.app.domain.GeoPoint
@@ -1471,96 +1473,130 @@ private fun SettingsScreen(
 ) {
     LazyColumn(
         modifier = modifier.background(MaterialTheme.colorScheme.background),
-        contentPadding = androidx.compose.foundation.layout.PaddingValues(20.dp),
-        verticalArrangement = Arrangement.spacedBy(18.dp),
+        contentPadding = PaddingValues(vertical = 20.dp),
+        verticalArrangement = Arrangement.spacedBy(24.dp),
     ) {
         item {
-            SettingsSection(title = stringResource(R.string.appearance)) {
-                AppearanceMode.entries.forEach { mode ->
-                    SettingChoiceRow(
-                        title = appearanceLabel(mode),
-                        selected = settings.appearance == mode,
-                        onClick = { onSettingsChanged(settings.copy(appearance = mode)) },
+            Column(verticalArrangement = Arrangement.spacedBy(24.dp)) {
+                SettingsSectionHeader(stringResource(R.string.appearance))
+                SettingsGroup {
+                    AppearanceMode.entries.forEachIndexed { index, mode ->
+                        if (index > 0) HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                        SettingChoiceRow(
+                            title = appearanceLabel(mode),
+                            selected = settings.appearance == mode,
+                            onClick = { onSettingsChanged(settings.copy(appearance = mode)) },
+                        )
+                    }
+                }
+            }
+        }
+        item {
+            Column(verticalArrangement = Arrangement.spacedBy(24.dp)) {
+                SettingsSectionHeader(stringResource(R.string.recording_frequency))
+                SettingsGroup {
+                    RecordingFrequency.entries.forEachIndexed { index, frequency ->
+                        if (index > 0) HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                        SettingChoiceRow(
+                            title = frequencyLabel(frequency),
+                            subtitle = frequencyDescription(frequency),
+                            selected = settings.recordingFrequency == frequency,
+                            onClick = { onSettingsChanged(settings.copy(recordingFrequency = frequency)) },
+                        )
+                    }
+                }
+            }
+        }
+        item {
+            Column(verticalArrangement = Arrangement.spacedBy(24.dp)) {
+                SettingsSectionHeader(stringResource(R.string.photo_match_settings))
+                SettingsGroup {
+                    SettingStepper(
+                        title = stringResource(R.string.camera_offset_minutes),
+                        value = settings.cameraOffset.toMinutes(),
+                        range = AppSettingsStore.MIN_CAMERA_OFFSET_MINUTES..AppSettingsStore.MAX_CAMERA_OFFSET_MINUTES,
+                        onValueChange = { onSettingsChanged(settings.copy(cameraOffset = Duration.ofMinutes(it))) },
+                    )
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                    SettingStepper(
+                        title = stringResource(R.string.max_time_difference_minutes),
+                        value = settings.maxPhotoTimeDifference.toMinutes(),
+                        range = AppSettingsStore.MIN_PHOTO_TIME_DIFFERENCE_MINUTES..AppSettingsStore.MAX_PHOTO_TIME_DIFFERENCE_MINUTES,
+                        onValueChange = { onSettingsChanged(settings.copy(maxPhotoTimeDifference = Duration.ofMinutes(it))) },
+                    )
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                    SettingSwitchRow(
+                        title = stringResource(R.string.allow_start_fallback),
+                        checked = settings.allowStartFallback,
+                        onCheckedChange = { onSettingsChanged(settings.copy(allowStartFallback = it)) },
+                    )
+                    SettingSwitchRow(
+                        title = stringResource(R.string.allow_end_fallback),
+                        checked = settings.allowEndFallback,
+                        onCheckedChange = { onSettingsChanged(settings.copy(allowEndFallback = it)) },
                     )
                 }
             }
         }
         item {
-            SettingsSection(title = stringResource(R.string.recording_frequency)) {
-                RecordingFrequency.entries.forEach { frequency ->
+            Column(verticalArrangement = Arrangement.spacedBy(24.dp)) {
+                SettingsSectionHeader(stringResource(R.string.export_settings))
+                SettingsGroup {
                     SettingChoiceRow(
-                        title = frequencyLabel(frequency),
-                        subtitle = frequencyDescription(frequency),
-                        selected = settings.recordingFrequency == frequency,
-                        onClick = { onSettingsChanged(settings.copy(recordingFrequency = frequency)) },
+                        title = stringResource(R.string.write_copies),
+                        subtitle = stringResource(R.string.write_copies_default_desc),
+                        selected = settings.preferExportCopies,
+                        onClick = { onSettingsChanged(settings.copy(preferExportCopies = true)) },
+                    )
+                    SettingChoiceRow(
+                        title = stringResource(R.string.write_originals),
+                        subtitle = stringResource(R.string.write_originals_default_desc),
+                        selected = !settings.preferExportCopies,
+                        onClick = { onSettingsChanged(settings.copy(preferExportCopies = false)) },
+                    )
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                    ExportFolderSetting(
+                        folderUri = settings.defaultExportFolderUri,
+                        onChooseExportFolder = onChooseExportFolder,
+                        onClearExportFolder = onClearExportFolder,
                     )
                 }
             }
         }
         item {
-            SettingsSection(title = stringResource(R.string.photo_match_settings)) {
-                SettingStepper(
-                    title = stringResource(R.string.camera_offset_minutes),
-                    value = settings.cameraOffset.toMinutes(),
-                    range = AppSettingsStore.MIN_CAMERA_OFFSET_MINUTES..AppSettingsStore.MAX_CAMERA_OFFSET_MINUTES,
-                    onValueChange = { onSettingsChanged(settings.copy(cameraOffset = Duration.ofMinutes(it))) },
-                )
-                HorizontalDivider()
-                SettingStepper(
-                    title = stringResource(R.string.max_time_difference_minutes),
-                    value = settings.maxPhotoTimeDifference.toMinutes(),
-                    range = AppSettingsStore.MIN_PHOTO_TIME_DIFFERENCE_MINUTES..AppSettingsStore.MAX_PHOTO_TIME_DIFFERENCE_MINUTES,
-                    onValueChange = { onSettingsChanged(settings.copy(maxPhotoTimeDifference = Duration.ofMinutes(it))) },
-                )
-                HorizontalDivider()
-                SettingSwitchRow(
-                    title = stringResource(R.string.allow_start_fallback),
-                    checked = settings.allowStartFallback,
-                    onCheckedChange = { onSettingsChanged(settings.copy(allowStartFallback = it)) },
-                )
-                SettingSwitchRow(
-                    title = stringResource(R.string.allow_end_fallback),
-                    checked = settings.allowEndFallback,
-                    onCheckedChange = { onSettingsChanged(settings.copy(allowEndFallback = it)) },
-                )
-            }
-        }
-        item {
-            SettingsSection(title = stringResource(R.string.export_settings)) {
-                SettingChoiceRow(
-                    title = stringResource(R.string.write_copies),
-                    subtitle = stringResource(R.string.write_copies_default_desc),
-                    selected = settings.preferExportCopies,
-                    onClick = { onSettingsChanged(settings.copy(preferExportCopies = true)) },
-                )
-                SettingChoiceRow(
-                    title = stringResource(R.string.write_originals),
-                    subtitle = stringResource(R.string.write_originals_default_desc),
-                    selected = !settings.preferExportCopies,
-                    onClick = { onSettingsChanged(settings.copy(preferExportCopies = false)) },
-                )
-                HorizontalDivider()
-                ExportFolderSetting(
-                    folderUri = settings.defaultExportFolderUri,
-                    onChooseExportFolder = onChooseExportFolder,
-                    onClearExportFolder = onClearExportFolder,
-                )
-            }
-        }
-        item {
-            SettingsSection(title = stringResource(R.string.about)) {
-                Text(stringResource(R.string.version_name), style = MaterialTheme.typography.bodyMedium)
+            Column(verticalArrangement = Arrangement.spacedBy(24.dp)) {
+                SettingsSectionHeader(stringResource(R.string.about))
+                SettingsGroup {
+                    Text(
+                        stringResource(R.string.version_name),
+                        modifier = Modifier.padding(vertical = 12.dp),
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                }
             }
         }
     }
 }
 
 @Composable
-private fun SettingsSection(title: String, content: @Composable ColumnScope.() -> Unit) {
-    SurfaceCard {
-        Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-        Spacer(Modifier.height(10.dp))
-        content()
+private fun SettingsSectionHeader(title: String) {
+    Text(
+        text = title.uppercase(),
+        style = MaterialTheme.typography.labelMedium,
+        fontWeight = FontWeight.Medium,
+        letterSpacing = 0.5.sp,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.padding(horizontal = 4.dp),
+    )
+}
+
+@Composable
+private fun SettingsGroup(content: @Composable ColumnScope.() -> Unit) {
+    Surface(
+        shape = RoundedCornerShape(12.dp),
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
+    ) {
+        Column(content = content)
     }
 }
 
