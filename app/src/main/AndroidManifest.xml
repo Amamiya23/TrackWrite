@@ -18,6 +18,12 @@
         <meta-data
             android:name="com.amap.api.v2.apikey"
             android:value="${amapApiKey}" />
+        <meta-data
+            android:name="com.trackwrite.amap.web_key"
+            android:value="${amapWebKey}" />
+        <meta-data
+            android:name="com.trackwrite.amap.security_js_code"
+            android:value="${amapSecurityJsCode}" />
 
         <provider
             android:name="androidx.core.content.FileProvider"
@@ -33,6 +39,10 @@
             android:name=".recording.TrackingService"
             android:exported="false"
             android:foregroundServiceType="location" />
+
+        <activity
+            android:name=".map.ManualLocationActivity"
+            android:exported="false" />
 
         <activity
             android:name=".MainActivity"

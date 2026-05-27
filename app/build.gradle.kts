@@ -1,7 +1,17 @@
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
     id("org.jetbrains.kotlin.kapt")
+}
+
+fun localProperty(name: String): String? {
+    val file = rootProject.file("local.properties")
+    if (!file.isFile) return null
+    val properties = Properties()
+    file.inputStream().use { properties.load(it) }
+    return properties.getProperty(name)
 }
 
 android {
@@ -18,7 +28,15 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         manifestPlaceholders["amapApiKey"] = providers
             .gradleProperty("TRACKWRITE_AMAP_API_KEY")
-            .orElse("")
+            .orElse(localProperty("TRACKWRITE_AMAP_API_KEY") ?: "")
+            .get()
+        manifestPlaceholders["amapWebKey"] = providers
+            .gradleProperty("TRACKWRITE_AMAP_WEB_KEY")
+            .orElse(localProperty("TRACKWRITE_AMAP_WEB_KEY") ?: "")
+            .get()
+        manifestPlaceholders["amapSecurityJsCode"] = providers
+            .gradleProperty("TRACKWRITE_AMAP_SECURITY_JS_CODE")
+            .orElse(localProperty("TRACKWRITE_AMAP_SECURITY_JS_CODE") ?: "")
             .get()
     }
 

@@ -1,6 +1,7 @@
 package com.trackwrite.app
 
 import android.Manifest
+import android.app.Activity
 import android.app.AlertDialog
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -23,6 +24,7 @@ import com.trackwrite.app.domain.MatchOptions
 import com.trackwrite.app.domain.Track
 import com.trackwrite.app.domain.stats
 import com.trackwrite.app.io.GpxFileActions
+import com.trackwrite.app.map.ManualLocationActivity
 import com.trackwrite.app.media.PhotoCandidate
 import com.trackwrite.app.media.PhotoGeotagging
 import com.trackwrite.app.media.PhotoMatchResult
@@ -48,6 +50,7 @@ class MainActivity : ComponentActivity() {
     private var selectedPhotos: List<PhotoCandidate> = emptyList()
     private var matchResults: List<PhotoMatchResult> = emptyList()
     private var matchOptions = MatchOptions()
+    private var pendingManualPhotoIndex: Int? = null
 
     private val permissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions(),
@@ -97,6 +100,31 @@ class MainActivity : ComponentActivity() {
             log(geotagging.exportCopies(matchResults, uri).joinToString("\n"))
             refresh()
         }
+    }
+
+    private val manualLocationLauncher = registerForActivityResult(
+        ActivityResultContracts.StartActivityForResult(),
+    ) { result ->
+        val index = pendingManualPhotoIndex
+        pendingManualPhotoIndex = null
+        if (result.resultCode != Activity.RESULT_OK || index == null) return@registerForActivityResult
+        val data = result.data ?: return@registerForActivityResult
+        val latitude = data.getDoubleExtra(ManualLocationActivity.EXTRA_LATITUDE, Double.NaN)
+        val longitude = data.getDoubleExtra(ManualLocationActivity.EXTRA_LONGITUDE, Double.NaN)
+        val label = data.getStringExtra(ManualLocationActivity.EXTRA_LABEL).orEmpty()
+        if (latitude.isNaN() || longitude.isNaN()) {
+            log("Manual location result was invalid.")
+            return@registerForActivityResult
+        }
+        val point = runCatching { GeoPoint(latitude, longitude) }.getOrElse {
+            log(it.message ?: "Manual location result was out of range.")
+            return@registerForActivityResult
+        }
+        selectedPhotos = selectedPhotos.mapIndexed { photoIndex, photo ->
+            if (photoIndex == index) photo.copy(manualLocation = point) else photo
+        }
+        log("Manual location bound to photo ${index + 1}${if (label.isBlank()) "" else ": $label"}")
+        matchSelectedPhotos()
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -152,8 +180,7 @@ class MainActivity : ComponentActivity() {
         ))
         root.addView(row(
             button("Match") { matchSelectedPhotos() },
-            button("Manual point") { promptManualPoint() },
-            button("AMap search") { showAmapSearchNotice() },
+            button("Set location") { promptManualPoint() },
             button("Clear manual") { clearManualPoint() },
         ))
         root.addView(row(
@@ -316,41 +343,51 @@ class MainActivity : ComponentActivity() {
     private fun promptManualPoint() {
         if (selectedPhotos.isEmpty()) return log("Select photos first.")
         val input = EditText(this).apply {
-            hint = "photo index, latitude, longitude"
-            setText("1,30.000000,120.000000")
+            hint = "Photo index"
+            setText("1")
         }
         AlertDialog.Builder(this)
-            .setTitle("Set manual location")
-            .setMessage("AMap search/map SDK integration remains behind the provider boundary; this MVP field supports direct map-coordinate fallback.")
+            .setTitle("Choose photo")
+            .setMessage("Enter the photo number to bind. The next screen supports AMap search/map tap when TRACKWRITE_AMAP_WEB_KEY is configured, and direct coordinate entry otherwise.")
             .setView(input)
-            .setPositiveButton("Bind") { _, _ ->
-                val parts = input.text.toString().split(",").map { it.trim() }
-                if (parts.size < 3) return@setPositiveButton log("Use: index, latitude, longitude")
-                val index = parts[0].toIntOrNull()?.minus(1) ?: return@setPositiveButton log("Invalid index")
-                val lat = parts[1].toDoubleOrNull() ?: return@setPositiveButton log("Invalid latitude")
-                val lon = parts[2].toDoubleOrNull() ?: return@setPositiveButton log("Invalid longitude")
-            selectedPhotos = selectedPhotos.mapIndexed { photoIndex, photo ->
-                    if (photoIndex == index) photo.copy(manualLocation = GeoPoint(lat, lon)) else photo
+            .setPositiveButton("Open map") { _, _ ->
+                val index = input.text.toString().trim().toIntOrNull()?.minus(1)
+                    ?: return@setPositiveButton log("Invalid photo index")
+                if (index !in selectedPhotos.indices) {
+                    log("Photo index is out of range.")
+                    return@setPositiveButton
                 }
-                matchSelectedPhotos()
+                pendingManualPhotoIndex = index
+                manualLocationLauncher.launch(Intent(this, ManualLocationActivity::class.java))
             }
             .setNegativeButton("Cancel", null)
             .show()
     }
 
     private fun clearManualPoint() {
-        selectedPhotos = selectedPhotos.map { it.copy(manualLocation = null) }
-        matchSelectedPhotos()
-    }
-
-    private fun showAmapSearchNotice() {
+        if (selectedPhotos.isEmpty()) return log("Select photos first.")
+        val input = EditText(this).apply {
+            hint = "Photo index"
+            setText("1")
+        }
         AlertDialog.Builder(this)
-            .setTitle("AMap provider boundary")
-            .setMessage(
-                "The app is wired for AMap key/permissions, but the AMap SDK artifacts are not present in the local Gradle cache. " +
-                    "Manual fallback is available through direct coordinates now; adding the SDK can replace this action with search results and map-tap binding.",
-            )
-            .setPositiveButton("OK", null)
+            .setTitle("Clear manual location")
+            .setMessage("Enter the photo number to clear.")
+            .setView(input)
+            .setPositiveButton("Clear") { _, _ ->
+                val index = input.text.toString().trim().toIntOrNull()?.minus(1)
+                    ?: return@setPositiveButton log("Invalid photo index")
+                if (index !in selectedPhotos.indices) {
+                    log("Photo index is out of range.")
+                    return@setPositiveButton
+                }
+                selectedPhotos = selectedPhotos.mapIndexed { photoIndex, photo ->
+                    if (photoIndex == index) photo.copy(manualLocation = null) else photo
+                }
+                log("Manual location cleared for photo ${index + 1}.")
+                matchSelectedPhotos()
+            }
+            .setNegativeButton("Cancel", null)
             .show()
     }
 
