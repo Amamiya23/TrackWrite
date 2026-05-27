@@ -136,7 +136,9 @@ locationManager.requestLocationUpdates(provider, frequency.intervalMs, frequency
 ## Code Review Checklist
 
 - Compose UI is under `TrackWriteTheme`.
-- Three-tab navigation preserves the Record / Match / Library workflow.
+- Bottom navigation has exactly the Record and Match destinations. Track history
+  management belongs on Record; matching track source selection belongs on
+  Match.
 - Settings controls are backed by real persisted behavior.
 - User-visible text is in string resources with Chinese equivalents.
 - Manual AMap WebView is hosted as a native `WebView` root surface, with Compose
