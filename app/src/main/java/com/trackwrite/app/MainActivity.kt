@@ -287,10 +287,6 @@ class MainActivity : ComponentActivity() {
                         pendingExportMode = ExportFolderMode.SaveDefault
                         exportFolderLauncher.launch(null)
                     },
-                    onClearExportFolder = {
-                        settingsStore.setDefaultExportFolderUri(null)
-                        uiState = uiState.copy(settings = settingsStore.current(), logMessage = getString(R.string.export_folder_cleared))
-                    },
                     onDismissDialog = { dismissDialogs() },
                     onDismissWriteResult = { uiState = uiState.copy(writeResult = null) },
                     onConfirmStart = { name ->
@@ -594,7 +590,6 @@ private fun TrackWriteApp(
     onWriteDefault: () -> Unit,
     onSettingsChanged: (AppSettings) -> Unit,
     onChooseExportFolder: () -> Unit,
-    onClearExportFolder: () -> Unit,
     onDismissDialog: () -> Unit,
     onDismissWriteResult: () -> Unit,
     onConfirmStart: (String) -> Unit,
@@ -671,7 +666,6 @@ private fun TrackWriteApp(
                 settings = state.settings,
                 onSettingsChanged = onSettingsChanged,
                 onChooseExportFolder = onChooseExportFolder,
-                onClearExportFolder = onClearExportFolder,
             )
         } else {
             when (state.selectedTab) {
@@ -1605,7 +1599,6 @@ private fun SettingsScreen(
     settings: AppSettings,
     onSettingsChanged: (AppSettings) -> Unit,
     onChooseExportFolder: () -> Unit,
-    onClearExportFolder: () -> Unit,
 ) {
     var showAppearanceDialog by remember { mutableStateOf(false) }
     var showFrequencyDialog by remember { mutableStateOf(false) }
@@ -1693,23 +1686,15 @@ private fun SettingsScreen(
             Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 SettingsSectionHeader(stringResource(R.string.export_settings))
                 SettingsGroup {
-                    SettingChoiceRow(
-                        title = stringResource(R.string.write_copies),
-                        subtitle = stringResource(R.string.write_copies_default_desc),
-                        selected = settings.preferExportCopies,
-                        onClick = { onSettingsChanged(settings.copy(preferExportCopies = true)) },
-                    )
-                    SettingChoiceRow(
-                        title = stringResource(R.string.write_originals),
-                        subtitle = stringResource(R.string.write_originals_default_desc),
-                        selected = !settings.preferExportCopies,
-                        onClick = { onSettingsChanged(settings.copy(preferExportCopies = false)) },
+                    ExportModeSelector(
+                        preferCopies = settings.preferExportCopies,
+                        onSelectCopies = { onSettingsChanged(settings.copy(preferExportCopies = true)) },
+                        onSelectOriginals = { onSettingsChanged(settings.copy(preferExportCopies = false)) },
                     )
                     HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant, modifier = Modifier.padding(horizontal = 16.dp))
-                    ExportFolderSetting(
+                    ExportFolderRow(
                         folderUri = settings.defaultExportFolderUri,
                         onChooseExportFolder = onChooseExportFolder,
-                        onClearExportFolder = onClearExportFolder,
                     )
                 }
             }
@@ -1859,33 +1844,86 @@ private fun SettingSwitchRow(
 }
 
 @Composable
-private fun ExportFolderSetting(
+private fun ExportModeSelector(
+    preferCopies: Boolean,
+    onSelectCopies: () -> Unit,
+    onSelectOriginals: () -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = stringResource(R.string.export_settings),
+            style = MaterialTheme.typography.bodyMedium,
+            modifier = Modifier.weight(1f),
+        )
+        Surface(
+            shape = RoundedCornerShape(8.dp),
+            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+            border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+        ) {
+            Row {
+                val copiesBg = if (preferCopies) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surface
+                val copiesContent = if (preferCopies) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface
+                Surface(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(topStart = 8.dp, bottomStart = 8.dp))
+                        .clickable(onClick = onSelectCopies),
+                    color = copiesBg,
+                ) {
+                    Text(
+                        text = stringResource(R.string.write_copies),
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                        style = MaterialTheme.typography.labelLarge,
+                        color = copiesContent,
+                    )
+                }
+                val originalsBg = if (!preferCopies) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surface
+                val originalsContent = if (!preferCopies) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface
+                Surface(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(topEnd = 8.dp, bottomEnd = 8.dp))
+                        .clickable(onClick = onSelectOriginals),
+                    color = originalsBg,
+                ) {
+                    Text(
+                        text = stringResource(R.string.write_originals),
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                        style = MaterialTheme.typography.labelLarge,
+                        color = originalsContent,
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ExportFolderRow(
     folderUri: String?,
     onChooseExportFolder: () -> Unit,
-    onClearExportFolder: () -> Unit,
 ) {
-    Column(Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onChooseExportFolder)
+            .padding(horizontal = 16.dp, vertical = 14.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
         Text(
             text = stringResource(R.string.default_export_folder),
             style = MaterialTheme.typography.bodyMedium,
+            modifier = Modifier.weight(1f),
         )
-        Spacer(Modifier.height(2.dp))
-        Text(
-            text = if (folderUri.isNullOrBlank()) {
-                stringResource(R.string.export_folder_unconfigured)
-            } else {
-                stringResource(R.string.export_folder_configured)
-            },
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        Icon(
+            Icons.Default.Search,
+            contentDescription = stringResource(R.string.choose_folder),
+            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.size(20.dp),
         )
-        Spacer(Modifier.height(10.dp))
-        ActionRow {
-            SecondaryActionButton(stringResource(R.string.choose_folder), Icons.Default.Search, onChooseExportFolder)
-            if (!folderUri.isNullOrBlank()) {
-                DangerActionButton(stringResource(R.string.clear), Icons.Default.Delete, onClearExportFolder)
-            }
-        }
     }
 }
 
