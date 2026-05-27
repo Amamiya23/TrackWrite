@@ -44,6 +44,8 @@ import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Share
+import androidx.compose.material.icons.filled.Pause
+import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -56,6 +58,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.NavigationBar
+import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
@@ -634,17 +637,17 @@ private fun TrackWriteApp(
         bottomBar = {
             if (!state.showSettings) {
                 NavigationBar(containerColor = MaterialTheme.colorScheme.surface) {
-                    NavigationItem(
+                    NavigationBarItem(
                         selected = state.selectedTab == MainTab.Record,
-                        icon = Icons.Default.LocationOn,
-                        label = stringResource(R.string.tab_record),
                         onClick = { onTabSelected(MainTab.Record) },
+                        icon = { Icon(Icons.Default.LocationOn, contentDescription = stringResource(R.string.tab_record)) },
+                        label = { Text(stringResource(R.string.tab_record)) },
                     )
-                    NavigationItem(
+                    NavigationBarItem(
                         selected = state.selectedTab == MainTab.Match,
-                        icon = Icons.Default.Search,
-                        label = stringResource(R.string.tab_match),
                         onClick = { onTabSelected(MainTab.Match) },
+                        icon = { Icon(Icons.Default.Search, contentDescription = stringResource(R.string.tab_match)) },
+                        label = { Text(stringResource(R.string.tab_match)) },
                     )
                 }
             }
@@ -699,35 +702,6 @@ private fun TrackWriteApp(
     DeleteTrackDialog(state.deleteDialog, onDismissDialog, onConfirmDelete)
     WriteOriginalsDialog(state.showWriteDialog, onDismissDialog, onConfirmWrite)
     WriteResultSheet(state.writeResult, onDismissWriteResult)
-}
-
-@Composable
-private fun RowScope.NavigationItem(
-    selected: Boolean,
-    icon: ImageVector,
-    label: String,
-    onClick: () -> Unit,
-) {
-    val color = if (selected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface
-    val contentColor = if (selected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant
-    Surface(
-        modifier = Modifier
-            .weight(1f)
-            .padding(horizontal = 4.dp, vertical = 8.dp)
-            .clip(RoundedCornerShape(8.dp))
-            .clickable(onClick = onClick),
-        color = color,
-        shape = RoundedCornerShape(8.dp),
-    ) {
-        Column(
-            modifier = Modifier.padding(vertical = 8.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-        ) {
-            Icon(icon, contentDescription = label, tint = contentColor, modifier = Modifier.size(20.dp))
-            Spacer(Modifier.height(2.dp))
-            Text(label, color = contentColor, style = MaterialTheme.typography.labelSmall)
-        }
-    }
 }
 
 @Composable
@@ -826,14 +800,14 @@ private fun RecordingPanel(
             }
             RecordingStatus.Recording -> {
                 ActionRow {
-                    SecondaryActionButton(stringResource(R.string.pause), Icons.Default.Warning, onPause)
-                    DangerActionButton(stringResource(R.string.stop), Icons.Default.Warning, onStop)
+                    SecondaryActionButton(stringResource(R.string.pause), Icons.Default.Pause, onPause)
+                    DangerActionButton(stringResource(R.string.stop), Icons.Default.Stop, onStop)
                 }
             }
             RecordingStatus.Paused -> {
                 ActionRow {
                     PrimaryActionButton(stringResource(R.string.resume), Icons.Default.PlayArrow, onResume)
-                    DangerActionButton(stringResource(R.string.stop), Icons.Default.Warning, onStop)
+                    DangerActionButton(stringResource(R.string.stop), Icons.Default.Stop, onStop)
                 }
             }
         }
@@ -961,8 +935,6 @@ private fun MatchScreen(
             )
         }
         item {
-            SectionHeader(stringResource(R.string.photo_matching), Icons.Default.Search)
-            Spacer(Modifier.height(10.dp))
             ActionRow {
                 PrimaryActionButton(stringResource(R.string.select_photos), Icons.Default.Search, onSelectPhotos)
                 SecondaryActionButton(stringResource(R.string.select_folder), Icons.Default.Share, onSelectFolder)
@@ -1296,7 +1268,6 @@ private fun ReviewWritePanel(
     onWriteDefault: () -> Unit,
 ) {
     SectionBlock {
-        SectionHeader(stringResource(R.string.review_write), Icons.Default.Check)
         Spacer(Modifier.height(10.dp))
         Text(
             text = stringResource(R.string.write_readiness, readiness.writeable, readiness.skipped),
@@ -1427,9 +1398,24 @@ private fun SectionHeader(text: String, icon: ImageVector) {
 @Composable
 private fun MetricGrid(metrics: List<Pair<String, String>>) {
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        metrics.chunked(2).forEach { row ->
+        if (metrics.isNotEmpty()) {
+            val (label, value) = metrics.first()
+            Surface(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(8.dp),
+                color = MaterialTheme.colorScheme.surfaceVariant,
+            ) {
+                Column(Modifier.padding(12.dp)) {
+                    Text(label, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Spacer(Modifier.height(4.dp))
+                    Text(value, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+                }
+            }
+        }
+        val remaining = metrics.drop(1)
+        if (remaining.isNotEmpty()) {
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
-                row.forEach { (label, value) ->
+                remaining.forEach { (label, value) ->
                     Surface(
                         modifier = Modifier
                             .weight(1f)
@@ -1444,7 +1430,6 @@ private fun MetricGrid(metrics: List<Pair<String, String>>) {
                         }
                     }
                 }
-                if (row.size == 1) Spacer(Modifier.weight(1f))
             }
         }
     }
