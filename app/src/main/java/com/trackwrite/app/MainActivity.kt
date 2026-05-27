@@ -9,6 +9,7 @@ import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
@@ -55,6 +56,7 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -158,7 +160,7 @@ class MainActivity : ComponentActivity() {
     ) { uris ->
         persistPhotoPermissions(uris)
         selectedPhotos = geotagging.loadPhotos(uris)
-        uiState = uiState.copy(selectedTab = MainTab.Match, photoBatchExpanded = false)
+        uiState = uiState.copy(selectedTab = MainTab.Match)
         matchSelectedPhotos()
     }
 
@@ -171,7 +173,7 @@ class MainActivity : ComponentActivity() {
                 Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION,
             )
             selectedPhotos = geotagging.loadPhotosFromFolder(uri)
-            uiState = uiState.copy(selectedTab = MainTab.Match, photoBatchExpanded = false)
+            uiState = uiState.copy(selectedTab = MainTab.Match)
             matchSelectedPhotos()
         }
     }
@@ -223,7 +225,7 @@ class MainActivity : ComponentActivity() {
             if (photoIndex == index) photo.copy(manualLocation = point) else photo
         }
         log("Manual location bound to photo ${index + 1}${if (label.isBlank()) "" else ": $label"}")
-        uiState = uiState.copy(selectedTab = MainTab.Match, photoBatchExpanded = true, highlightedPhotoIndex = index)
+        uiState = uiState.copy(selectedTab = MainTab.Match, showPhotoBatchSheet = true, highlightedPhotoIndex = index)
         matchSelectedPhotos()
     }
 
@@ -255,12 +257,14 @@ class MainActivity : ComponentActivity() {
                     onRecordTrackSelected = { recordTrackId = it; refresh() },
                     onMatchTrackSelected = {
                         matchTrackId = it
-                        uiState = uiState.copy(trackSourceExpanded = false)
                         matchSelectedPhotos()
                     },
-                    onToggleTrackHistory = { uiState = uiState.copy(trackHistoryExpanded = !uiState.trackHistoryExpanded) },
-                    onToggleTrackSource = { uiState = uiState.copy(trackSourceExpanded = !uiState.trackSourceExpanded) },
-                    onTogglePhotoBatch = { uiState = uiState.copy(photoBatchExpanded = !uiState.photoBatchExpanded) },
+                    onShowTrackHistory = { uiState = uiState.copy(showTrackHistorySheet = true) },
+                    onDismissTrackHistory = { uiState = uiState.copy(showTrackHistorySheet = false) },
+                    onShowTrackSource = { uiState = uiState.copy(showTrackSourceSheet = true) },
+                    onDismissTrackSource = { uiState = uiState.copy(showTrackSourceSheet = false) },
+                    onShowPhotoBatch = { uiState = uiState.copy(showPhotoBatchSheet = true) },
+                    onDismissPhotoBatch = { uiState = uiState.copy(showPhotoBatchSheet = false) },
                     onHighlightConsumed = { uiState = uiState.copy(highlightedPhotoIndex = null) },
                     onSelectPhotos = { photoPickerLauncher.launch(arrayOf("image/*")) },
                     onSelectFolder = { folderPickerLauncher.launch(null) },
@@ -380,7 +384,6 @@ class MainActivity : ComponentActivity() {
             val track = gpx.importTrack(UUID.randomUUID().toString(), xml)
             repository.saveTrack(track)
             matchTrackId = track.id
-            uiState = uiState.copy(trackSourceExpanded = false)
             log("Imported ${track.name}")
             refresh()
         }.onFailure { log("Import failed: ${it.message}") }
@@ -498,9 +501,9 @@ private data class MainUiState(
     val matches: List<PhotoMatchResult> = emptyList(),
     val settings: AppSettings = AppSettings(),
     val logMessage: String = "",
-    val trackHistoryExpanded: Boolean = false,
-    val trackSourceExpanded: Boolean = true,
-    val photoBatchExpanded: Boolean = false,
+    val showTrackHistorySheet: Boolean = false,
+    val showTrackSourceSheet: Boolean = false,
+    val showPhotoBatchSheet: Boolean = false,
     val highlightedPhotoIndex: Int? = null,
     val writeResult: WriteResultState? = null,
     val startDialogName: String? = null,
@@ -577,9 +580,12 @@ private fun TrackWriteApp(
     onDeleteTrack: () -> Unit,
     onRecordTrackSelected: (String) -> Unit,
     onMatchTrackSelected: (String) -> Unit,
-    onToggleTrackHistory: () -> Unit,
-    onToggleTrackSource: () -> Unit,
-    onTogglePhotoBatch: () -> Unit,
+    onShowTrackHistory: () -> Unit,
+    onDismissTrackHistory: () -> Unit,
+    onShowTrackSource: () -> Unit,
+    onDismissTrackSource: () -> Unit,
+    onShowPhotoBatch: () -> Unit,
+    onDismissPhotoBatch: () -> Unit,
     onHighlightConsumed: () -> Unit,
     onSelectPhotos: () -> Unit,
     onSelectFolder: () -> Unit,
@@ -657,6 +663,7 @@ private fun TrackWriteApp(
         },
     ) { padding ->
         if (state.showSettings) {
+            BackHandler { onCloseSettings() }
             SettingsScreen(
                 modifier = Modifier
                     .padding(padding)
@@ -680,15 +687,18 @@ private fun TrackWriteApp(
                     onRenameTrack = onRenameTrack,
                     onDeleteTrack = onDeleteTrack,
                     onRecordTrackSelected = onRecordTrackSelected,
-                    onToggleTrackHistory = onToggleTrackHistory,
+                    onShowTrackHistory = onShowTrackHistory,
+                    onDismissTrackHistory = onDismissTrackHistory,
                 )
                 MainTab.Match -> MatchScreen(
                     modifier = Modifier.padding(padding),
                     state = state,
                     onImportGpx = onImportGpx,
                     onMatchTrackSelected = onMatchTrackSelected,
-                    onToggleTrackSource = onToggleTrackSource,
-                    onTogglePhotoBatch = onTogglePhotoBatch,
+                    onShowTrackSource = onShowTrackSource,
+                    onDismissTrackSource = onDismissTrackSource,
+                    onShowPhotoBatch = onShowPhotoBatch,
+                    onDismissPhotoBatch = onDismissPhotoBatch,
                     onHighlightConsumed = onHighlightConsumed,
                     onSelectPhotos = onSelectPhotos,
                     onSelectFolder = onSelectFolder,
@@ -720,7 +730,8 @@ private fun RecordScreen(
     onRenameTrack: () -> Unit,
     onDeleteTrack: () -> Unit,
     onRecordTrackSelected: (String) -> Unit,
-    onToggleTrackHistory: () -> Unit,
+    onShowTrackHistory: () -> Unit,
+    onDismissTrackHistory: () -> Unit,
 ) {
     LaunchedEffect(state.recording.status) {
         while (state.recording.status == RecordingStatus.Recording) {
@@ -741,18 +752,24 @@ private fun RecordScreen(
             RecordingPanel(state, activeTrack, onStartRecording, onPause, onResume, onStop)
         }
         item {
-            TrackHistoryPanel(
-                tracks = state.tracks,
-                selectedTrackId = state.recordTrackId,
-                expanded = state.trackHistoryExpanded || state.tracks.isEmpty(),
+            TrackHistoryButton(
+                trackCount = state.tracks.size,
                 selectedTrack = selectedTrack,
-                onToggle = onToggleTrackHistory,
-                onTrackSelected = onRecordTrackSelected,
-                onExportGpx = onExportGpx,
-                onRenameTrack = onRenameTrack,
-                onDeleteTrack = onDeleteTrack,
+                onClick = onShowTrackHistory,
             )
         }
+    }
+
+    if (state.showTrackHistorySheet) {
+        TrackHistorySheet(
+            tracks = state.tracks,
+            selectedTrackId = state.recordTrackId,
+            onTrackSelected = onRecordTrackSelected,
+            onExportGpx = onExportGpx,
+            onRenameTrack = onRenameTrack,
+            onDeleteTrack = onDeleteTrack,
+            onDismiss = onDismissTrackHistory,
+        )
     }
 }
 
@@ -832,65 +849,132 @@ private fun RecordingConfidenceLine(recording: RecordingSnapshot, settings: AppS
 }
 
 @Composable
-private fun TrackHistoryPanel(
+private fun TrackHistoryButton(
+    trackCount: Int,
+    selectedTrack: Track?,
+    onClick: () -> Unit,
+) {
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(12.dp))
+            .clickable(onClick = onClick),
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(Icons.Default.LocationOn, contentDescription = null, modifier = Modifier.size(20.dp))
+            Spacer(Modifier.width(12.dp))
+            Column(Modifier.weight(1f)) {
+                Text(
+                    text = stringResource(R.string.track_history_count, trackCount),
+                    style = MaterialTheme.typography.bodyLarge,
+                    fontWeight = FontWeight.Medium,
+                )
+                if (selectedTrack != null) {
+                    Spacer(Modifier.height(2.dp))
+                    Text(
+                        text = selectedTrack.name,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+            }
+            Text(
+                "›",
+                style = MaterialTheme.typography.titleLarge,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun TrackHistorySheet(
     tracks: List<Track>,
     selectedTrackId: String?,
-    expanded: Boolean,
-    selectedTrack: Track?,
-    onToggle: () -> Unit,
     onTrackSelected: (String) -> Unit,
     onExportGpx: () -> Unit,
     onRenameTrack: () -> Unit,
     onDeleteTrack: () -> Unit,
+    onDismiss: () -> Unit,
 ) {
-    SectionBlock {
-        Row(
+    ModalBottomSheet(onDismissRequest = onDismiss) {
+        Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .clickable(onClick = onToggle),
-            verticalAlignment = Alignment.CenterVertically,
+                .padding(horizontal = 20.dp, vertical = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
         ) {
-            SectionHeader(
-                text = stringResource(R.string.track_history_count, tracks.size),
-                icon = Icons.Default.LocationOn,
-            )
-            Spacer(Modifier.weight(1f))
             Text(
-                text = stringResource(if (expanded) R.string.collapse else R.string.expand),
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.primary,
+                text = stringResource(R.string.track_history_count, tracks.size),
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.SemiBold,
+                modifier = Modifier.padding(bottom = 12.dp),
             )
-        }
-        if (!expanded) {
-            if (selectedTrack != null) {
-                Spacer(Modifier.height(8.dp))
+            if (tracks.isEmpty()) {
                 Text(
-                    text = selectedTrack.name,
-                    style = MaterialTheme.typography.bodySmall,
+                    text = stringResource(R.string.no_tracks),
+                    style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.padding(vertical = 20.dp),
                 )
-            }
-        } else {
-            Spacer(Modifier.height(12.dp))
-            TrackList(
-                tracks = tracks,
-                selectedTrackId = selectedTrackId,
-                onTrackSelected = onTrackSelected,
-                compact = true,
-            )
-            if (tracks.isNotEmpty()) {
-                Spacer(Modifier.height(12.dp))
-                ActionRow {
-                    SecondaryActionButton(stringResource(R.string.export_gpx), Icons.Default.Share, onExportGpx)
-                    SecondaryActionButton(stringResource(R.string.rename), Icons.Default.Edit, onRenameTrack)
+            } else {
+                tracks.forEach { track ->
+                    val selected = track.id == selectedTrackId
+                    val stats = track.stats()
+                    Surface(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(8.dp),
+                        color = if (selected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface,
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Column(Modifier.weight(1f)) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Text(
+                                        text = track.name,
+                                        style = MaterialTheme.typography.bodyLarge,
+                                        fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                        modifier = Modifier.weight(1f, fill = false),
+                                    )
+                                    if (selected) {
+                                        Spacer(Modifier.width(8.dp))
+                                        StatusPill(stringResource(R.string.selected), PillTone.Success)
+                                    }
+                                }
+                                Spacer(Modifier.height(2.dp))
+                                Text(
+                                    text = "${track.points.size} ${stringResource(R.string.points_short)} · ${formatDuration(stats.duration)} · ${formatDistance(stats.distanceMeters)}",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                            Row {
+                                IconButton(onClick = { onTrackSelected(track.id); onExportGpx() }, modifier = Modifier.size(36.dp)) {
+                                    Icon(Icons.Default.Share, contentDescription = stringResource(R.string.export_gpx), modifier = Modifier.size(18.dp))
+                                }
+                                IconButton(onClick = { onTrackSelected(track.id); onRenameTrack() }, modifier = Modifier.size(36.dp)) {
+                                    Icon(Icons.Default.Edit, contentDescription = stringResource(R.string.rename), modifier = Modifier.size(18.dp))
+                                }
+                                IconButton(onClick = { onTrackSelected(track.id); onDeleteTrack() }, modifier = Modifier.size(36.dp)) {
+                                    Icon(Icons.Default.Delete, contentDescription = stringResource(R.string.delete), modifier = Modifier.size(18.dp), tint = MaterialTheme.colorScheme.error)
+                                }
+                            }
+                        }
+                    }
                 }
-                Spacer(Modifier.height(10.dp))
-                ActionRow {
-                    DangerActionButton(stringResource(R.string.delete), Icons.Default.Delete, onDeleteTrack)
-                }
             }
+            Spacer(Modifier.height(16.dp))
         }
     }
 }
@@ -901,8 +985,10 @@ private fun MatchScreen(
     state: MainUiState,
     onImportGpx: () -> Unit,
     onMatchTrackSelected: (String) -> Unit,
-    onToggleTrackSource: () -> Unit,
-    onTogglePhotoBatch: () -> Unit,
+    onShowTrackSource: () -> Unit,
+    onDismissTrackSource: () -> Unit,
+    onShowPhotoBatch: () -> Unit,
+    onDismissPhotoBatch: () -> Unit,
     onHighlightConsumed: () -> Unit,
     onSelectPhotos: () -> Unit,
     onSelectFolder: () -> Unit,
@@ -910,254 +996,312 @@ private fun MatchScreen(
     onClearManualLocation: (Int) -> Unit,
     onWriteDefault: () -> Unit,
 ) {
-    val listState = rememberLazyListState()
-    LaunchedEffect(state.highlightedPhotoIndex) {
-        val index = state.highlightedPhotoIndex ?: return@LaunchedEffect
-        if (state.photoBatchExpanded) {
-            listState.animateScrollToItem(index + 3)
-            delay(1_200)
-            onHighlightConsumed()
-        }
-    }
-    LazyColumn(
-        state = listState,
-        modifier = modifier
-            .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background),
-        contentPadding = androidx.compose.foundation.layout.PaddingValues(20.dp),
-        verticalArrangement = Arrangement.spacedBy(18.dp),
-    ) {
-        item {
-            MatchTrackSourcePanel(
-                tracks = state.tracks,
-                selectedTrack = state.matchTrackId?.let { id -> state.tracks.firstOrNull { it.id == id } },
-                expanded = state.trackSourceExpanded || state.matchTrackId == null,
-                onToggle = onToggleTrackSource,
-                onImportGpx = onImportGpx,
-                onTrackSelected = onMatchTrackSelected,
-            )
-        }
-        item {
-            ActionRow {
-                PrimaryActionButton(stringResource(R.string.select_photos), Icons.Default.Search, onSelectPhotos)
-                SecondaryActionButton(stringResource(R.string.select_folder), Icons.Default.Share, onSelectFolder)
-            }
-            Spacer(Modifier.height(10.dp))
-            MatchSettingsSummary(state.settings)
-        }
-        if (state.matches.isEmpty()) {
-            item { EmptyPanel(stringResource(R.string.no_photos)) }
-        } else {
+    val selectedTrack = state.matchTrackId?.let { id -> state.tracks.firstOrNull { it.id == id } }
+    Box(modifier = modifier.fillMaxSize()) {
+        LazyColumn(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(MaterialTheme.colorScheme.background),
+            contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 20.dp, bottom = 80.dp),
+            verticalArrangement = Arrangement.spacedBy(18.dp),
+        ) {
             item {
-                PhotoBatchSummary(
-                    matches = state.matches,
-                    expanded = state.photoBatchExpanded,
-                    onToggle = onTogglePhotoBatch,
+                TrackSourceButton(
+                    selectedTrack = selectedTrack,
+                    onClick = onShowTrackSource,
                 )
             }
-            if (state.photoBatchExpanded) {
-                itemsIndexed(state.matches) { index, result ->
-                    PhotoMatchRow(
-                        index = index,
-                        result = result,
-                        highlighted = index == state.highlightedPhotoIndex,
-                        onSetManualLocation = { onSetManualLocation(index) },
-                        onClearManualLocation = { onClearManualLocation(index) },
+            item {
+                ActionRow {
+                    PrimaryActionButton(stringResource(R.string.select_photos), Icons.Default.Search, onSelectPhotos)
+                    SecondaryActionButton(stringResource(R.string.select_folder), Icons.Default.Share, onSelectFolder)
+                }
+            }
+            if (state.matches.isEmpty()) {
+                item { EmptyPanel(stringResource(R.string.no_photos)) }
+            } else {
+                item {
+                    PhotoBatchButton(
+                        matches = state.matches,
+                        onClick = onShowPhotoBatch,
+                    )
+                }
+                item {
+                    ReviewWritePanel(
+                        settings = state.settings,
+                        readiness = writeReadiness(state.matches),
                     )
                 }
             }
-            item {
-                ReviewWritePanel(
-                    settings = state.settings,
-                    readiness = writeReadiness(state.matches),
-                    onWriteDefault = onWriteDefault,
+        }
+        if (state.matches.isNotEmpty()) {
+            ExtendedFloatingActionButton(
+                onClick = onWriteDefault,
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .padding(20.dp),
+                shape = RoundedCornerShape(12.dp),
+                containerColor = if (state.settings.preferExportCopies) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.errorContainer,
+                contentColor = if (state.settings.preferExportCopies) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onErrorContainer,
+            ) {
+                Icon(
+                    if (state.settings.preferExportCopies) Icons.Default.Share else Icons.Default.Warning,
+                    contentDescription = null,
+                    modifier = Modifier.size(18.dp),
+                )
+                Spacer(Modifier.width(8.dp))
+                Text(
+                    if (state.settings.preferExportCopies) stringResource(R.string.write_copies) else stringResource(R.string.write_originals),
+                    fontWeight = FontWeight.SemiBold,
                 )
             }
         }
     }
+
+    if (state.showTrackSourceSheet) {
+        TrackSourceSheet(
+            tracks = state.tracks,
+            selectedTrackId = state.matchTrackId,
+            onTrackSelected = onMatchTrackSelected,
+            onImportGpx = onImportGpx,
+            onDismiss = onDismissTrackSource,
+        )
+    }
+    if (state.showPhotoBatchSheet) {
+        PhotoBatchSheet(
+            matches = state.matches,
+            highlightedPhotoIndex = state.highlightedPhotoIndex,
+            onSetManualLocation = onSetManualLocation,
+            onClearManualLocation = onClearManualLocation,
+            onDismiss = onDismissPhotoBatch,
+        )
+    }
 }
 
 @Composable
-private fun MatchTrackSourcePanel(
-    tracks: List<Track>,
+private fun TrackSourceButton(
     selectedTrack: Track?,
-    expanded: Boolean,
-    onToggle: () -> Unit,
-    onImportGpx: () -> Unit,
-    onTrackSelected: (String) -> Unit,
+    onClick: () -> Unit,
 ) {
-    SectionBlock {
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(12.dp))
+            .clickable(onClick = onClick),
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
+    ) {
         Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clickable(onClick = onToggle),
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            SectionHeader(stringResource(R.string.match_track_source), Icons.Default.LocationOn)
-            Spacer(Modifier.weight(1f))
-            Text(
-                text = stringResource(if (expanded) R.string.collapse else R.string.expand),
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.primary,
-            )
-        }
-        if (selectedTrack != null) {
-            Spacer(Modifier.height(8.dp))
-            val stats = selectedTrack.stats()
-            Text(
-                text = selectedTrack.name,
-                style = MaterialTheme.typography.titleSmall,
-                fontWeight = FontWeight.SemiBold,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-            Text(
-                text = "${selectedTrack.points.size} ${stringResource(R.string.points_short)} · ${formatDuration(stats.duration)} · ${formatDistance(stats.distanceMeters)}",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        } else {
-            Spacer(Modifier.height(8.dp))
-            Text(
-                text = stringResource(R.string.no_match_track_help),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
-        if (expanded) {
-            Spacer(Modifier.height(12.dp))
-            ActionRow {
-                PrimaryActionButton(stringResource(R.string.import_gpx), Icons.Default.Share, onImportGpx)
+            Icon(Icons.Default.LocationOn, contentDescription = null, modifier = Modifier.size(20.dp))
+            Spacer(Modifier.width(12.dp))
+            Column(Modifier.weight(1f)) {
+                if (selectedTrack != null) {
+                    val stats = selectedTrack.stats()
+                    Text(
+                        text = selectedTrack.name,
+                        style = MaterialTheme.typography.bodyLarge,
+                        fontWeight = FontWeight.Medium,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    Spacer(Modifier.height(2.dp))
+                    Text(
+                        text = "${selectedTrack.points.size} ${stringResource(R.string.points_short)} · ${formatDuration(stats.duration)} · ${formatDistance(stats.distanceMeters)}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                } else {
+                    Text(
+                        text = stringResource(R.string.match_track_source),
+                        style = MaterialTheme.typography.bodyLarge,
+                        fontWeight = FontWeight.Medium,
+                    )
+                    Spacer(Modifier.height(2.dp))
+                    Text(
+                        text = stringResource(R.string.no_match_track_help),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
             }
-            Spacer(Modifier.height(12.dp))
             Text(
-                text = stringResource(R.string.choose_existing_track),
-                style = MaterialTheme.typography.labelMedium,
+                "›",
+                style = MaterialTheme.typography.titleLarge,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            Spacer(Modifier.height(8.dp))
-            TrackList(
-                tracks = tracks,
-                selectedTrackId = selectedTrack?.id,
-                onTrackSelected = onTrackSelected,
-                compact = true,
             )
         }
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun PhotoBatchSummary(
+private fun TrackSourceSheet(
+    tracks: List<Track>,
+    selectedTrackId: String?,
+    onTrackSelected: (String) -> Unit,
+    onImportGpx: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    ModalBottomSheet(onDismissRequest = onDismiss) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 20.dp, vertical = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            Text(
+                text = stringResource(R.string.match_track_source),
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.SemiBold,
+                modifier = Modifier.padding(bottom = 12.dp),
+            )
+            if (tracks.isEmpty()) {
+                Text(
+                    text = stringResource(R.string.no_tracks),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(vertical = 20.dp),
+                )
+            } else {
+                tracks.forEach { track ->
+                    val selected = track.id == selectedTrackId
+                    val stats = track.stats()
+                    Surface(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(8.dp))
+                            .clickable { onTrackSelected(track.id); onDismiss() },
+                        color = if (selected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface,
+                        border = if (selected) androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.primary) else null,
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Column(Modifier.weight(1f)) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Text(
+                                        text = track.name,
+                                        style = MaterialTheme.typography.bodyLarge,
+                                        fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                        modifier = Modifier.weight(1f, fill = false),
+                                    )
+                                    if (selected) {
+                                        Spacer(Modifier.width(8.dp))
+                                        StatusPill(stringResource(R.string.selected), PillTone.Success)
+                                    }
+                                }
+                                Spacer(Modifier.height(2.dp))
+                                Text(
+                                    text = "${track.points.size} ${stringResource(R.string.points_short)} · ${formatDuration(stats.duration)} · ${formatDistance(stats.distanceMeters)}",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+            Spacer(Modifier.height(12.dp))
+            OutlinedButton(
+                onClick = { onImportGpx() },
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(8.dp),
+            ) {
+                Icon(Icons.Default.Share, contentDescription = null, modifier = Modifier.size(18.dp))
+                Spacer(Modifier.width(8.dp))
+                Text(stringResource(R.string.import_gpx))
+            }
+            Spacer(Modifier.height(16.dp))
+        }
+    }
+}
+
+@Composable
+private fun PhotoBatchButton(
     matches: List<PhotoMatchResult>,
-    expanded: Boolean,
-    onToggle: () -> Unit,
+    onClick: () -> Unit,
 ) {
     val manualCount = matches.count { it.photo.manualLocation != null }
     val matchedCount = matches.count { it.selectedPosition != null }
     val unmatchedCount = matches.size - matchedCount
-    SectionBlock {
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(12.dp))
+            .clickable(onClick = onClick),
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
+    ) {
         Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clickable(onClick = onToggle),
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Column(Modifier.weight(1f)) {
                 Text(
                     text = stringResource(R.string.photo_batch_count, matches.size),
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.SemiBold,
+                    style = MaterialTheme.typography.bodyLarge,
+                    fontWeight = FontWeight.Medium,
                 )
-                Spacer(Modifier.height(6.dp))
+                Spacer(Modifier.height(2.dp))
                 Text(
                     text = stringResource(R.string.photo_batch_stats, matchedCount, unmatchedCount, manualCount),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
-            Text(
-                text = stringResource(if (expanded) R.string.collapse else R.string.expand),
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.primary,
-            )
-        }
-        if (unmatchedCount > 0) {
-            Spacer(Modifier.height(10.dp))
-            StatusPill(stringResource(R.string.photos_need_attention, unmatchedCount), PillTone.Warning)
-        }
-    }
-}
-
-@Composable
-private fun TrackList(
-    tracks: List<Track>,
-    selectedTrackId: String?,
-    onTrackSelected: (String) -> Unit,
-    compact: Boolean,
-) {
-    if (tracks.isEmpty()) {
-        EmptyPanel(stringResource(R.string.no_tracks))
-        return
-    }
-    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        tracks.forEach { track ->
-            TrackRow(
-                track = track,
-                selected = track.id == selectedTrackId,
-                compact = compact,
-                onClick = { onTrackSelected(track.id) },
-            )
-        }
-    }
-}
-
-@Composable
-private fun TrackRow(
-    track: Track,
-    selected: Boolean,
-    compact: Boolean,
-    onClick: () -> Unit,
-) {
-    val stats = track.stats()
-    Surface(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(8.dp))
-            .clickable(onClick = onClick)
-            .border(
-                width = 1.dp,
-                color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline,
-                shape = RoundedCornerShape(8.dp),
-            ),
-        color = if (selected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface,
-        tonalElevation = 0.dp,
-    ) {
-        Column(Modifier.padding(14.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    text = track.name,
-                    modifier = Modifier.weight(1f),
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.SemiBold,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-                if (selected) StatusPill(stringResource(R.string.selected), PillTone.Success)
+            if (unmatchedCount > 0) {
+                StatusPill(stringResource(R.string.photos_need_attention, unmatchedCount), PillTone.Warning)
+                Spacer(Modifier.width(8.dp))
             }
-            Spacer(Modifier.height(6.dp))
             Text(
-                text = "${track.points.size} ${stringResource(R.string.points_short)} · ${formatDuration(stats.duration)} · ${formatDistance(stats.distanceMeters)}",
-                style = MaterialTheme.typography.bodySmall,
+                "›",
+                style = MaterialTheme.typography.titleLarge,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-            if (!compact) {
-                Spacer(Modifier.height(4.dp))
-                Text(
-                    text = track.startTime?.toString() ?: stringResource(R.string.not_available),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun PhotoBatchSheet(
+    matches: List<PhotoMatchResult>,
+    highlightedPhotoIndex: Int?,
+    onSetManualLocation: (Int) -> Unit,
+    onClearManualLocation: (Int) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    ModalBottomSheet(onDismissRequest = onDismiss) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 20.dp, vertical = 12.dp),
+        ) {
+            Text(
+                text = stringResource(R.string.photo_batch_count, matches.size),
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.SemiBold,
+                modifier = Modifier.padding(bottom = 12.dp),
+            )
+            LazyColumn(
+                modifier = Modifier.heightIn(max = 400.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                itemsIndexed(matches) { index, result ->
+                    PhotoMatchRow(
+                        index = index,
+                        result = result,
+                        highlighted = index == highlightedPhotoIndex,
+                        onSetManualLocation = { onSetManualLocation(index) },
+                        onClearManualLocation = { onClearManualLocation(index) },
+                    )
+                }
             }
+            Spacer(Modifier.height(16.dp))
         }
     }
 }
@@ -1268,7 +1412,6 @@ private fun MatchPill(photo: PhotoCandidate, match: PhotoMatch?) {
 private fun ReviewWritePanel(
     settings: AppSettings,
     readiness: WriteReadiness,
-    onWriteDefault: () -> Unit,
 ) {
     SectionBlock {
         Spacer(Modifier.height(10.dp))
@@ -1277,14 +1420,6 @@ private fun ReviewWritePanel(
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
-        Spacer(Modifier.height(14.dp))
-        ActionRow {
-            if (settings.preferExportCopies) {
-                PrimaryActionButton(stringResource(R.string.write_copies), Icons.Default.Share, onWriteDefault)
-            } else {
-                DangerFilledButton(stringResource(R.string.write_originals), Icons.Default.Warning, onWriteDefault)
-            }
-        }
     }
 }
 
@@ -1796,26 +1931,6 @@ private fun SettingStepper(
                     Text("+", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                 }
             }
-        }
-    }
-}
-
-@Composable
-private fun MatchSettingsSummary(settings: AppSettings) {
-    Surface(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(8.dp),
-        color = MaterialTheme.colorScheme.surfaceVariant,
-    ) {
-        Column(Modifier.padding(12.dp)) {
-            Text(
-                text = "${stringResource(R.string.camera_offset_minutes)}: ${settings.cameraOffset.toMinutes()}",
-                style = MaterialTheme.typography.bodySmall,
-            )
-            Text(
-                text = "${stringResource(R.string.max_time_difference_minutes)}: ${settings.maxPhotoTimeDifference.toMinutes()}",
-                style = MaterialTheme.typography.bodySmall,
-            )
         }
     }
 }

@@ -76,7 +76,7 @@
     <string name="write_copies">Write copies</string>
     <string name="write_originals">Write originals</string>
     <string name="write_originals_title">Write original photos?</string>
-    <string name="write_originals_message">This modifies the selected source files in place. Exported copies are safer.</string>
+    <string name="write_originals_message">This modifies the selected source files in place.</string>
     <string name="write_readiness">Will write %1$d, skip %2$d.</string>
     <string name="write_missing_location_prompt">No photos have a matched or manual location yet.</string>
     <string name="write_copies_result">Copy write result</string>

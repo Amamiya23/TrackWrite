@@ -76,7 +76,7 @@
     <string name="write_copies">写入副本</string>
     <string name="write_originals">写入原图</string>
     <string name="write_originals_title">写入原始照片？</string>
-    <string name="write_originals_message">这会直接修改所选源文件。导出副本更安全。</string>
+    <string name="write_originals_message">这会直接修改所选源文件。</string>
     <string name="write_readiness">将写入 %1$d 张，跳过 %2$d 张。</string>
     <string name="write_missing_location_prompt">还没有照片拥有匹配或手动位置。</string>
     <string name="write_copies_result">副本写入结果</string>
