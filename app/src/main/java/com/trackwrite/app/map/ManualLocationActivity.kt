@@ -5,298 +5,144 @@ import android.app.Activity
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Bundle
-import android.view.Gravity
-import android.view.View
 import android.webkit.JavascriptInterface
 import android.webkit.WebView
 import android.webkit.WebViewClient
-import android.widget.EditText
-import android.widget.FrameLayout
-import android.widget.LinearLayout
-import android.widget.ScrollView
-import android.widget.Space
-import android.widget.TextView
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.setContent
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.ui.draw.clip
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.LocationOn
+import androidx.compose.material.icons.filled.Map
+import androidx.compose.material.icons.filled.MyLocation
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Icon
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.viewinterop.AndroidView
 import com.trackwrite.app.R
+import com.trackwrite.app.settings.AppSettingsStore
+import com.trackwrite.app.ui.TrackWriteTheme
 import org.json.JSONObject
 
 class ManualLocationActivity : ComponentActivity() {
-    private lateinit var webView: WebView
-    private lateinit var selectedText: TextView
-    private lateinit var queryInput: EditText
-    private lateinit var latInput: EditText
-    private lateinit var lonInput: EditText
-
+    private var webView: WebView? = null
     private var selectedLatitude: Double? = null
     private var selectedLongitude: Double? = null
-    private var selectedLabel: String = "Manual location"
+    private var selectedLabel: String = ""
+    private var uiState by mutableStateOf(ManualLocationUiState())
 
     @SuppressLint("SetJavaScriptEnabled")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         val key = amapWebKey()
         val securityJsCode = amapSecurityJsCode()
+        uiState = uiState.copy(hasAmapKey = key.isNotBlank())
 
-        queryInput = EditText(this).apply {
-            hint = "Search a place (e.g. Forbidden City)"
-            setSingleLine(true)
-            isEnabled = key.isNotBlank()
-            setBackgroundResource(R.drawable.card_background)
-            setPadding(dp(12), dp(10), dp(12), dp(10))
-            textSize = 14f
-        }
-        selectedText = TextView(this).apply {
-            text = "No location selected"
-            textSize = 14f
-            typeface = android.graphics.Typeface.DEFAULT_BOLD
-            setTextColor(getColor(R.color.trackwrite_accent))
-            setPadding(0, dp(4), 0, dp(4))
-        }
-        latInput = EditText(this).apply {
-            hint = "Latitude"
-            inputType = android.text.InputType.TYPE_CLASS_NUMBER or
-                android.text.InputType.TYPE_NUMBER_FLAG_DECIMAL or
-                android.text.InputType.TYPE_NUMBER_FLAG_SIGNED
-            setBackgroundResource(R.drawable.card_background)
-            setPadding(dp(12), dp(10), dp(12), dp(10))
-            textSize = 14f
-            gravity = Gravity.CENTER_HORIZONTAL
-        }
-        lonInput = EditText(this).apply {
-            hint = "Longitude"
-            inputType = android.text.InputType.TYPE_CLASS_NUMBER or
-                android.text.InputType.TYPE_NUMBER_FLAG_DECIMAL or
-                android.text.InputType.TYPE_NUMBER_FLAG_SIGNED
-            setBackgroundResource(R.drawable.card_background)
-            setPadding(dp(12), dp(10), dp(12), dp(10))
-            textSize = 14f
-            gravity = Gravity.CENTER_HORIZONTAL
-        }
-        webView = WebView(this).apply {
-            settings.javaScriptEnabled = true
-            settings.domStorageEnabled = true
-            webViewClient = WebViewClient()
-            addJavascriptInterface(MapBridge(), "TrackWrite")
-            visibility = if (key.isBlank()) View.GONE else View.VISIBLE
-        }
-
-        val root = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(dp(20), dp(20), dp(20), dp(20))
-            setBackgroundColor(getColor(R.color.trackwrite_background))
-        }
-
-        // Header
-        val headerLayout = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(0, dp(8), 0, dp(20))
-        }
-        val titleText = TextView(this).apply {
-            text = "Set Photo Location"
-            textSize = 24f
-            typeface = android.graphics.Typeface.DEFAULT_BOLD
-            setTextColor(getColor(R.color.trackwrite_text))
-        }
-        val subtitleText = TextView(this).apply {
-            text = "Select a point on the map or type WGS84 coordinates."
-            textSize = 13f
-            setTextColor(0xFF5A6760.toInt())
-            setPadding(0, dp(4), 0, 0)
-        }
-        headerLayout.addView(titleText)
-        headerLayout.addView(subtitleText)
-        root.addView(headerLayout)
-
-        // 1. Search Card (if key configured)
-        if (key.isNotBlank()) {
-            val searchCard = cardLayout()
-            searchCard.addView(sectionTitle("Search AMap Places"))
-            searchCard.addView(queryInput)
-            val searchButton = customButton("Search AMap", R.drawable.button_primary, 0xFFFFFFFF.toInt()) { search() }
-            val buttonContainer = LinearLayout(this).apply {
-                orientation = LinearLayout.HORIZONTAL
-                gravity = Gravity.END
-                setPadding(0, dp(10), 0, 0)
-                addView(searchButton)
+        setContent {
+            TrackWriteTheme(AppSettingsStore(this).current().appearance) {
+                ManualLocationScreen(
+                    state = uiState,
+                    onQueryChanged = { uiState = uiState.copy(query = it) },
+                    onLatitudeChanged = { uiState = uiState.copy(latitudeText = it) },
+                    onLongitudeChanged = { uiState = uiState.copy(longitudeText = it) },
+                    onSearch = { search() },
+                    onUseTypedCoordinates = { useTypedCoordinates() },
+                    onConfirm = { confirm() },
+                    onCancel = {
+                        setResult(Activity.RESULT_CANCELED)
+                        finish()
+                    },
+                    webViewFactory = {
+                        WebView(this).apply {
+                            settings.javaScriptEnabled = true
+                            settings.domStorageEnabled = true
+                            webViewClient = WebViewClient()
+                            addJavascriptInterface(MapBridge(), "TrackWrite")
+                            loadDataWithBaseURL(
+                                "https://webapi.amap.com/",
+                                mapHtml(key, securityJsCode),
+                                "text/html",
+                                "UTF-8",
+                                null,
+                            )
+                            webView = this
+                        }
+                    },
+                )
             }
-            searchCard.addView(buttonContainer)
-            root.addView(searchCard)
-        }
-
-        // 2. Direct Coordinates Entry Card
-        val coordCard = cardLayout()
-        coordCard.addView(sectionTitle("Direct WGS84 Coordinates"))
-        val inputRow = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            addView(latInput, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
-            addView(Space(this@ManualLocationActivity).apply {
-                layoutParams = LinearLayout.LayoutParams(dp(12), LinearLayout.LayoutParams.MATCH_PARENT)
-            })
-            addView(lonInput, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
-        }
-        coordCard.addView(inputRow)
-        val useTypedBtn = customButton("Use Typed Coordinates", R.drawable.button_secondary, getColor(R.color.trackwrite_accent)) {
-            useTypedCoordinates()
-        }
-        val coordButtonContainer = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.END
-            setPadding(0, dp(12), 0, 0)
-            addView(useTypedBtn)
-        }
-        coordCard.addView(coordButtonContainer)
-        root.addView(coordCard)
-
-        // 3. Selection Status Card
-        val statusCard = cardLayout()
-        statusCard.addView(sectionTitle("Selected Location"))
-        statusCard.addView(selectedText)
-        root.addView(statusCard)
-
-        // 4. Map Card (if key configured)
-        if (key.isNotBlank()) {
-            val mapCard = cardLayout().apply {
-                // Give map section solid height inside layouts
-                val params = layoutParams as LinearLayout.LayoutParams
-                params.height = dp(320)
-                layoutParams = params
-            }
-            mapCard.addView(sectionTitle("Map View (AMap JSAPI)"))
-            val webViewFrame = FrameLayout(this).apply {
-                setBackgroundResource(R.drawable.card_background)
-                setPadding(dp(1), dp(1), dp(1), dp(1))
-                addView(webView, FrameLayout.LayoutParams(
-                    FrameLayout.LayoutParams.MATCH_PARENT,
-                    FrameLayout.LayoutParams.MATCH_PARENT
-                ))
-            }
-            mapCard.addView(webViewFrame, LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT,
-                0,
-                1f
-            ))
-            root.addView(mapCard)
-        } else {
-            root.addView(cardLayout().apply {
-                val warningLabel = TextView(this@ManualLocationActivity).apply {
-                    text = "AMap Web Key is not configured in local.properties. Map search and interactive selection are unavailable. Please type WGS84 coordinates directly."
-                    textSize = 12f
-                    setTextColor(0xFFA93226.toInt())
-                }
-                addView(warningLabel)
-            })
-        }
-
-        // 5. Actions Card
-        val actionsCard = cardLayout()
-        val actionsRow = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.END
-            val confirmBtn = customButton("Confirm Selection", R.drawable.button_primary, 0xFFFFFFFF.toInt()) { confirm() }
-            val cancelBtn = customButton("Cancel", R.drawable.button_danger, 0xFFA93226.toInt()) {
-                setResult(Activity.RESULT_CANCELED)
-                finish()
-            }.apply {
-                val lp = LinearLayout.LayoutParams(
-                    LinearLayout.LayoutParams.WRAP_CONTENT,
-                    LinearLayout.LayoutParams.WRAP_CONTENT
-                ).apply {
-                    setMargins(0, 0, dp(8), 0)
-                }
-                layoutParams = lp
-            }
-            addView(cancelBtn)
-            addView(confirmBtn)
-        }
-        actionsCard.addView(actionsRow)
-        root.addView(actionsCard)
-
-        val mainScroll = ScrollView(this).apply {
-            addView(root)
-            isFillViewport = true
-        }
-        setContentView(mainScroll)
-
-        if (key.isNotBlank()) {
-            webView.loadDataWithBaseURL(
-                "https://webapi.amap.com/",
-                mapHtml(key, securityJsCode),
-                "text/html",
-                "UTF-8",
-                null,
-            )
         }
     }
 
-    private fun dp(value: Int): Int =
-        (value * resources.displayMetrics.density).toInt()
-
-    private fun cardLayout(): LinearLayout =
-        LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(dp(14), dp(14), dp(14), dp(14))
-            setBackgroundResource(R.drawable.card_background)
-            val params = LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT,
-                LinearLayout.LayoutParams.WRAP_CONTENT
-            ).apply {
-                setMargins(0, 0, 0, dp(14))
-            }
-            layoutParams = params
-        }
-
-    private fun sectionTitle(text: String): TextView =
-        TextView(this).apply {
-            this.text = text.uppercase()
-            textSize = 11f
-            typeface = android.graphics.Typeface.DEFAULT_BOLD
-            setTextColor(getColor(R.color.trackwrite_accent))
-            setPadding(0, 0, 0, dp(8))
-        }
-
-    private fun customButton(
-        text: String,
-        bgDrawableId: Int,
-        textColor: Int,
-        onClick: () -> Unit = {}
-    ): TextView =
-        TextView(this).apply {
-            this.text = text
-            textSize = 13f
-            typeface = android.graphics.Typeface.DEFAULT_BOLD
-            setTextColor(textColor)
-            setBackgroundResource(bgDrawableId)
-            gravity = Gravity.CENTER
-            setPadding(dp(16), dp(10), dp(16), dp(10))
-            isClickable = true
-            isFocusable = true
-            setOnClickListener { onClick() }
-        }
-
     private fun search() {
-        if (!queryInput.isEnabled) {
-            selectedText.text = "AMap Web key is not configured. Enter coordinates directly."
+        if (!uiState.hasAmapKey) {
+            uiState = uiState.copy(message = getString(R.string.amap_key_missing))
             return
         }
-        val query = JSONObject.quote(queryInput.text.toString())
-        webView.evaluateJavascript("window.trackwriteSearch($query);", null)
+        val query = JSONObject.quote(uiState.query)
+        webView?.evaluateJavascript("window.trackwriteSearch($query);", null)
     }
 
     private fun useTypedCoordinates() {
-        val lat = latInput.text.toString().toDoubleOrNull()
-        val lon = lonInput.text.toString().toDoubleOrNull()
+        val lat = uiState.latitudeText.toDoubleOrNull()
+        val lon = uiState.longitudeText.toDoubleOrNull()
         if (lat == null || lon == null) {
-            selectedText.text = "Enter valid latitude and longitude"
+            uiState = uiState.copy(message = getString(R.string.invalid_coordinates))
             return
         }
-        selectWgs84(lat, lon, "Typed WGS84 coordinates")
+        selectWgs84(lat, lon, getString(R.string.typed_wgs84_coordinates))
     }
 
     private fun confirm() {
         val lat = selectedLatitude
         val lon = selectedLongitude
         if (lat == null || lon == null) {
-            selectedText.text = "Select or type a location first"
+            uiState = uiState.copy(message = getString(R.string.select_location_first))
             return
         }
         setResult(
@@ -313,9 +159,11 @@ class ManualLocationActivity : ComponentActivity() {
         selectedLatitude = latitude
         selectedLongitude = longitude
         selectedLabel = label
-        latInput.setText(latitude.toString())
-        lonInput.setText(longitude.toString())
-        selectedText.text = "$label\n$latitude, $longitude"
+        uiState = uiState.copy(
+            latitudeText = latitude.toString(),
+            longitudeText = longitude.toString(),
+            message = "$label\n$latitude, $longitude",
+        )
     }
 
     private fun amapWebKey(): String {
@@ -336,7 +184,7 @@ class ManualLocationActivity : ComponentActivity() {
                 this@ManualLocationActivity.selectWgs84(
                     wgs84.latitude,
                     wgs84.longitude,
-                    label ?: "AMap selection",
+                    label ?: getString(R.string.amap_selection),
                 )
             }
         }
@@ -344,7 +192,7 @@ class ManualLocationActivity : ComponentActivity() {
         @JavascriptInterface
         fun error(message: String?) {
             runOnUiThread {
-                selectedText.text = message ?: "AMap error"
+                uiState = uiState.copy(message = message ?: getString(R.string.amap_error))
             }
         }
     }
@@ -353,5 +201,180 @@ class ManualLocationActivity : ComponentActivity() {
         const val EXTRA_LATITUDE = "latitude"
         const val EXTRA_LONGITUDE = "longitude"
         const val EXTRA_LABEL = "label"
+    }
+}
+
+private data class ManualLocationUiState(
+    val hasAmapKey: Boolean = false,
+    val query: String = "",
+    val latitudeText: String = "",
+    val longitudeText: String = "",
+    val message: String = "",
+)
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun ManualLocationScreen(
+    state: ManualLocationUiState,
+    onQueryChanged: (String) -> Unit,
+    onLatitudeChanged: (String) -> Unit,
+    onLongitudeChanged: (String) -> Unit,
+    onSearch: () -> Unit,
+    onUseTypedCoordinates: () -> Unit,
+    onConfirm: () -> Unit,
+    onCancel: () -> Unit,
+    webViewFactory: () -> WebView,
+) {
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = {
+                    Column {
+                        Text(
+                            text = stringResource(R.string.manual_location_title),
+                            style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.SemiBold,
+                        )
+                        Text(
+                            text = stringResource(R.string.manual_location_subtitle),
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background),
+            )
+        },
+    ) { padding ->
+        Column(
+            modifier = Modifier
+                .padding(padding)
+                .fillMaxSize()
+                .background(MaterialTheme.colorScheme.background)
+                .verticalScroll(rememberScrollState())
+                .padding(20.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
+        ) {
+            if (state.hasAmapKey) {
+                PickerCard(title = stringResource(R.string.search_places), icon = Icons.Default.Search) {
+                    OutlinedTextField(
+                        value = state.query,
+                        onValueChange = onQueryChanged,
+                        label = { Text(stringResource(R.string.search_hint)) },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    Spacer(Modifier.height(10.dp))
+                    Button(onClick = onSearch, shape = RoundedCornerShape(8.dp)) {
+                        Icon(Icons.Default.Search, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(8.dp))
+                        Text(stringResource(R.string.search_amap))
+                    }
+                }
+            } else {
+                Surface(
+                    modifier = Modifier.fillMaxWidth(),
+                    color = MaterialTheme.colorScheme.errorContainer,
+                    shape = RoundedCornerShape(8.dp),
+                ) {
+                    Text(
+                        text = stringResource(R.string.amap_key_missing),
+                        modifier = Modifier.padding(14.dp),
+                        color = MaterialTheme.colorScheme.onErrorContainer,
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                }
+            }
+
+            PickerCard(title = stringResource(R.string.direct_coordinates), icon = Icons.Default.MyLocation) {
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    OutlinedTextField(
+                        value = state.latitudeText,
+                        onValueChange = onLatitudeChanged,
+                        label = { Text(stringResource(R.string.latitude)) },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                        singleLine = true,
+                        modifier = Modifier.weight(1f),
+                    )
+                    OutlinedTextField(
+                        value = state.longitudeText,
+                        onValueChange = onLongitudeChanged,
+                        label = { Text(stringResource(R.string.longitude)) },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                        singleLine = true,
+                        modifier = Modifier.weight(1f),
+                    )
+                }
+                Spacer(Modifier.height(10.dp))
+                OutlinedButton(onClick = onUseTypedCoordinates, shape = RoundedCornerShape(8.dp)) {
+                    Icon(Icons.Default.LocationOn, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(8.dp))
+                    Text(stringResource(R.string.use_typed_coordinates))
+                }
+            }
+
+            PickerCard(title = stringResource(R.string.selected_location), icon = Icons.Default.Check) {
+                Text(
+                    text = state.message.ifBlank { stringResource(R.string.no_location_selected) },
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = if (state.message.isBlank()) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface,
+                )
+            }
+
+            if (state.hasAmapKey) {
+                PickerCard(title = stringResource(R.string.map_view), icon = Icons.Default.Map) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(340.dp)
+                            .clip(RoundedCornerShape(8.dp))
+                            .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(8.dp)),
+                    ) {
+                        AndroidView(
+                            factory = { webViewFactory() },
+                            modifier = Modifier.fillMaxSize(),
+                        )
+                    }
+                }
+            }
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.End,
+            ) {
+                TextButton(onClick = onCancel) {
+                    Text(stringResource(R.string.cancel))
+                }
+                Spacer(Modifier.width(8.dp))
+                Button(onClick = onConfirm, shape = RoundedCornerShape(8.dp)) {
+                    Text(stringResource(R.string.confirm_selection))
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun PickerCard(
+    title: String,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    content: @Composable ColumnScope.() -> Unit,
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(8.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
+    ) {
+        Column(Modifier.padding(16.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
+                Spacer(Modifier.width(8.dp))
+                Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+            }
+            Spacer(Modifier.height(12.dp))
+            content()
+        }
     }
 }

@@ -21,17 +21,20 @@ import com.trackwrite.app.R
 import com.trackwrite.app.data.TrackRepository
 import com.trackwrite.app.domain.GeoPoint
 import com.trackwrite.app.domain.TrackPoint
+import com.trackwrite.app.settings.AppSettingsStore
 import java.time.Instant
 
 class TrackingService : Service(), LocationListener {
     private lateinit var repository: TrackRepository
     private lateinit var stateStore: RecordingStateStore
+    private lateinit var settingsStore: AppSettingsStore
     private lateinit var locationManager: LocationManager
 
     override fun onCreate() {
         super.onCreate()
         repository = TrackRepository(this)
         stateStore = RecordingStateStore(this)
+        settingsStore = AppSettingsStore(this)
         locationManager = getSystemService(Context.LOCATION_SERVICE) as LocationManager
         ensureChannel()
     }
@@ -129,12 +132,8 @@ class TrackingService : Service(), LocationListener {
             return
         }
 
-        locationManager.requestLocationUpdates(
-            provider,
-            BALANCED_INTERVAL_MS,
-            BALANCED_DISTANCE_METERS,
-            this,
-        )
+        val frequency = settingsStore.current().recordingFrequency
+        locationManager.requestLocationUpdates(provider, frequency.intervalMs, frequency.distanceMeters, this)
     }
 
     private fun notification(title: String, text: String) =
@@ -169,8 +168,6 @@ class TrackingService : Service(), LocationListener {
     companion object {
         private const val CHANNEL_ID = "track_recording"
         private const val NOTIFICATION_ID = 1001
-        private const val BALANCED_INTERVAL_MS = 5_000L
-        private const val BALANCED_DISTANCE_METERS = 8f
         private const val EXTRA_TRACK_NAME = "track_name"
 
         const val ACTION_START = "com.trackwrite.app.recording.START"
