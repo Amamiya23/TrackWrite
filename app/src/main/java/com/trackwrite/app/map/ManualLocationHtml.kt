@@ -31,26 +31,37 @@ fun mapHtml(amapKey: String, securityJsCode: String, text: ManualLocationMapText
     }
     #panel {
       position: absolute;
-      top: 8px;
-      left: 8px;
-      right: 8px;
-      max-height: 44%;
+      top: 112px;
+      left: 12px;
+      right: 12px;
+      display: none;
+      max-height: 34%;
       overflow: auto;
       background: white;
       border: 1px solid #d8ddd8;
+      border-radius: 12px;
+      box-shadow: 0 4px 16px rgba(38, 50, 45, 0.18);
       font-family: sans-serif;
       font-size: 13px;
       z-index: 2;
     }
-    .item { padding: 8px; border-bottom: 1px solid #eef1ee; }
-    .hint { padding: 8px; color: #4b5a53; }
+    .item { padding: 10px 12px; border-bottom: 1px solid #eef1ee; }
+    .hint { padding: 10px 12px; color: #4b5a53; }
   </style>
   <script>
     $securityConfig
     function panelMessage(message) {
       var panel = document.getElementById('panel');
       if (panel) {
+        panel.style.display = 'block';
         panel.innerHTML = '<div class="hint">' + message + '</div>';
+      }
+    }
+    function hidePanel() {
+      var panel = document.getElementById('panel');
+      if (panel) {
+        panel.innerHTML = '';
+        panel.style.display = 'none';
       }
     }
     function bridgeStatus(message) {
@@ -76,7 +87,7 @@ fun mapHtml(amapKey: String, securityJsCode: String, text: ManualLocationMapText
 </head>
 <body>
   <div id="map"></div>
-  <div id="panel"><div class="hint">Loading AMap...</div></div>
+  <div id="panel"></div>
   <script>
     var map = null;
     var marker = null;
@@ -92,6 +103,7 @@ fun mapHtml(amapKey: String, securityJsCode: String, text: ManualLocationMapText
       }
       marker.setPosition([lng, lat]);
       map.setCenter([lng, lat]);
+      hidePanel();
       TrackWrite.select(lat, lng, label || 'Map selection');
     }
 
@@ -106,7 +118,6 @@ fun mapHtml(amapKey: String, securityJsCode: String, text: ManualLocationMapText
         center: [116.397428, 39.90923]
       });
       map.on('complete', function() {
-        panelMessage('Tap the map or search for a place.');
         if (window.TrackWrite && TrackWrite.ready) {
           TrackWrite.ready();
         }
@@ -154,6 +165,7 @@ fun mapHtml(amapKey: String, securityJsCode: String, text: ManualLocationMapText
           var foundMessage = '$foundResultsTemplate'.replace('{count}', result.poiList.pois.length);
           bridgeStatus(foundMessage);
           panel.innerHTML = '';
+          panel.style.display = 'block';
           result.poiList.pois.forEach(function(poi) {
             if (!poi.location) return;
             var item = document.createElement('div');

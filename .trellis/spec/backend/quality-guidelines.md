@@ -49,9 +49,8 @@ UI, services, storage, MediaStore, EXIF, or AMap.
   if Android write grants are unavailable.
 - Manual photo fallback opens a dedicated location picker. It uses
   `TRACKWRITE_AMAP_WEB_KEY` plus `TRACKWRITE_AMAP_SECURITY_JS_CODE` for AMap JS
-  search/map-tap binding when configured, and still supports direct WGS84
-  coordinate entry when no web key is available. Do not hardcode Android SDK
-  keys, Web JS keys, or Web JS security codes in source.
+  search/map-tap binding. Do not hardcode Android SDK keys, Web JS keys, or Web
+  JS security codes in source.
 
 ## Scenario: Manual Location Picker AMap Boundary
 
@@ -75,7 +74,7 @@ UI, services, storage, MediaStore, EXIF, or AMap.
 
 ### 3. Contracts
 - `TRACKWRITE_AMAP_WEB_KEY` is optional. When blank, the picker hides/disables
-  AMap search/map UI and keeps direct WGS84 coordinate entry available.
+  AMap search/map UI and reports that map search is unavailable.
 - A configured `TRACKWRITE_AMAP_WEB_KEY` should be paired with
   `TRACKWRITE_AMAP_SECURITY_JS_CODE` for JSAPI 2.0 initialization. If AMap
   rejects the key/security pair, the picker must surface the JSAPI/search error
@@ -84,18 +83,16 @@ UI, services, storage, MediaStore, EXIF, or AMap.
   It must not fall back to `TRACKWRITE_AMAP_API_KEY`.
 - `ManualLocationActivity` converts AMap/GCJ-02 coordinates to WGS84 before it
   returns activity-result extras to `MainActivity`.
-- Direct typed coordinates are treated as WGS84 and validated through
-  `GeoPoint` before being attached to a `PhotoCandidate`.
 - Manual location binding and clearing operate on one selected photo index at a
   time; batch clearing is a separate explicit behavior if added later.
 
 ### 4. Validation & Error Matrix
-- Missing web key -> show coordinate-entry fallback; search/map WebView is not
-  exposed as an available action.
+- Missing web key -> show unavailable state; search/map WebView is not exposed
+  as an available action.
 - Missing/invalid JS security code with a Web key -> show the AMap JS/search
   error in the picker so the configuration can be fixed.
-- Non-numeric typed latitude/longitude -> picker displays a validation message
-  and does not return a result.
+- No selected map/search location -> picker displays a validation message and
+  does not return a result.
 - Returned latitude/longitude is NaN -> caller logs invalid manual result and
   leaves photos unchanged.
 - Returned coordinate is outside `GeoPoint` bounds -> caller logs the
@@ -106,8 +103,8 @@ UI, services, storage, MediaStore, EXIF, or AMap.
 ### 5. Good/Base/Bad Cases
 - Good: Web key configured, user picks an AMap search result, result is
   converted to WGS84, and only the target photo gets a manual location.
-- Base: Web key blank, user types WGS84 coordinates, and the same result payload
-  path attaches the manual location.
+- Base: Web key configured, user taps the map directly, result is converted to
+  WGS84 and returned through the same activity result payload.
 - Bad: Web key blank but search appears enabled, or GCJ-02 coordinates are
   written directly to EXIF as if they were WGS84.
 

@@ -33,24 +33,14 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.Article
-import androidx.compose.material.icons.filled.CameraAlt
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
-import androidx.compose.material.icons.filled.FileDownload
-import androidx.compose.material.icons.filled.FileUpload
-import androidx.compose.material.icons.filled.FolderOpen
-import androidx.compose.material.icons.filled.Image
-import androidx.compose.material.icons.filled.Map
-import androidx.compose.material.icons.filled.MoreHoriz
-import androidx.compose.material.icons.filled.MyLocation
-import androidx.compose.material.icons.filled.Pause
-import androidx.compose.material.icons.filled.PhotoLibrary
+import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.Save
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Share
-import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -522,19 +512,19 @@ private fun TrackWriteApp(
                 NavigationBar(containerColor = MaterialTheme.colorScheme.surface) {
                     NavigationItem(
                         selected = state.selectedTab == MainTab.Record,
-                        icon = Icons.Default.MyLocation,
+                        icon = Icons.Default.LocationOn,
                         label = stringResource(R.string.tab_record),
                         onClick = { onTabSelected(MainTab.Record) },
                     )
                     NavigationItem(
                         selected = state.selectedTab == MainTab.Match,
-                        icon = Icons.Default.PhotoLibrary,
+                        icon = Icons.Default.Search,
                         label = stringResource(R.string.tab_match),
                         onClick = { onTabSelected(MainTab.Match) },
                     )
                     NavigationItem(
                         selected = state.selectedTab == MainTab.Library,
-                        icon = Icons.AutoMirrored.Filled.Article,
+                        icon = Icons.Default.Edit,
                         label = stringResource(R.string.tab_library),
                         onClick = { onTabSelected(MainTab.Library) },
                     )
@@ -645,11 +635,11 @@ private fun RecordScreen(
             RecordingPanel(state, selectedTrack, onStartRecording, onPause, onResume, onStop)
         }
         item {
-            SectionHeader(stringResource(R.string.track_source), Icons.Default.Map)
+            SectionHeader(stringResource(R.string.track_source), Icons.Default.LocationOn)
             Spacer(Modifier.height(10.dp))
             ActionRow {
-                PrimaryActionButton(stringResource(R.string.import_gpx), Icons.Default.FileUpload, onImportGpx)
-                SecondaryActionButton(stringResource(R.string.export_gpx), Icons.Default.FileDownload, onExportGpx)
+                PrimaryActionButton(stringResource(R.string.import_gpx), Icons.Default.Share, onImportGpx)
+                SecondaryActionButton(stringResource(R.string.export_gpx), Icons.Default.Share, onExportGpx)
             }
         }
         item {
@@ -684,7 +674,7 @@ private fun RecordingPanel(
                 StatusPill(statusLabel(state.recording.status), statusTone(state.recording.status))
             }
             Icon(
-                imageVector = Icons.Default.MyLocation,
+                imageVector = Icons.Default.LocationOn,
                 contentDescription = null,
                 tint = MaterialTheme.colorScheme.primary,
                 modifier = Modifier.size(36.dp),
@@ -702,12 +692,12 @@ private fun RecordingPanel(
         Spacer(Modifier.height(18.dp))
         ActionRow {
             PrimaryActionButton(stringResource(R.string.start_recording), Icons.Default.PlayArrow, onStartRecording)
-            SecondaryActionButton(stringResource(R.string.pause), Icons.Default.Pause, onPause)
+            SecondaryActionButton(stringResource(R.string.pause), Icons.Default.Warning, onPause)
         }
         Spacer(Modifier.height(10.dp))
         ActionRow {
             SecondaryActionButton(stringResource(R.string.resume), Icons.Default.PlayArrow, onResume)
-            DangerActionButton(stringResource(R.string.stop), Icons.Default.Stop, onStop)
+            DangerActionButton(stringResource(R.string.stop), Icons.Default.Warning, onStop)
         }
     }
 }
@@ -731,11 +721,11 @@ private fun MatchScreen(
         verticalArrangement = Arrangement.spacedBy(18.dp),
     ) {
         item {
-            SectionHeader(stringResource(R.string.photo_matching), Icons.Default.CameraAlt)
+            SectionHeader(stringResource(R.string.photo_matching), Icons.Default.Search)
             Spacer(Modifier.height(10.dp))
             ActionRow {
-                PrimaryActionButton(stringResource(R.string.select_photos), Icons.Default.Image, onSelectPhotos)
-                SecondaryActionButton(stringResource(R.string.select_folder), Icons.Default.FolderOpen, onSelectFolder)
+                PrimaryActionButton(stringResource(R.string.select_photos), Icons.Default.Search, onSelectPhotos)
+                SecondaryActionButton(stringResource(R.string.select_folder), Icons.Default.Share, onSelectFolder)
             }
             Spacer(Modifier.height(10.dp))
             MatchSettingsSummary(state.settings)
@@ -789,7 +779,7 @@ private fun LibraryScreen(
         }
         item {
             ActionRow {
-                SecondaryActionButton(stringResource(R.string.export_gpx), Icons.Default.FileDownload, onExportGpx)
+                SecondaryActionButton(stringResource(R.string.export_gpx), Icons.Default.Share, onExportGpx)
                 SecondaryActionButton(stringResource(R.string.share), Icons.Default.Share, onShareTrack)
             }
             Spacer(Modifier.height(10.dp))
@@ -800,7 +790,7 @@ private fun LibraryScreen(
         }
         item {
             SurfaceCard {
-                SectionHeader(stringResource(R.string.system_log), Icons.Default.MoreHoriz)
+                SectionHeader(stringResource(R.string.system_log), Icons.Default.Settings)
                 Spacer(Modifier.height(8.dp))
                 Text(
                     text = state.logMessage.ifBlank { stringResource(R.string.ready) },
@@ -925,7 +915,7 @@ private fun PhotoMatchRow(
                 Spacer(Modifier.height(10.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     OutlinedButton(onClick = onSetManualLocation) {
-                        Icon(Icons.Default.Map, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Icon(Icons.Default.LocationOn, contentDescription = null, modifier = Modifier.size(18.dp))
                         Spacer(Modifier.width(6.dp))
                         Text(stringResource(R.string.set_location))
                     }
@@ -970,7 +960,7 @@ private fun PhotoThumbnail(uri: Uri) {
                 contentScale = ContentScale.Crop,
             )
         } else {
-            Icon(Icons.Default.Image, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+            Icon(Icons.Default.Search, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
 }
@@ -992,7 +982,7 @@ private fun ReviewWritePanel(
     onWriteOriginals: () -> Unit,
 ) {
     SurfaceCard {
-        SectionHeader(stringResource(R.string.review_write), Icons.Default.Save)
+        SectionHeader(stringResource(R.string.review_write), Icons.Default.Check)
         Spacer(Modifier.height(10.dp))
         Text(
             text = stringResource(R.string.write_originals_message),
@@ -1002,13 +992,13 @@ private fun ReviewWritePanel(
         Spacer(Modifier.height(14.dp))
         if (settings.preferExportCopies) {
             ActionRow {
-                PrimaryActionButton(stringResource(R.string.export_copies), Icons.Default.FileDownload, onExportCopies)
+                PrimaryActionButton(stringResource(R.string.export_copies), Icons.Default.Share, onExportCopies)
                 DangerActionButton(stringResource(R.string.write_originals), Icons.Default.Warning, onWriteOriginals)
             }
         } else {
             ActionRow {
                 DangerFilledButton(stringResource(R.string.write_originals), Icons.Default.Warning, onWriteOriginals)
-                SecondaryActionButton(stringResource(R.string.export_copies), Icons.Default.FileDownload, onExportCopies)
+                SecondaryActionButton(stringResource(R.string.export_copies), Icons.Default.Share, onExportCopies)
             }
         }
     }

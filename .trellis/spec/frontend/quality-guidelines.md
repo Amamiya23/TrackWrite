@@ -32,10 +32,10 @@ safety should be visible and easy to scan.
 
 - Compose-only screens use `ComponentActivity.setContent { TrackWriteTheme(...) { ... } }`.
 - Manual AMap picker screens may use a native `FrameLayout` root with a full-size
-  native `WebView` and a bottom `ComposeView` controls overlay. Keep the controls
-  inside `TrackWriteTheme`; do not embed the interactive AMap WebView inside a
-  scrollable Compose card via `AndroidView`, because that can leave the map blank
-  or incorrectly measured.
+  native `WebView`, a top search `ComposeView`, and a bottom selection
+  `ComposeView`. Keep the controls inside `TrackWriteTheme`; do not embed the
+  interactive AMap WebView inside a scrollable Compose card via `AndroidView`,
+  because that can leave the map blank or incorrectly measured.
 - Compose Material components must be rendered inside `TrackWriteTheme`, which
   wraps Material 3 `MaterialTheme`.
 - Use Android string resources for default and Simplified Chinese UI copy:
@@ -84,9 +84,9 @@ safety should be visible and easy to scan.
 - Camera offset outside allowed range -> clamp to the supported range before
   persisting.
 - Max photo time difference outside allowed range -> clamp before persisting.
-- Missing AMap Web key -> hide interactive map/search and keep WGS84 coordinate
-  input available.
-- Invalid typed coordinates -> show validation message and do not return a
+- Missing AMap Web key -> hide interactive map/search and show that map search
+  is unavailable.
+- No selected map/search location -> show validation message and do not return a
   location result.
 
 ### 5. Good/Base/Bad Cases

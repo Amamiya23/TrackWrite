@@ -19,24 +19,20 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -50,8 +46,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.platform.ViewCompositionStrategy
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.core.view.doOnLayout
 import com.trackwrite.app.R
@@ -86,29 +81,34 @@ class ManualLocationActivity : ComponentActivity() {
             )
         }
 
-        val controls = ComposeView(this).apply {
-            setBackgroundColor(android.graphics.Color.TRANSPARENT)
-            setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
-            setContent {
-                TrackWriteTheme(AppSettingsStore(this@ManualLocationActivity).current().appearance) {
-                    ManualLocationScreen(
-                        state = uiState,
-                        onQueryChanged = { uiState = uiState.copy(query = it) },
-                        onLatitudeChanged = { uiState = uiState.copy(latitudeText = it) },
-                        onLongitudeChanged = { uiState = uiState.copy(longitudeText = it) },
-                        onSearch = { search() },
-                        onUseTypedCoordinates = { useTypedCoordinates() },
-                        onConfirm = { confirm() },
-                        onCancel = {
-                            setResult(Activity.RESULT_CANCELED)
-                            finish()
-                        },
-                    )
-                }
-            }
+        val searchControls = composeOverlay {
+            ManualLocationSearchPanel(
+                state = uiState,
+                onQueryChanged = { uiState = uiState.copy(query = it) },
+                onSearch = { search() },
+            )
         }
         root.addView(
-            controls,
+            searchControls,
+            FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                Gravity.TOP,
+            ),
+        )
+
+        val selectionControls = composeOverlay {
+            ManualLocationSelectionPanel(
+                state = uiState,
+                onConfirm = { confirm() },
+                onCancel = {
+                    setResult(Activity.RESULT_CANCELED)
+                    finish()
+                },
+            )
+        }
+        root.addView(
+            selectionControls,
             FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.WRAP_CONTENT,
@@ -117,6 +117,17 @@ class ManualLocationActivity : ComponentActivity() {
         )
         setContentView(root)
     }
+
+    private fun composeOverlay(content: @Composable () -> Unit): ComposeView =
+        ComposeView(this).apply {
+            setBackgroundColor(android.graphics.Color.TRANSPARENT)
+            setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
+            setContent {
+                TrackWriteTheme(AppSettingsStore(this@ManualLocationActivity).current().appearance) {
+                    content()
+                }
+            }
+        }
 
     private fun createMapWebView(key: String, securityJsCode: String): WebView =
         WebView(this).apply {
@@ -177,16 +188,6 @@ class ManualLocationActivity : ComponentActivity() {
         }
     }
 
-    private fun useTypedCoordinates() {
-        val lat = uiState.latitudeText.toDoubleOrNull()
-        val lon = uiState.longitudeText.toDoubleOrNull()
-        if (lat == null || lon == null) {
-            uiState = uiState.copy(message = getString(R.string.invalid_coordinates))
-            return
-        }
-        selectWgs84(lat, lon, getString(R.string.typed_wgs84_coordinates))
-    }
-
     private fun confirm() {
         val lat = selectedLatitude
         val lon = selectedLongitude
@@ -209,8 +210,7 @@ class ManualLocationActivity : ComponentActivity() {
         selectedLongitude = longitude
         selectedLabel = label
         uiState = uiState.copy(
-            latitudeText = latitude.toString(),
-            longitudeText = longitude.toString(),
+            hasSelection = true,
             message = "$label\n$latitude, $longitude",
         )
     }
@@ -286,20 +286,64 @@ class ManualLocationActivity : ComponentActivity() {
 private data class ManualLocationUiState(
     val hasAmapKey: Boolean = false,
     val mapReady: Boolean = false,
+    val hasSelection: Boolean = false,
     val query: String = "",
-    val latitudeText: String = "",
-    val longitudeText: String = "",
     val message: String = "",
 )
 
 @Composable
-private fun ManualLocationScreen(
+private fun ManualLocationSearchPanel(
     state: ManualLocationUiState,
     onQueryChanged: (String) -> Unit,
-    onLatitudeChanged: (String) -> Unit,
-    onLongitudeChanged: (String) -> Unit,
     onSearch: () -> Unit,
-    onUseTypedCoordinates: () -> Unit,
+) {
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .statusBarsPadding()
+            .padding(12.dp),
+        color = MaterialTheme.colorScheme.surface,
+        tonalElevation = 3.dp,
+        shadowElevation = 6.dp,
+        shape = RoundedCornerShape(16.dp),
+    ) {
+        if (state.hasAmapKey) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                OutlinedTextField(
+                    value = state.query,
+                    onValueChange = onQueryChanged,
+                    label = { Text(stringResource(R.string.search_hint)) },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                    keyboardActions = KeyboardActions(onSearch = { onSearch() }),
+                    modifier = Modifier.weight(1f),
+                )
+                Button(onClick = onSearch, shape = RoundedCornerShape(8.dp)) {
+                    Icon(Icons.Default.Search, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(8.dp))
+                    Text(stringResource(R.string.search_amap))
+                }
+            }
+        } else {
+            Text(
+                text = stringResource(R.string.amap_key_missing),
+                modifier = Modifier.padding(14.dp),
+                color = MaterialTheme.colorScheme.onSurface,
+                style = MaterialTheme.typography.bodyMedium,
+            )
+        }
+    }
+}
+
+@Composable
+private fun ManualLocationSelectionPanel(
+    state: ManualLocationUiState,
     onConfirm: () -> Unit,
     onCancel: () -> Unit,
 ) {
@@ -307,7 +351,6 @@ private fun ManualLocationScreen(
         modifier = Modifier
             .fillMaxWidth()
             .navigationBarsPadding()
-            .imePadding()
             .padding(12.dp),
         color = MaterialTheme.colorScheme.surface,
         tonalElevation = 3.dp,
@@ -317,94 +360,9 @@ private fun ManualLocationScreen(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .heightIn(max = 460.dp)
-                .verticalScroll(rememberScrollState())
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
+                .padding(12.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.Top,
-                horizontalArrangement = Arrangement.SpaceBetween,
-            ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = stringResource(R.string.manual_location_title),
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.SemiBold,
-                    )
-                    Text(
-                        text = stringResource(R.string.manual_location_subtitle),
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-                TextButton(onClick = onCancel) {
-                    Text(stringResource(R.string.cancel))
-                }
-            }
-
-            if (state.hasAmapKey) {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedTextField(
-                        value = state.query,
-                        onValueChange = onQueryChanged,
-                        label = { Text(stringResource(R.string.search_hint)) },
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth(),
-                    )
-                    Button(onClick = onSearch, shape = RoundedCornerShape(8.dp)) {
-                        Icon(Icons.Default.Search, contentDescription = null, modifier = Modifier.size(18.dp))
-                        Spacer(Modifier.width(8.dp))
-                        Text(stringResource(R.string.search_amap))
-                    }
-                }
-            } else {
-                Surface(
-                    modifier = Modifier.fillMaxWidth(),
-                    color = MaterialTheme.colorScheme.errorContainer,
-                    shape = RoundedCornerShape(8.dp),
-                ) {
-                    Text(
-                        text = stringResource(R.string.amap_key_missing),
-                        modifier = Modifier.padding(14.dp),
-                        color = MaterialTheme.colorScheme.onErrorContainer,
-                        style = MaterialTheme.typography.bodyMedium,
-                    )
-                }
-            }
-
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text(
-                    text = stringResource(R.string.direct_coordinates),
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.SemiBold,
-                )
-                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    OutlinedTextField(
-                        value = state.latitudeText,
-                        onValueChange = onLatitudeChanged,
-                        label = { Text(stringResource(R.string.latitude)) },
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                        singleLine = true,
-                        modifier = Modifier.weight(1f),
-                    )
-                    OutlinedTextField(
-                        value = state.longitudeText,
-                        onValueChange = onLongitudeChanged,
-                        label = { Text(stringResource(R.string.longitude)) },
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                        singleLine = true,
-                        modifier = Modifier.weight(1f),
-                    )
-                }
-                OutlinedButton(onClick = onUseTypedCoordinates, shape = RoundedCornerShape(8.dp)) {
-                    Icon(Icons.Default.LocationOn, contentDescription = null, modifier = Modifier.size(18.dp))
-                    Spacer(Modifier.width(8.dp))
-                    Text(stringResource(R.string.use_typed_coordinates))
-                }
-            }
-
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.Top,
@@ -428,7 +386,15 @@ private fun ManualLocationScreen(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.End,
             ) {
-                Button(onClick = onConfirm, shape = RoundedCornerShape(8.dp)) {
+                TextButton(onClick = onCancel) {
+                    Text(stringResource(R.string.cancel))
+                }
+                Spacer(Modifier.width(8.dp))
+                Button(
+                    onClick = onConfirm,
+                    enabled = state.hasSelection,
+                    shape = RoundedCornerShape(8.dp),
+                ) {
                     Text(stringResource(R.string.confirm_selection))
                 }
             }
