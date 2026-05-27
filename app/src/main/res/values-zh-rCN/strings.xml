@@ -11,6 +11,14 @@
     <string name="status_recording">记录中</string>
     <string name="status_paused">已暂停</string>
     <string name="status_stopped">未记录</string>
+    <string name="record_confidence_recent">最近轨迹点：%1$d 秒前，来源 %2$s。</string>
+    <string name="record_confidence_stale">最近轨迹点：%1$d 秒前，来源 %2$s。请检查天空视野或定位服务。</string>
+    <string name="record_confidence_waiting">正在等待首次定位，来源 %1$s。</string>
+    <string name="record_confidence_permission">缺少定位权限，当前无法记录轨迹点。</string>
+    <string name="record_confidence_location_disabled">设备定位已关闭，开启后才能记录轨迹点。</string>
+    <string name="record_confidence_paused">记录已暂停，不会新增轨迹点。</string>
+    <string name="record_confidence_stopped">拍摄前开始记录，才能捕捉轨迹。</string>
+    <string name="provider_unknown">未知来源</string>
     <string name="active_track">当前轨迹</string>
     <string name="points_captured">已记录点数</string>
     <string name="duration">时长</string>

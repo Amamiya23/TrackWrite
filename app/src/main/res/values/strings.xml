@@ -11,6 +11,14 @@
     <string name="status_recording">Recording</string>
     <string name="status_paused">Paused</string>
     <string name="status_stopped">Stopped</string>
+    <string name="record_confidence_recent">Last point %1$d s ago via %2$s.</string>
+    <string name="record_confidence_stale">Last point %1$d s ago via %2$s. Check sky view or location service.</string>
+    <string name="record_confidence_waiting">Waiting for first location fix via %1$s.</string>
+    <string name="record_confidence_permission">Location permission is missing. Recording cannot capture points.</string>
+    <string name="record_confidence_location_disabled">Device location is off. Turn it on to capture points.</string>
+    <string name="record_confidence_paused">Recording is paused. No new points are being captured.</string>
+    <string name="record_confidence_stopped">Start recording before shooting to capture a track.</string>
+    <string name="provider_unknown">provider unknown</string>
     <string name="active_track">Active track</string>
     <string name="points_captured">Points captured</string>
     <string name="duration">Duration</string>

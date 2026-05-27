@@ -99,6 +99,7 @@ import com.trackwrite.app.media.PhotoGeotagging
 import com.trackwrite.app.media.PhotoMatchResult
 import com.trackwrite.app.media.PhotoWriteOutcome
 import com.trackwrite.app.recording.RecordingSnapshot
+import com.trackwrite.app.recording.RecordingIssue
 import com.trackwrite.app.recording.RecordingStateStore
 import com.trackwrite.app.recording.RecordingStatus
 import com.trackwrite.app.recording.TrackingService
@@ -112,6 +113,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.time.Duration
 import java.time.Instant
+import java.util.Locale
 import java.util.UUID
 
 class MainActivity : ComponentActivity() {
@@ -239,6 +241,7 @@ class MainActivity : ComponentActivity() {
                     onPause = { command(TrackingService.ACTION_PAUSE) },
                     onResume = { requestRecordingPermissionsThen { command(TrackingService.ACTION_RESUME) } },
                     onStop = { command(TrackingService.ACTION_STOP) },
+                    onRefreshRecording = { refresh() },
                     onImportGpx = { gpxImportLauncher.launch(arrayOf("application/gpx+xml", "text/xml", "*/*")) },
                     onExportGpx = { promptExport() },
                     onRenameTrack = { recordTrack()?.let { uiState = uiState.copy(renameDialog = RenameDialogState(it.id, it.name)) } },
@@ -561,6 +564,7 @@ private fun TrackWriteApp(
     onPause: () -> Unit,
     onResume: () -> Unit,
     onStop: () -> Unit,
+    onRefreshRecording: () -> Unit,
     onImportGpx: () -> Unit,
     onExportGpx: () -> Unit,
     onRenameTrack: () -> Unit,
@@ -665,6 +669,7 @@ private fun TrackWriteApp(
                     onPause = onPause,
                     onResume = onResume,
                     onStop = onStop,
+                    onRefreshRecording = onRefreshRecording,
                     onExportGpx = onExportGpx,
                     onRenameTrack = onRenameTrack,
                     onDeleteTrack = onDeleteTrack,
@@ -733,12 +738,19 @@ private fun RecordScreen(
     onPause: () -> Unit,
     onResume: () -> Unit,
     onStop: () -> Unit,
+    onRefreshRecording: () -> Unit,
     onExportGpx: () -> Unit,
     onRenameTrack: () -> Unit,
     onDeleteTrack: () -> Unit,
     onRecordTrackSelected: (String) -> Unit,
     onToggleTrackHistory: () -> Unit,
 ) {
+    LaunchedEffect(state.recording.status) {
+        while (state.recording.status == RecordingStatus.Recording) {
+            delay(2_000)
+            onRefreshRecording()
+        }
+    }
     val activeTrack = state.recording.trackId?.let { id -> state.tracks.firstOrNull { it.id == id } }
     val selectedTrack = state.tracks.firstOrNull { it.id == state.recordTrackId }
     LazyColumn(
@@ -776,7 +788,7 @@ private fun RecordingPanel(
     onResume: () -> Unit,
     onStop: () -> Unit,
 ) {
-    SurfaceCard {
+    SectionBlock {
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
@@ -786,6 +798,8 @@ private fun RecordingPanel(
                 Text(stringResource(R.string.record_title), style = MaterialTheme.typography.titleMedium)
                 Spacer(Modifier.height(8.dp))
                 StatusPill(statusLabel(state.recording.status), statusTone(state.recording.status))
+                Spacer(Modifier.height(10.dp))
+                RecordingConfidenceLine(state.recording, state.settings)
             }
             Icon(
                 imageVector = Icons.Default.LocationOn,
@@ -827,6 +841,20 @@ private fun RecordingPanel(
 }
 
 @Composable
+private fun RecordingConfidenceLine(recording: RecordingSnapshot, settings: AppSettings) {
+    val detail = recordingConfidenceText(recording, settings)
+    Text(
+        text = detail,
+        style = MaterialTheme.typography.bodySmall,
+        color = when (recordingConfidenceTone(recording)) {
+            PillTone.Error -> MaterialTheme.colorScheme.error
+            PillTone.Warning -> MaterialTheme.colorScheme.tertiary
+            else -> MaterialTheme.colorScheme.onSurfaceVariant
+        },
+    )
+}
+
+@Composable
 private fun TrackHistoryPanel(
     tracks: List<Track>,
     selectedTrackId: String?,
@@ -838,7 +866,7 @@ private fun TrackHistoryPanel(
     onRenameTrack: () -> Unit,
     onDeleteTrack: () -> Unit,
 ) {
-    SurfaceCard {
+    SectionBlock {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -867,24 +895,24 @@ private fun TrackHistoryPanel(
                     overflow = TextOverflow.Ellipsis,
                 )
             }
-            return@SurfaceCard
-        }
-        Spacer(Modifier.height(12.dp))
-        TrackList(
-            tracks = tracks,
-            selectedTrackId = selectedTrackId,
-            onTrackSelected = onTrackSelected,
-            compact = true,
-        )
-        if (tracks.isNotEmpty()) {
+        } else {
             Spacer(Modifier.height(12.dp))
-            ActionRow {
-                SecondaryActionButton(stringResource(R.string.export_gpx), Icons.Default.Share, onExportGpx)
-                SecondaryActionButton(stringResource(R.string.rename), Icons.Default.Edit, onRenameTrack)
-            }
-            Spacer(Modifier.height(10.dp))
-            ActionRow {
-                DangerActionButton(stringResource(R.string.delete), Icons.Default.Delete, onDeleteTrack)
+            TrackList(
+                tracks = tracks,
+                selectedTrackId = selectedTrackId,
+                onTrackSelected = onTrackSelected,
+                compact = true,
+            )
+            if (tracks.isNotEmpty()) {
+                Spacer(Modifier.height(12.dp))
+                ActionRow {
+                    SecondaryActionButton(stringResource(R.string.export_gpx), Icons.Default.Share, onExportGpx)
+                    SecondaryActionButton(stringResource(R.string.rename), Icons.Default.Edit, onRenameTrack)
+                }
+                Spacer(Modifier.height(10.dp))
+                ActionRow {
+                    DangerActionButton(stringResource(R.string.delete), Icons.Default.Delete, onDeleteTrack)
+                }
             }
         }
     }
@@ -983,7 +1011,7 @@ private fun MatchTrackSourcePanel(
     onImportGpx: () -> Unit,
     onTrackSelected: (String) -> Unit,
 ) {
-    SurfaceCard {
+    SectionBlock {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -1021,24 +1049,25 @@ private fun MatchTrackSourcePanel(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
-        if (!expanded) return@SurfaceCard
-        Spacer(Modifier.height(12.dp))
-        ActionRow {
-            PrimaryActionButton(stringResource(R.string.import_gpx), Icons.Default.Share, onImportGpx)
+        if (expanded) {
+            Spacer(Modifier.height(12.dp))
+            ActionRow {
+                PrimaryActionButton(stringResource(R.string.import_gpx), Icons.Default.Share, onImportGpx)
+            }
+            Spacer(Modifier.height(12.dp))
+            Text(
+                text = stringResource(R.string.choose_existing_track),
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Spacer(Modifier.height(8.dp))
+            TrackList(
+                tracks = tracks,
+                selectedTrackId = selectedTrack?.id,
+                onTrackSelected = onTrackSelected,
+                compact = true,
+            )
         }
-        Spacer(Modifier.height(12.dp))
-        Text(
-            text = stringResource(R.string.choose_existing_track),
-            style = MaterialTheme.typography.labelMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-        Spacer(Modifier.height(8.dp))
-        TrackList(
-            tracks = tracks,
-            selectedTrackId = selectedTrack?.id,
-            onTrackSelected = onTrackSelected,
-            compact = true,
-        )
     }
 }
 
@@ -1051,7 +1080,7 @@ private fun PhotoBatchSummary(
     val manualCount = matches.count { it.photo.manualLocation != null }
     val matchedCount = matches.count { it.selectedPosition != null }
     val unmatchedCount = matches.size - matchedCount
-    SurfaceCard {
+    SectionBlock {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -1266,7 +1295,7 @@ private fun ReviewWritePanel(
     readiness: WriteReadiness,
     onWriteDefault: () -> Unit,
 ) {
-    SurfaceCard {
+    SectionBlock {
         SectionHeader(stringResource(R.string.review_write), Icons.Default.Check)
         Spacer(Modifier.height(10.dp))
         Text(
@@ -1339,6 +1368,16 @@ private fun DangerFilledButton(text: String, icon: ImageVector, onClick: () -> U
         Spacer(Modifier.width(8.dp))
         Text(text)
     }
+}
+
+@Composable
+private fun SectionBlock(content: @Composable ColumnScope.() -> Unit) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 2.dp),
+        content = content,
+    )
 }
 
 @Composable
@@ -1875,6 +1914,41 @@ private fun statusTone(status: RecordingStatus): PillTone =
         RecordingStatus.Paused -> PillTone.Warning
         RecordingStatus.Stopped -> PillTone.Neutral
     }
+
+private fun recordingConfidenceTone(recording: RecordingSnapshot): PillTone =
+    when {
+        recording.issue == RecordingIssue.PermissionMissing -> PillTone.Error
+        recording.issue == RecordingIssue.LocationDisabled -> PillTone.Error
+        recording.status == RecordingStatus.Paused -> PillTone.Warning
+        recording.status == RecordingStatus.Recording && recording.issue == RecordingIssue.WaitingForFix -> PillTone.Warning
+        recording.status == RecordingStatus.Recording && recording.lastPointRecordedAtMillis != null -> PillTone.Success
+        else -> PillTone.Neutral
+    }
+
+@Composable
+private fun recordingConfidenceText(recording: RecordingSnapshot, settings: AppSettings): String {
+    val provider = recording.provider?.uppercase(Locale.ROOT) ?: stringResource(R.string.provider_unknown)
+    return when {
+        recording.status == RecordingStatus.Stopped -> stringResource(R.string.record_confidence_stopped)
+        recording.status == RecordingStatus.Paused -> stringResource(R.string.record_confidence_paused)
+        recording.issue == RecordingIssue.PermissionMissing -> stringResource(R.string.record_confidence_permission)
+        recording.issue == RecordingIssue.LocationDisabled -> stringResource(R.string.record_confidence_location_disabled)
+        recording.lastPointRecordedAtMillis == null -> {
+            stringResource(R.string.record_confidence_waiting, provider)
+        }
+        else -> {
+            val ageSeconds = ((System.currentTimeMillis() - recording.lastPointRecordedAtMillis) / 1000L).coerceAtLeast(0L)
+            if (ageSeconds > staleRecordingThresholdSeconds(settings)) {
+                stringResource(R.string.record_confidence_stale, ageSeconds, provider)
+            } else {
+                stringResource(R.string.record_confidence_recent, ageSeconds, provider)
+            }
+        }
+    }
+}
+
+private fun staleRecordingThresholdSeconds(settings: AppSettings): Long =
+    ((settings.recordingFrequency.intervalMs * 3L) / 1000L).coerceAtLeast(10L)
 
 @Composable
 private fun matchDetail(photo: PhotoCandidate, match: PhotoMatch?): String =

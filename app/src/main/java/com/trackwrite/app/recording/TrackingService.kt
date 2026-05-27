@@ -60,6 +60,7 @@ class TrackingService : Service(), LocationListener {
     override fun onLocationChanged(location: Location) {
         val state = stateStore.current()
         if (state.status != RecordingStatus.Recording || state.trackId == null) return
+        val recordedAtMillis = location.time.takeIf { it > 0L } ?: System.currentTimeMillis()
         repository.appendPoint(
             trackId = state.trackId,
             point = TrackPoint(
@@ -68,8 +69,15 @@ class TrackingService : Service(), LocationListener {
                     longitude = location.longitude,
                     altitudeMeters = if (location.hasAltitude()) location.altitude else null,
                 ),
-                recordedAt = Instant.ofEpochMilli(location.time.takeIf { it > 0L } ?: System.currentTimeMillis()),
+                recordedAt = Instant.ofEpochMilli(recordedAtMillis),
             ),
+        )
+        stateStore.set(
+            trackId = state.trackId,
+            status = RecordingStatus.Recording,
+            lastPointRecordedAtMillis = recordedAtMillis,
+            provider = location.provider,
+            issue = RecordingIssue.None,
         )
         updateNotification("Recording", "Captured ${repository.getTrack(state.trackId)?.points?.size ?: 0} points")
     }
@@ -79,14 +87,20 @@ class TrackingService : Service(), LocationListener {
 
     private fun startRecording(name: String) {
         val track = repository.createTrack(name.ifBlank { "Recording ${Instant.now()}" })
-        stateStore.set(track.id, RecordingStatus.Recording)
+        stateStore.set(
+            trackId = track.id,
+            status = RecordingStatus.Recording,
+            lastPointRecordedAtMillis = null,
+            provider = null,
+            issue = RecordingIssue.WaitingForFix,
+        )
         startForeground(NOTIFICATION_ID, notification("Recording", "Waiting for GPS fix"))
         requestLocationUpdates()
     }
 
     private fun pauseRecording() {
         val current = stateStore.current()
-        stateStore.set(current.trackId, RecordingStatus.Paused)
+        stateStore.set(current.trackId, RecordingStatus.Paused, issue = RecordingIssue.None)
         locationManager.removeUpdates(this)
         updateNotification("Paused", "Recording is paused")
     }
@@ -94,13 +108,19 @@ class TrackingService : Service(), LocationListener {
     private fun resumeRecording() {
         val current = stateStore.current()
         if (current.trackId == null) return
-        stateStore.set(current.trackId, RecordingStatus.Recording)
+        stateStore.set(current.trackId, RecordingStatus.Recording, issue = RecordingIssue.WaitingForFix)
         startForeground(NOTIFICATION_ID, notification("Recording", "Waiting for GPS fix"))
         requestLocationUpdates()
     }
 
     private fun stopRecording() {
-        stateStore.set(null, RecordingStatus.Stopped)
+        stateStore.set(
+            trackId = null,
+            status = RecordingStatus.Stopped,
+            lastPointRecordedAtMillis = null,
+            provider = null,
+            issue = RecordingIssue.None,
+        )
         locationManager.removeUpdates(this)
         stopForeground(STOP_FOREGROUND_REMOVE)
         stopSelf()
@@ -118,6 +138,8 @@ class TrackingService : Service(), LocationListener {
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED &&
             ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED
         ) {
+            val current = stateStore.current()
+            stateStore.set(current.trackId, current.status, issue = RecordingIssue.PermissionMissing)
             updateNotification("Permission required", "Open TrackWrite and grant location permission")
             return
         }
@@ -128,11 +150,20 @@ class TrackingService : Service(), LocationListener {
             else -> null
         }
         if (provider == null) {
+            val current = stateStore.current()
+            stateStore.set(current.trackId, current.status, provider = null, issue = RecordingIssue.LocationDisabled)
             updateNotification("Location disabled", "Enable device location services")
             return
         }
 
         val frequency = settingsStore.current().recordingFrequency
+        val current = stateStore.current()
+        stateStore.set(
+            trackId = current.trackId,
+            status = current.status,
+            provider = provider,
+            issue = if (current.lastPointRecordedAtMillis == null) RecordingIssue.WaitingForFix else RecordingIssue.None,
+        )
         locationManager.requestLocationUpdates(provider, frequency.intervalMs, frequency.distanceMeters, this)
     }
 

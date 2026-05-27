@@ -141,6 +141,10 @@ locationManager.requestLocationUpdates(provider, frequency.intervalMs, frequency
   Match.
 - Settings controls are backed by real persisted behavior.
 - User-visible text is in string resources with Chinese equivalents.
+- Recording status must expose field confidence, not just the coarse
+  Recording/Paused/Stopped state. Show recent point age and provider when
+  available, and explicit permission/location/waiting states when capture is
+  blocked or still waiting for a fix.
 - Manual AMap WebView is hosted as a native `WebView` root surface, with Compose
   controls overlaid rather than wrapping the map in a Compose scroll/card layout.
 - AMap WebView interop still returns WGS84 through the existing Activity result
