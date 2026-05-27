@@ -18,7 +18,7 @@ Redesign TrackWrite from a functional Android MVP/debug shell into a product-gra
 * Current UI resources are simple XML drawables for primary/secondary/danger buttons, cards, selected cards, and recording/match status tags.
 * The user chose Jetpack Compose for the product-grade UI migration.
 * The user chose to migrate both `MainActivity` and `ManualLocationActivity` to Compose in this task, accepting the larger scope and WebView interop risk for stronger UI consistency.
-* The user chose a three-tab bottom navigation structure and requested a unified top-right settings entry.
+* The user initially chose a three-tab bottom navigation structure, then revised the information architecture to two bottom navigation destinations: Record and Match. The unified top-right settings entry remains required.
 * The UI must support Chinese.
 * The user wants this main session to perform the full development rather than handing UI work to another agent.
 * The settings area should be a complete, real settings surface covering appearance, track recording frequency, photo matching time difference, export, and related workflow defaults.
@@ -55,20 +55,51 @@ The current UI is better than the initial debug shell but still not product-grad
 ## Requirements (evolving)
 
 * Rework the main experience around the photographer workflow, not around implementation modules.
-* Use three bottom navigation destinations: Record, Match, and Library.
+* Use two bottom navigation destinations: Record and Match.
 * Provide one consistent top app bar with a right-aligned Settings entry.
 * Implement a real Settings screen/flow from the top-right entry.
 * Settings must include appearance preferences.
 * Settings must include track recording frequency controls that affect `TrackingService` location update requests.
 * Settings must include photo matching time-difference controls that affect the matching workflow.
-* Settings must include export-related controls or defaults that affect available export/write behavior where supported by the current app.
+* Settings must include export/write defaults that affect available behavior where supported by the current app, including default write mode and default export-copy folder handling.
+* Settings must include a default write mode control with two modes: write exported copies and write originals.
+* New users should default to writing exported copies.
+* Writing originals must still require confirmation every time, even if original writing is the default write mode.
+* Settings must include a default export-copy directory control that stores a persisted SAF tree URI, shows configured/unconfigured status, and allows choosing or clearing the directory.
+* If the default export-copy directory is missing or its authorization is invalid, clicking the write-copies action should open the directory picker, save the new directory, and continue the write operation.
 * Make recording truth immediately visible: state, active track, point count, duration, pause/resume/stop affordances.
-* Make track selection/import/export manageable without letting GPX operations dominate the photo workflow.
+* The app should use edge-to-edge status bar handling across the main UI and manual map picker. Main app content should remain protected by the top app bar/insets rather than being visually crowded under the status bar.
+* The Record page should focus on GPS recording and track history, not track source selection for matching.
+* Redesign the recording panel around state and duration first, then point count, distance, and recording-session context.
+* Recording controls should be state-driven: stopped shows start, recording shows pause/stop, paused shows resume/stop.
+* Starting a recording should keep the existing track-name confirmation dialog.
+* Track history should live on the Record page, default collapsed when tracks exist, and show a simple count summary such as Track history (N).
+* Track history entries should support selection for local viewing/management, rename, GPX export, and delete. Remove share from the primary track history actions.
+* Track history selection and Match-page current track selection should be separate concepts. The Record page does not set a track for matching directly.
+* Track source selection for matching should live at the top of the Match page as a collapsible section.
+* The Match-page track source section should show the current matching track name plus point count, duration, and distance when collapsed. With no current matching track, it should expand and guide the user to import GPX or choose an existing track.
+* Match-page track source actions should be limited to choosing a source: import GPX or choose from existing tracks. GPX export, rename, and delete belong to Record-page track history.
+* Importing a GPX from the Match page should automatically select the imported track as the current matching track and collapse the track source section.
+* After recording stops, the new track should become the current matching track only if the Match page does not already have a current matching track.
+* The current matching track is session-only and does not need to persist across app restarts.
 * Make photo matching review the primary workspace after photos are selected.
-* Make manual location correction easy to discover from each unmatched/incorrect photo.
+* After batch photo or folder selection, photos should default to a collapsed batch summary rather than a long list.
+* The collapsed photo batch summary should show selected count plus matched, unmatched, and manual-position counts. It should also show a clear warning when there are photos that need attention.
+* The photo batch should remain collapsed after selection, including when there are unmatched photos. Users can expand it to inspect or correct individual photos.
+* Expanding the photo batch should show a compact row for each photo: thumbnail, file name, match status, and direct manual-location action. Detailed timestamps/coordinates/reasons should remain secondary to preserve batch density.
+* Manual location should be available for every photo, not only unmatched photos. If a manual location exists, it takes precedence over automatic matching until cleared.
+* Matching-setting changes should immediately recompute the current batch when a batch and matching track exist. Existing manual locations must not be overwritten, and the current folded/unfolded state should be preserved.
+* When returning from manual location selection, the photo batch should expand, scroll to the edited photo, and temporarily highlight it without changing list order.
+* The selected photo batch should not persist across app restarts.
+* Make manual location correction easy to discover from each photo while preserving the batch-writing workflow as the primary path.
 * Preserve the current AMap WebView manual picker behavior, including Web key/security config and GCJ-02 to WGS84 conversion boundary.
 * Rebuild `ManualLocationActivity` with Compose while preserving the existing WebView, JavaScript bridge, AMap search/select behavior, missing-key unavailable state, and Activity result extras.
-* Make export copies and write originals clearly different in hierarchy, tone, and confirmation.
+* Replace the two visible Match-page write actions with one write button whose label follows the default write mode: Write copies or Write originals.
+* The Match page should show write readiness near the button, such as "will write X, skip Y". The button may remain visible and clickable in empty/incomplete states; missing prerequisites should produce a short prompt.
+* Write operations should automatically skip unmatched photos, process matched photos and manual-location photos, and report written/skipped/failed counts.
+* If there is no current matching track but some photos have manual locations, writing should still be allowed for those manual-location photos.
+* Write/export completion should show a bottom-sheet result panel with written, skipped, and failed counts. Failed items should list file name and reason; skipped unmatched photos can remain summarized. Closing the result panel clears it.
+* Make export copies and write originals clearly different through settings, button label, and confirmation behavior. Original writes remain dangerous and must not lose confirmation.
 * Replace comma-separated match rule editing with a clearer UI pattern.
 * Move reusable visual constants/components out of ad hoc duplicated Kotlin where practical.
 * Use Jetpack Compose and Material 3 as the new UI foundation.
@@ -80,18 +111,32 @@ The current UI is better than the initial debug shell but still not product-grad
 
 ## Acceptance Criteria (evolving)
 
-* [ ] The first screen clearly shows recording status and next best workflow action.
-* [ ] Main UI has bottom navigation with Record, Match, and Library tabs.
-* [ ] Main UI has a unified top-right settings entry.
-* [ ] Settings is a complete Compose surface covering appearance, recording frequency, photo matching time difference, and export/write behavior supported by the app.
-* [ ] Recording frequency settings are persisted and used by `TrackingService`.
-* [ ] Photo matching time-difference settings are persisted and used by the match workflow.
-* [ ] Track, photo, match, manual correction, and write/export steps are visually distinct and easy to scan.
-* [ ] Manual AMap location selection remains functional and is easier to discover from photo review.
+* [ ] Main UI uses edge-to-edge status bar handling; main content remains protected by top app bar/insets.
+* [ ] Main UI has bottom navigation with only Record and Match tabs.
+* [ ] Main UI has a unified top-right settings entry on both tabs.
+* [ ] TopAppBar title shows Record / Match depending on active tab.
+* [ ] The Record page focuses on recording: redesigned recording panel with state+duration first, state-driven controls, and existing start-name dialog.
+* [ ] The Record page contains collapsible track history with count summary (N). Track history supports selection, rename, export GPX, and delete; share removed.
+* [ ] Track history and Match-page current track selection are separate concepts.
+* [ ] The Match page top has a collapsible track source section: collapsed shows current matching track name + stats; expanded shows import GPX and choose from existing tracks.
+* [ ] Importing GPX from Match page auto-selects it as current matching track.
+* [ ] Recording stop auto-sets new track as current matching track only when Match page has none.
+* [ ] Current matching track is session-only.
+* [ ] After batch photo/folder selection, photos default to collapsed batch summary showing count + matched/unmatched/manual stats + warning for attention-needed photos.
+* [ ] Photo batch remains collapsed by default; expanding shows compact rows: thumbnail, file name, match status, and direct manual-location action.
+* [ ] Manual location is available for every photo; manual location takes precedence over automatic matching.
+* [ ] Matching-setting changes immediately recompute the current batch; existing manual locations preserved; folded/unfolded state preserved.
+* [ ] Returning from manual location expands photo batch, scrolls to edited photo, and temporarily highlights it.
+* [ ] Selected photo batch does not persist across app restarts.
 * [ ] `ManualLocationActivity` is Compose-based around the AMap WebView and still returns WGS84 coordinates through the existing result contract.
-* [ ] Safe export is visually primary over direct original writes unless the user intentionally chooses the dangerous path.
-* [ ] Match rule editing no longer requires a comma-separated string.
-* [ ] UI states cover empty, selected, matched, unmatched, manual, recording, paused, stopped, error/log feedback.
+* [ ] Match page has one write button whose label follows settings: Write copies / Write originals.
+* [ ] The write button area shows "will write X, skip Y" summary. The button remains clickable in empty/incomplete states; missing prerequisites produce a short prompt.
+* [ ] Write operations automatically skip unmatched photos, process matched + manual-location photos, and report written/skipped/failed counts.
+* [ ] Writing is allowed with no current matching track when some photos have manual locations.
+* [ ] Write/export completion shows a bottom-sheet result panel with written/skipped/failed counts; failed items list file name and reason; closing clears the panel.
+* [ ] Original writes always require confirmation, even when original writing is the default write mode.
+* [ ] Settings include default write mode (write copies / write originals) and default export-copy directory (persisted SAF tree URI, status display, choose/clear). Missing/invalid directory triggers directory picker on write and continues.
+* [ ] UI states cover empty, selected, matched, unmatched, manual, recording, paused, stopped, error/short feedback.
 * [ ] Redesigned Compose UI supports Chinese through Android string resources.
 * [ ] Touch targets and text contrast are suitable for Android mobile use.
 * [ ] Existing geotagging, recording, GPX, Room, and AMap behavior is preserved.
