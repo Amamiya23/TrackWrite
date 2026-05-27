@@ -613,13 +613,6 @@ private fun TrackWriteApp(
                             style = MaterialTheme.typography.titleLarge,
                             fontWeight = FontWeight.SemiBold,
                         )
-                        if (!state.showSettings) {
-                            Text(
-                                text = stringResource(R.string.app_subtitle),
-                                style = MaterialTheme.typography.labelMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                        }
                     }
                 },
                 actions = {
@@ -1695,19 +1688,6 @@ private fun SettingsScreen(
                     ExportFolderRow(
                         folderUri = settings.defaultExportFolderUri,
                         onChooseExportFolder = onChooseExportFolder,
-                    )
-                }
-            }
-        }
-        item {
-            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                SettingsSectionHeader(stringResource(R.string.about))
-                SettingsGroup {
-                    Text(
-                        stringResource(R.string.version_name),
-                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
             }
