@@ -32,6 +32,7 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -1471,44 +1472,59 @@ private fun SettingsScreen(
     onChooseExportFolder: () -> Unit,
     onClearExportFolder: () -> Unit,
 ) {
+    var showAppearanceDialog by remember { mutableStateOf(false) }
+    var showFrequencyDialog by remember { mutableStateOf(false) }
+
+    if (showAppearanceDialog) {
+        SingleChoiceDialog(
+            title = stringResource(R.string.appearance),
+            options = AppearanceMode.entries.map { appearanceLabel(it) },
+            selectedIndex = AppearanceMode.entries.indexOf(settings.appearance),
+            onSelect = { index ->
+                onSettingsChanged(settings.copy(appearance = AppearanceMode.entries[index]))
+                showAppearanceDialog = false
+            },
+            onDismiss = { showAppearanceDialog = false },
+        )
+    }
+    if (showFrequencyDialog) {
+        SingleChoiceDialog(
+            title = stringResource(R.string.recording_frequency),
+            options = RecordingFrequency.entries.map { "${frequencyLabel(it)}\n${frequencyDescription(it)}" },
+            selectedIndex = RecordingFrequency.entries.indexOf(settings.recordingFrequency),
+            onSelect = { index ->
+                onSettingsChanged(settings.copy(recordingFrequency = RecordingFrequency.entries[index]))
+                showFrequencyDialog = false
+            },
+            onDismiss = { showFrequencyDialog = false },
+        )
+    }
+
     LazyColumn(
         modifier = modifier.background(MaterialTheme.colorScheme.background),
-        contentPadding = PaddingValues(vertical = 20.dp),
-        verticalArrangement = Arrangement.spacedBy(24.dp),
+        contentPadding = PaddingValues(horizontal = 20.dp, vertical = 20.dp),
+        verticalArrangement = Arrangement.spacedBy(28.dp),
     ) {
         item {
-            Column(verticalArrangement = Arrangement.spacedBy(24.dp)) {
-                SettingsSectionHeader(stringResource(R.string.appearance))
-                SettingsGroup {
-                    AppearanceMode.entries.forEachIndexed { index, mode ->
-                        if (index > 0) HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-                        SettingChoiceRow(
-                            title = appearanceLabel(mode),
-                            selected = settings.appearance == mode,
-                            onClick = { onSettingsChanged(settings.copy(appearance = mode)) },
-                        )
-                    }
-                }
+            SettingsGroup {
+                SettingNavigationRow(
+                    title = stringResource(R.string.appearance),
+                    value = appearanceLabel(settings.appearance),
+                    onClick = { showAppearanceDialog = true },
+                )
             }
         }
         item {
-            Column(verticalArrangement = Arrangement.spacedBy(24.dp)) {
-                SettingsSectionHeader(stringResource(R.string.recording_frequency))
-                SettingsGroup {
-                    RecordingFrequency.entries.forEachIndexed { index, frequency ->
-                        if (index > 0) HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-                        SettingChoiceRow(
-                            title = frequencyLabel(frequency),
-                            subtitle = frequencyDescription(frequency),
-                            selected = settings.recordingFrequency == frequency,
-                            onClick = { onSettingsChanged(settings.copy(recordingFrequency = frequency)) },
-                        )
-                    }
-                }
+            SettingsGroup {
+                SettingNavigationRow(
+                    title = stringResource(R.string.recording_frequency),
+                    value = frequencyLabel(settings.recordingFrequency),
+                    onClick = { showFrequencyDialog = true },
+                )
             }
         }
         item {
-            Column(verticalArrangement = Arrangement.spacedBy(24.dp)) {
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 SettingsSectionHeader(stringResource(R.string.photo_match_settings))
                 SettingsGroup {
                     SettingStepper(
@@ -1517,14 +1533,14 @@ private fun SettingsScreen(
                         range = AppSettingsStore.MIN_CAMERA_OFFSET_MINUTES..AppSettingsStore.MAX_CAMERA_OFFSET_MINUTES,
                         onValueChange = { onSettingsChanged(settings.copy(cameraOffset = Duration.ofMinutes(it))) },
                     )
-                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant, modifier = Modifier.padding(horizontal = 16.dp))
                     SettingStepper(
                         title = stringResource(R.string.max_time_difference_minutes),
                         value = settings.maxPhotoTimeDifference.toMinutes(),
                         range = AppSettingsStore.MIN_PHOTO_TIME_DIFFERENCE_MINUTES..AppSettingsStore.MAX_PHOTO_TIME_DIFFERENCE_MINUTES,
                         onValueChange = { onSettingsChanged(settings.copy(maxPhotoTimeDifference = Duration.ofMinutes(it))) },
                     )
-                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant, modifier = Modifier.padding(horizontal = 16.dp))
                     SettingSwitchRow(
                         title = stringResource(R.string.allow_start_fallback),
                         checked = settings.allowStartFallback,
@@ -1539,7 +1555,7 @@ private fun SettingsScreen(
             }
         }
         item {
-            Column(verticalArrangement = Arrangement.spacedBy(24.dp)) {
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 SettingsSectionHeader(stringResource(R.string.export_settings))
                 SettingsGroup {
                     SettingChoiceRow(
@@ -1554,7 +1570,7 @@ private fun SettingsScreen(
                         selected = !settings.preferExportCopies,
                         onClick = { onSettingsChanged(settings.copy(preferExportCopies = false)) },
                     )
-                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant, modifier = Modifier.padding(horizontal = 16.dp))
                     ExportFolderSetting(
                         folderUri = settings.defaultExportFolderUri,
                         onChooseExportFolder = onChooseExportFolder,
@@ -1564,13 +1580,14 @@ private fun SettingsScreen(
             }
         }
         item {
-            Column(verticalArrangement = Arrangement.spacedBy(24.dp)) {
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 SettingsSectionHeader(stringResource(R.string.about))
                 SettingsGroup {
                     Text(
                         stringResource(R.string.version_name),
-                        modifier = Modifier.padding(vertical = 12.dp),
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
                         style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
             }
@@ -1579,13 +1596,47 @@ private fun SettingsScreen(
 }
 
 @Composable
+private fun SingleChoiceDialog(
+    title: String,
+    options: List<String>,
+    selectedIndex: Int,
+    onSelect: (Int) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(title, style = MaterialTheme.typography.titleLarge) },
+        text = {
+            Column {
+                options.forEachIndexed { index, label ->
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(8.dp))
+                            .clickable { onSelect(index) }
+                            .padding(vertical = 12.dp, horizontal = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        RadioButton(selected = index == selectedIndex, onClick = { onSelect(index) })
+                        Spacer(Modifier.width(12.dp))
+                        Text(label, style = MaterialTheme.typography.bodyLarge)
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) }
+        },
+    )
+}
+
+@Composable
 private fun SettingsSectionHeader(title: String) {
     Text(
-        text = title.uppercase(),
-        style = MaterialTheme.typography.labelMedium,
-        fontWeight = FontWeight.Medium,
-        letterSpacing = 0.5.sp,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        text = title,
+        style = MaterialTheme.typography.titleSmall,
+        fontWeight = FontWeight.SemiBold,
+        color = MaterialTheme.colorScheme.onSurface,
         modifier = Modifier.padding(horizontal = 4.dp),
     )
 }
@@ -1601,6 +1652,35 @@ private fun SettingsGroup(content: @Composable ColumnScope.() -> Unit) {
 }
 
 @Composable
+private fun SettingNavigationRow(
+    title: String,
+    value: String,
+    onClick: () -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(12.dp))
+            .clickable(onClick = onClick)
+            .padding(horizontal = 16.dp, vertical = 14.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(title, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
+        Text(
+            value,
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Spacer(Modifier.width(4.dp))
+        Text(
+            "›",
+            style = MaterialTheme.typography.titleLarge,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+}
+
+@Composable
 private fun SettingChoiceRow(
     title: String,
     subtitle: String? = null,
@@ -1610,15 +1690,16 @@ private fun SettingChoiceRow(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(8.dp))
             .clickable(onClick = onClick)
-            .padding(vertical = 8.dp),
+            .padding(horizontal = 16.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         RadioButton(selected = selected, onClick = onClick)
+        Spacer(Modifier.width(12.dp))
         Column(Modifier.weight(1f)) {
-            Text(title, style = MaterialTheme.typography.bodyLarge)
+            Text(title, style = MaterialTheme.typography.bodyMedium)
             if (subtitle != null) {
+                Spacer(Modifier.height(2.dp))
                 Text(subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
@@ -1634,10 +1715,10 @@ private fun SettingSwitchRow(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = 8.dp),
+            .padding(horizontal = 16.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text(title, modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodyLarge)
+        Text(title, modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
         Switch(checked = checked, onCheckedChange = onCheckedChange)
     }
 }
@@ -1648,12 +1729,12 @@ private fun ExportFolderSetting(
     onChooseExportFolder: () -> Unit,
     onClearExportFolder: () -> Unit,
 ) {
-    Column(Modifier.padding(vertical = 10.dp)) {
+    Column(Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
         Text(
             text = stringResource(R.string.default_export_folder),
-            style = MaterialTheme.typography.bodyLarge,
+            style = MaterialTheme.typography.bodyMedium,
         )
-        Spacer(Modifier.height(4.dp))
+        Spacer(Modifier.height(2.dp))
         Text(
             text = if (folderUri.isNullOrBlank()) {
                 stringResource(R.string.export_folder_unconfigured)
@@ -1683,30 +1764,38 @@ private fun SettingStepper(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = 10.dp),
+            .padding(horizontal = 16.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text(title, modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodyLarge)
-        OutlinedButton(
-            onClick = { onValueChange((value - 1).coerceIn(range.first, range.last)) },
-            enabled = value > range.first,
+        Text(title, modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
+        Surface(
             shape = RoundedCornerShape(8.dp),
+            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+            border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
         ) {
-            Text("-")
-        }
-        Text(
-            text = value.toString(),
-            modifier = Modifier.width(56.dp),
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.SemiBold,
-            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
-        )
-        OutlinedButton(
-            onClick = { onValueChange((value + 1).coerceIn(range.first, range.last)) },
-            enabled = value < range.last,
-            shape = RoundedCornerShape(8.dp),
-        ) {
-            Text("+")
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                IconButton(
+                    onClick = { onValueChange((value - 1).coerceIn(range.first, range.last)) },
+                    enabled = value > range.first,
+                    modifier = Modifier.size(36.dp),
+                ) {
+                    Text("−", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                }
+                Text(
+                    text = value.toString(),
+                    modifier = Modifier.widthIn(min = 36.dp),
+                    style = MaterialTheme.typography.bodyLarge,
+                    fontWeight = FontWeight.SemiBold,
+                    textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                )
+                IconButton(
+                    onClick = { onValueChange((value + 1).coerceIn(range.first, range.last)) },
+                    enabled = value < range.last,
+                    modifier = Modifier.size(36.dp),
+                ) {
+                    Text("+", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                }
+            }
         }
     }
 }
