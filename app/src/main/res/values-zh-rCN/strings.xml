@@ -92,6 +92,7 @@
     <string name="search_places">搜索地点</string>
     <string name="search_hint">搜索地点</string>
     <string name="search_amap">搜索高德</string>
+    <string name="search_query_required">请输入搜索关键词。</string>
     <string name="direct_coordinates">直接输入 WGS84 坐标</string>
     <string name="latitude">纬度</string>
     <string name="longitude">经度</string>
@@ -101,6 +102,11 @@
     <string name="map_view">地图</string>
     <string name="confirm_selection">确认选择</string>
     <string name="amap_key_missing">尚未配置高德 Web Key。请直接输入 WGS84 坐标。</string>
+    <string name="amap_loading">高德地图仍在加载，请稍等后再搜索。</string>
+    <string name="amap_ready">高德地图已就绪，可搜索或点选地图。</string>
+    <string name="amap_searching">正在搜索高德...</string>
+    <string name="amap_no_results_template">没有找到“{query}”的结果。</string>
+    <string name="amap_search_results_found_template">找到 {count} 个结果，请在地图面板中选择。</string>
     <string name="invalid_coordinates">请输入有效的经纬度</string>
     <string name="select_location_first">请先选择或输入位置</string>
     <string name="typed_wgs84_coordinates">输入的 WGS84 坐标</string>

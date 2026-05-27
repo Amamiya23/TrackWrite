@@ -92,6 +92,7 @@
     <string name="search_places">Search places</string>
     <string name="search_hint">Search a place</string>
     <string name="search_amap">Search AMap</string>
+    <string name="search_query_required">Enter a search term.</string>
     <string name="direct_coordinates">Direct WGS84 coordinates</string>
     <string name="latitude">Latitude</string>
     <string name="longitude">Longitude</string>
@@ -101,6 +102,11 @@
     <string name="map_view">Map view</string>
     <string name="confirm_selection">Confirm selection</string>
     <string name="amap_key_missing">AMap Web key is not configured. Type WGS84 coordinates directly.</string>
+    <string name="amap_loading">AMap is still loading. Wait a moment and search again.</string>
+    <string name="amap_ready">AMap is ready. Search or tap the map.</string>
+    <string name="amap_searching">Searching AMap...</string>
+    <string name="amap_no_results_template">No results for "{query}".</string>
+    <string name="amap_search_results_found_template">Found {count} results. Select one in the map panel.</string>
     <string name="invalid_coordinates">Enter valid latitude and longitude</string>
     <string name="select_location_first">Select or type a location first</string>
     <string name="typed_wgs84_coordinates">Typed WGS84 coordinates</string>

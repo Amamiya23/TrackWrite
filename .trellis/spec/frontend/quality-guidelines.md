@@ -30,7 +30,12 @@ safety should be visible and easy to scan.
 
 ## Required Patterns
 
-- Compose screens use `ComponentActivity.setContent { TrackWriteTheme(...) { ... } }`.
+- Compose-only screens use `ComponentActivity.setContent { TrackWriteTheme(...) { ... } }`.
+- Manual AMap picker screens may use a native `FrameLayout` root with a full-size
+  native `WebView` and a bottom `ComposeView` controls overlay. Keep the controls
+  inside `TrackWriteTheme`; do not embed the interactive AMap WebView inside a
+  scrollable Compose card via `AndroidView`, because that can leave the map blank
+  or incorrectly measured.
 - Compose Material components must be rendered inside `TrackWriteTheme`, which
   wraps Material 3 `MaterialTheme`.
 - Use Android string resources for default and Simplified Chinese UI copy:
@@ -56,7 +61,8 @@ safety should be visible and easy to scan.
 - Theme enum: `AppearanceMode` with storage values `system`, `light`, `dark`.
 - Recording enum: `RecordingFrequency` with interval/distance fields.
 - Main UI entry: `MainActivity.setContent { TrackWriteTheme(settings.appearance) { ... } }`.
-- Manual picker entry: `ManualLocationActivity.setContent { TrackWriteTheme(...) { ... } }`.
+- Manual picker entry: `ManualLocationActivity` renders AMap in a native
+  `WebView` and renders controls in `ComposeView { TrackWriteTheme(...) { ... } }`.
 
 ### 3. Contracts
 - Settings are stored in SharedPreferences named `app_settings`.
@@ -133,5 +139,7 @@ locationManager.requestLocationUpdates(provider, frequency.intervalMs, frequency
 - Three-tab navigation preserves the Record / Match / Library workflow.
 - Settings controls are backed by real persisted behavior.
 - User-visible text is in string resources with Chinese equivalents.
+- Manual AMap WebView is hosted as a native `WebView` root surface, with Compose
+  controls overlaid rather than wrapping the map in a Compose scroll/card layout.
 - AMap WebView interop still returns WGS84 through the existing Activity result
   extras.
