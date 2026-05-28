@@ -2,6 +2,7 @@ package com.trackwrite.app
 
 import android.Manifest
 import android.app.Activity
+import android.content.ContentResolver
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.BitmapFactory
@@ -23,8 +24,10 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.FlowRowScope
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -47,7 +50,7 @@ import androidx.compose.material.icons.filled.FolderOpen
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Speed
 import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
@@ -96,12 +99,12 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import com.trackwrite.app.data.TrackRepository
 import com.trackwrite.app.domain.GeoPoint
@@ -224,17 +227,23 @@ class MainActivity : ComponentActivity() {
         val longitude = data.getDoubleExtra(ManualLocationActivity.EXTRA_LONGITUDE, Double.NaN)
         val label = data.getStringExtra(ManualLocationActivity.EXTRA_LABEL).orEmpty()
         if (latitude.isNaN() || longitude.isNaN()) {
-            log("Manual location result was invalid.")
+            log(getString(R.string.manual_location_invalid))
             return@registerForActivityResult
         }
         val point = runCatching { GeoPoint(latitude, longitude) }.getOrElse {
-            log(it.message ?: "Manual location result was out of range.")
+            log(it.message ?: getString(R.string.manual_location_out_of_range))
             return@registerForActivityResult
         }
         selectedPhotos = selectedPhotos.mapIndexed { photoIndex, photo ->
             if (photoIndex == index) photo.copy(manualLocation = point) else photo
         }
-        log("Manual location bound to photo ${index + 1}${if (label.isBlank()) "" else ": $label"}")
+        log(
+            if (label.isBlank()) {
+                getString(R.string.manual_location_bound, index + 1)
+            } else {
+                getString(R.string.manual_location_bound_with_label, index + 1, label)
+            },
+        )
         uiState = uiState.copy(selectedTab = MainTab.Match, showPhotoBatchSheet = true, highlightedPhotoIndex = index)
         matchSelectedPhotos()
     }
@@ -286,7 +295,7 @@ class MainActivity : ComponentActivity() {
                         selectedPhotos = selectedPhotos.mapIndexed { photoIndex, photo ->
                             if (photoIndex == index) photo.copy(manualLocation = null) else photo
                         }
-                        log("Manual location cleared for photo ${index + 1}.")
+                        log(getString(R.string.manual_location_cleared, index + 1))
                         matchSelectedPhotos()
                     },
                     onWriteDefault = { writeDefault() },
@@ -386,13 +395,13 @@ class MainActivity : ComponentActivity() {
     private fun importGpx(uri: Uri) {
         runCatching {
             val xml = contentResolver.openInputStream(uri)?.bufferedReader()?.use { it.readText() }
-                ?: error("Could not read GPX")
+                ?: error(getString(R.string.gpx_read_failed))
             val track = gpx.importTrack(UUID.randomUUID().toString(), xml)
             repository.saveTrack(track)
             matchTrackId = track.id
-            log("Imported ${track.name}")
+            log(getString(R.string.gpx_imported, track.name))
             refresh()
-        }.onFailure { log("Import failed: ${it.message}") }
+        }.onFailure { log(getString(R.string.gpx_import_failed, it.message.orEmpty())) }
     }
 
     private fun promptExport() {
@@ -405,7 +414,7 @@ class MainActivity : ComponentActivity() {
         contentResolver.openOutputStream(uri, "w").use { output ->
             requireNotNull(output).write(gpx.encode(track).toByteArray())
         }
-        log("Exported ${track.name}")
+        log(getString(R.string.gpx_exported, track.name))
     }
 
     private fun matchSelectedPhotos() {
@@ -647,13 +656,13 @@ private fun TrackWriteApp(
                     NavigationBarItem(
                         selected = state.selectedTab == MainTab.Record,
                         onClick = { onTabSelected(MainTab.Record) },
-                        icon = { Icon(Icons.Default.LocationOn, contentDescription = stringResource(R.string.tab_record)) },
+                        icon = { Icon(Icons.Default.LocationOn, contentDescription = null) },
                         label = { Text(stringResource(R.string.tab_record)) },
                     )
                     NavigationBarItem(
                         selected = state.selectedTab == MainTab.Match,
                         onClick = { onTabSelected(MainTab.Match) },
-                        icon = { Icon(Icons.Default.Search, contentDescription = stringResource(R.string.tab_match)) },
+                        icon = { Icon(Icons.Default.Search, contentDescription = null) },
                         label = { Text(stringResource(R.string.tab_match)) },
                     )
                 }
@@ -770,6 +779,7 @@ private fun RecordScreen(
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun RecordingPanel(
     state: MainUiState,
@@ -957,14 +967,14 @@ private fun TrackHistorySheet(
                                 )
                             }
                             Row {
-                                IconButton(onClick = { onTrackSelected(track.id); onExportGpx() }, modifier = Modifier.size(36.dp)) {
-                                    Icon(Icons.Default.Share, contentDescription = stringResource(R.string.export_gpx), modifier = Modifier.size(18.dp))
+                                IconButton(onClick = { onTrackSelected(track.id); onExportGpx() }, modifier = Modifier.size(48.dp)) {
+                                    Icon(Icons.Default.Share, contentDescription = stringResource(R.string.export_track_gpx, track.name), modifier = Modifier.size(18.dp))
                                 }
-                                IconButton(onClick = { onTrackSelected(track.id); onRenameTrack() }, modifier = Modifier.size(36.dp)) {
-                                    Icon(Icons.Default.Edit, contentDescription = stringResource(R.string.rename), modifier = Modifier.size(18.dp))
+                                IconButton(onClick = { onTrackSelected(track.id); onRenameTrack() }, modifier = Modifier.size(48.dp)) {
+                                    Icon(Icons.Default.Edit, contentDescription = stringResource(R.string.rename_track, track.name), modifier = Modifier.size(18.dp))
                                 }
-                                IconButton(onClick = { onTrackSelected(track.id); onDeleteTrack() }, modifier = Modifier.size(36.dp)) {
-                                    Icon(Icons.Default.Delete, contentDescription = stringResource(R.string.delete), modifier = Modifier.size(18.dp), tint = MaterialTheme.colorScheme.error)
+                                IconButton(onClick = { onTrackSelected(track.id); onDeleteTrack() }, modifier = Modifier.size(48.dp)) {
+                                    Icon(Icons.Default.Delete, contentDescription = stringResource(R.string.delete_track, track.name), modifier = Modifier.size(18.dp), tint = MaterialTheme.colorScheme.error)
                                 }
                             }
                         }
@@ -976,6 +986,7 @@ private fun TrackHistorySheet(
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun MatchScreen(
     modifier: Modifier,
@@ -1303,6 +1314,7 @@ private fun PhotoBatchSheet(
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun PhotoMatchRow(
     index: Int,
@@ -1343,7 +1355,7 @@ private fun PhotoMatchRow(
                     color = MaterialTheme.colorScheme.onSurface,
                 )
                 Spacer(Modifier.height(10.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                ActionRow {
                     OutlinedButton(onClick = onSetManualLocation) {
                         Icon(Icons.Default.LocationOn, contentDescription = null, modifier = Modifier.size(18.dp))
                         Spacer(Modifier.width(6.dp))
@@ -1366,12 +1378,11 @@ private fun PhotoMatchRow(
 @Composable
 private fun PhotoThumbnail(uri: Uri) {
     val context = LocalContext.current
+    val targetSizePx = with(LocalDensity.current) { 64.dp.roundToPx() }
     var bitmap by remember(uri) { mutableStateOf<androidx.compose.ui.graphics.ImageBitmap?>(null) }
     LaunchedEffect(uri) {
         bitmap = withContext(Dispatchers.IO) {
-            context.contentResolver.openInputStream(uri)?.use { input ->
-                BitmapFactory.decodeStream(input)?.asImageBitmap()
-            }
+            decodeSampledThumbnail(context.contentResolver, uri, targetSizePx)
         }
     }
     Box(
@@ -1393,6 +1404,40 @@ private fun PhotoThumbnail(uri: Uri) {
             Icon(Icons.Default.Search, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
+}
+
+private fun decodeSampledThumbnail(
+    resolver: ContentResolver,
+    uri: Uri,
+    targetSizePx: Int,
+): androidx.compose.ui.graphics.ImageBitmap? {
+    val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+    resolver.openInputStream(uri)?.use { input ->
+        BitmapFactory.decodeStream(input, null, bounds)
+    }
+    val sampleSize = calculateInSampleSize(bounds, targetSizePx, targetSizePx)
+    val decodeOptions = BitmapFactory.Options().apply { inSampleSize = sampleSize }
+    return resolver.openInputStream(uri)?.use { input ->
+        BitmapFactory.decodeStream(input, null, decodeOptions)?.asImageBitmap()
+    }
+}
+
+private fun calculateInSampleSize(
+    options: BitmapFactory.Options,
+    targetWidth: Int,
+    targetHeight: Int,
+): Int {
+    val height = options.outHeight
+    val width = options.outWidth
+    var sampleSize = 1
+    if (height > targetHeight || width > targetWidth) {
+        var halfHeight = height / 2
+        var halfWidth = width / 2
+        while (halfHeight / sampleSize >= targetHeight && halfWidth / sampleSize >= targetWidth) {
+            sampleSize *= 2
+        }
+    }
+    return sampleSize.coerceAtLeast(1)
 }
 
 @Composable
@@ -1420,11 +1465,13 @@ private fun ReviewWritePanel(
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun ActionRow(content: @Composable RowScope.() -> Unit) {
-    Row(
+private fun ActionRow(content: @Composable FlowRowScope.() -> Unit) {
+    FlowRow(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.spacedBy(10.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
         content = content,
     )
 }
@@ -1603,44 +1650,8 @@ private fun SettingsScreen(
     onSettingsChanged: (AppSettings) -> Unit,
     onChooseExportFolder: () -> Unit,
 ) {
-    var showAppearanceSheet by remember { mutableStateOf(false) }
-    var showFrequencySheet by remember { mutableStateOf(false) }
-
-    if (showAppearanceSheet) {
-        SettingsBottomSheet(
-            title = stringResource(R.string.appearance),
-            onDismiss = { showAppearanceSheet = false },
-        ) {
-            AppearanceMode.entries.forEach { mode ->
-                SettingChoiceRow(
-                    title = appearanceLabel(mode),
-                    selected = settings.appearance == mode,
-                    onClick = {
-                        onSettingsChanged(settings.copy(appearance = mode))
-                        showAppearanceSheet = false
-                    },
-                )
-            }
-        }
-    }
-    if (showFrequencySheet) {
-        SettingsBottomSheet(
-            title = stringResource(R.string.recording_frequency),
-            onDismiss = { showFrequencySheet = false },
-        ) {
-            RecordingFrequency.entries.forEach { freq ->
-                SettingChoiceRow(
-                    title = frequencyLabel(freq),
-                    subtitle = frequencyDescription(freq),
-                    selected = settings.recordingFrequency == freq,
-                    onClick = {
-                        onSettingsChanged(settings.copy(recordingFrequency = freq))
-                        showFrequencySheet = false
-                    },
-                )
-            }
-        }
-    }
+    var expandedAppearance by remember { mutableStateOf(false) }
+    var expandedFrequency by remember { mutableStateOf(false) }
 
     LazyColumn(
         modifier = modifier.background(MaterialTheme.colorScheme.background),
@@ -1648,23 +1659,67 @@ private fun SettingsScreen(
         verticalArrangement = Arrangement.spacedBy(24.dp),
     ) {
         item {
-            SettingsGroup {
-                SettingNavigationRow(
-                    title = stringResource(R.string.appearance),
-                    value = appearanceLabel(settings.appearance),
-                    icon = Icons.Default.Palette,
-                    onClick = { showAppearanceSheet = true },
-                )
-            }
-        }
-        item {
-            SettingsGroup {
-                SettingNavigationRow(
-                    title = stringResource(R.string.recording_frequency),
-                    value = frequencyLabel(settings.recordingFrequency),
-                    icon = Icons.Default.Refresh,
-                    onClick = { showFrequencySheet = true },
-                )
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                SettingsSectionHeader(stringResource(R.string.general_settings))
+                SettingsGroup {
+                    SettingNavigationRow(
+                        title = stringResource(R.string.appearance),
+                        value = appearanceLabel(settings.appearance),
+                        icon = Icons.Default.Palette,
+                        subtitle = stringResource(R.string.appearance_desc),
+                        onClick = { 
+                            expandedAppearance = !expandedAppearance
+                            if (expandedAppearance) expandedFrequency = false
+                        },
+                    )
+                    if (expandedAppearance) {
+                        HorizontalDivider(
+                            color = MaterialTheme.colorScheme.outlineVariant,
+                            modifier = Modifier.padding(horizontal = 16.dp)
+                        )
+                        AppearanceMode.entries.forEach { mode ->
+                            SettingChoiceRow(
+                                title = appearanceLabel(mode),
+                                selected = settings.appearance == mode,
+                                onClick = {
+                                    onSettingsChanged(settings.copy(appearance = mode))
+                                    expandedAppearance = false
+                                },
+                            )
+                        }
+                    }
+                    HorizontalDivider(
+                        color = MaterialTheme.colorScheme.outlineVariant,
+                        modifier = Modifier.padding(horizontal = 16.dp)
+                    )
+                    SettingNavigationRow(
+                        title = stringResource(R.string.recording_frequency),
+                        value = frequencyLabel(settings.recordingFrequency),
+                        icon = Icons.Default.Speed,
+                        subtitle = stringResource(R.string.recording_frequency_desc),
+                        onClick = { 
+                            expandedFrequency = !expandedFrequency
+                            if (expandedFrequency) expandedAppearance = false
+                        },
+                    )
+                    if (expandedFrequency) {
+                        HorizontalDivider(
+                            color = MaterialTheme.colorScheme.outlineVariant,
+                            modifier = Modifier.padding(horizontal = 16.dp)
+                        )
+                        RecordingFrequency.entries.forEach { freq ->
+                            SettingChoiceRow(
+                                title = frequencyLabel(freq),
+                                subtitle = frequencyDescription(freq),
+                                selected = settings.recordingFrequency == freq,
+                                onClick = {
+                                    onSettingsChanged(settings.copy(recordingFrequency = freq))
+                                    expandedFrequency = false
+                                },
+                            )
+                        }
+                    }
+                }
             }
         }
         item {
@@ -1675,6 +1730,7 @@ private fun SettingsScreen(
                         title = stringResource(R.string.camera_offset_minutes),
                         value = settings.cameraOffset.toMinutes(),
                         range = AppSettingsStore.MIN_CAMERA_OFFSET_MINUTES..AppSettingsStore.MAX_CAMERA_OFFSET_MINUTES,
+                        unit = stringResource(R.string.unit_minutes),
                         onValueChange = { onSettingsChanged(settings.copy(cameraOffset = Duration.ofMinutes(it))) },
                     )
                     HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant, modifier = Modifier.padding(horizontal = 16.dp))
@@ -1682,6 +1738,7 @@ private fun SettingsScreen(
                         title = stringResource(R.string.max_time_difference_minutes),
                         value = settings.maxPhotoTimeDifference.toMinutes(),
                         range = AppSettingsStore.MIN_PHOTO_TIME_DIFFERENCE_MINUTES..AppSettingsStore.MAX_PHOTO_TIME_DIFFERENCE_MINUTES,
+                        unit = stringResource(R.string.unit_minutes),
                         onValueChange = { onSettingsChanged(settings.copy(maxPhotoTimeDifference = Duration.ofMinutes(it))) },
                     )
                     HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant, modifier = Modifier.padding(horizontal = 16.dp))
@@ -1718,31 +1775,6 @@ private fun SettingsScreen(
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun SettingsBottomSheet(
-    title: String,
-    onDismiss: () -> Unit,
-    content: @Composable ColumnScope.() -> Unit,
-) {
-    ModalBottomSheet(
-        onDismissRequest = onDismiss,
-        containerColor = MaterialTheme.colorScheme.surface,
-        shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
-    ) {
-        Column(
-            modifier = Modifier.padding(bottom = 32.dp),
-        ) {
-            Text(
-                text = title,
-                style = MaterialTheme.typography.titleLarge,
-                modifier = Modifier.padding(horizontal = 24.dp, vertical = 16.dp),
-            )
-            content()
-        }
-    }
-}
-
 @Composable
 private fun SettingsSectionHeader(title: String) {
     Text(
@@ -1770,6 +1802,7 @@ private fun SettingNavigationRow(
     title: String,
     value: String,
     icon: ImageVector? = null,
+    subtitle: String? = null,
     onClick: () -> Unit,
 ) {
     Row(
@@ -1777,7 +1810,7 @@ private fun SettingNavigationRow(
             .fillMaxWidth()
             .clickable(onClick = onClick)
             .padding(horizontal = 16.dp, vertical = 16.dp),
-        verticalAlignment = Alignment.CenterVertically,
+        verticalAlignment = if (subtitle != null) Alignment.Top else Alignment.CenterVertically,
     ) {
         if (icon != null) {
             Icon(
@@ -1788,7 +1821,17 @@ private fun SettingNavigationRow(
             )
             Spacer(Modifier.width(16.dp))
         }
-        Text(title, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
+        Column(modifier = Modifier.weight(1f)) {
+            Text(title, style = MaterialTheme.typography.bodyLarge)
+            if (subtitle != null) {
+                Spacer(Modifier.height(2.dp))
+                Text(
+                    subtitle,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
         Text(
             value,
             style = MaterialTheme.typography.bodyMedium,
@@ -1815,10 +1858,10 @@ private fun SettingChoiceRow(
         modifier = Modifier
             .fillMaxWidth()
             .clickable(onClick = onClick)
-            .padding(horizontal = 24.dp, vertical = 14.dp),
+            .padding(horizontal = 16.dp, vertical = 14.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        RadioButton(selected = selected, onClick = onClick)
+        RadioButton(selected = selected, onClick = null)
         Spacer(Modifier.width(16.dp))
         Column(Modifier.weight(1f)) {
             Text(title, style = MaterialTheme.typography.bodyLarge)
@@ -1854,22 +1897,17 @@ private fun ExportModeSelector(
     onSelectCopies: () -> Unit,
     onSelectOriginals: () -> Unit,
 ) {
-    Row(
+    Column(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 16.dp, vertical = 14.dp),
-        verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text(
-            text = stringResource(R.string.export_settings),
-            style = MaterialTheme.typography.bodyLarge,
-            modifier = Modifier.weight(1f),
-        )
-        SingleChoiceSegmentedButtonRow {
+        SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
             SegmentedButton(
                 selected = preferCopies,
                 onClick = onSelectCopies,
                 shape = SegmentedButtonDefaults.itemShape(index = 0, count = 2),
+                modifier = Modifier.weight(1f),
             ) {
                 Text(stringResource(R.string.write_copies))
             }
@@ -1877,6 +1915,7 @@ private fun ExportModeSelector(
                 selected = !preferCopies,
                 onClick = onSelectOriginals,
                 shape = SegmentedButtonDefaults.itemShape(index = 1, count = 2),
+                modifier = Modifier.weight(1f),
             ) {
                 Text(stringResource(R.string.write_originals))
             }
@@ -1922,6 +1961,7 @@ private fun SettingStepper(
     title: String,
     value: Long,
     range: LongRange,
+    unit: String,
     onValueChange: (Long) -> Unit,
 ) {
     Row(
@@ -1939,16 +1979,16 @@ private fun SettingStepper(
                 IconButton(
                     onClick = { onValueChange((value - 1).coerceIn(range.first, range.last)) },
                     enabled = value > range.first,
-                    modifier = Modifier.size(40.dp),
+                    modifier = Modifier.size(48.dp),
                 ) {
                     Icon(
                         Icons.Default.Remove,
-                        contentDescription = null,
+                        contentDescription = stringResource(R.string.decrease_setting, title),
                         modifier = Modifier.size(18.dp),
                     )
                 }
                 Text(
-                    text = value.toString(),
+                    text = "$value $unit",
                     modifier = Modifier.widthIn(min = 40.dp),
                     style = MaterialTheme.typography.bodyLarge,
                     fontWeight = FontWeight.SemiBold,
@@ -1957,11 +1997,11 @@ private fun SettingStepper(
                 IconButton(
                     onClick = { onValueChange((value + 1).coerceIn(range.first, range.last)) },
                     enabled = value < range.last,
-                    modifier = Modifier.size(40.dp),
+                    modifier = Modifier.size(48.dp),
                 ) {
                     Icon(
                         Icons.Default.Add,
-                        contentDescription = null,
+                        contentDescription = stringResource(R.string.increase_setting, title),
                         modifier = Modifier.size(18.dp),
                     )
                 }
