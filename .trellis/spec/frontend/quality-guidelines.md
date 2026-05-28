@@ -133,6 +133,51 @@ locationManager.requestLocationUpdates(provider, frequency.intervalMs, frequency
 
 ---
 
+## Settings UI Patterns
+
+### Convention: Settings Group Structure
+**What**: Group related settings into a single `SettingsGroup` card with `HorizontalDivider` between items. Use `SettingsSectionHeader` above the card for group titles.
+
+**Why**: Prevents visual fragmentation from lonely single-item cards. Maintains consistent rhythm across the settings page.
+
+**Example**:
+```kotlin
+SettingsGroup {
+    SettingNavigationRow(title = "Appearance", ...)
+    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant, ...)
+    SettingNavigationRow(title = "Recording frequency", ...)
+}
+```
+
+### Convention: Inline Expansion for Small Option Sets
+**What**: When a setting has ≤4 options, use inline expansion within the card instead of `ModalBottomSheet`. Toggle `expandedState` on row click, show `SettingChoiceRow` list below.
+
+**Why**: Reduces interaction steps (click→select vs click→sheet opens→select→sheet closes). More efficient for mobile users.
+
+### Convention: Stepper Unit Display
+**What**: Always display the unit next to numeric values in `SettingStepper`. Pass `unit` parameter and render as `"$value $unit"`.
+
+**Why**: Prevents user confusion about what the number represents (minutes vs seconds vs meters).
+
+### Don't: Redundant Labels
+**Problem**:
+```kotlin
+SettingsSectionHeader("Export")
+SettingsGroup {
+    Column {
+        Text("Export")  // Redundant with section header
+        SegmentedButton(...)
+    }
+}
+```
+**Instead**: Let the section header provide context; inner components show only their controls.
+
+### Don't: Semantic Icon Mismatch
+**Problem**: Using `Icons.Default.Refresh` for recording frequency (refresh ≠ frequency).
+**Instead**: Use `Icons.Default.Speed` for frequency/speed, or omit the icon if no good match exists.
+
+---
+
 ## Code Review Checklist
 
 - Compose UI is under `TrackWriteTheme`.
