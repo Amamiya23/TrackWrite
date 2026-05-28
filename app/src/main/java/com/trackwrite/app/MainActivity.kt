@@ -39,17 +39,23 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.FolderOpen
 import androidx.compose.material.icons.filled.LocationOn
+import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material.icons.filled.Warning
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -67,6 +73,9 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SegmentedButton
+import androidx.compose.material3.SegmentedButtonDefaults
+import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
@@ -89,6 +98,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -1593,45 +1603,57 @@ private fun SettingsScreen(
     onSettingsChanged: (AppSettings) -> Unit,
     onChooseExportFolder: () -> Unit,
 ) {
-    var showAppearanceDialog by remember { mutableStateOf(false) }
-    var showFrequencyDialog by remember { mutableStateOf(false) }
+    var showAppearanceSheet by remember { mutableStateOf(false) }
+    var showFrequencySheet by remember { mutableStateOf(false) }
 
-    if (showAppearanceDialog) {
-        SingleChoiceDialog(
+    if (showAppearanceSheet) {
+        SettingsBottomSheet(
             title = stringResource(R.string.appearance),
-            options = AppearanceMode.entries.map { appearanceLabel(it) },
-            selectedIndex = AppearanceMode.entries.indexOf(settings.appearance),
-            onSelect = { index ->
-                onSettingsChanged(settings.copy(appearance = AppearanceMode.entries[index]))
-                showAppearanceDialog = false
-            },
-            onDismiss = { showAppearanceDialog = false },
-        )
+            onDismiss = { showAppearanceSheet = false },
+        ) {
+            AppearanceMode.entries.forEach { mode ->
+                SettingChoiceRow(
+                    title = appearanceLabel(mode),
+                    selected = settings.appearance == mode,
+                    onClick = {
+                        onSettingsChanged(settings.copy(appearance = mode))
+                        showAppearanceSheet = false
+                    },
+                )
+            }
+        }
     }
-    if (showFrequencyDialog) {
-        SingleChoiceDialog(
+    if (showFrequencySheet) {
+        SettingsBottomSheet(
             title = stringResource(R.string.recording_frequency),
-            options = RecordingFrequency.entries.map { "${frequencyLabel(it)}\n${frequencyDescription(it)}" },
-            selectedIndex = RecordingFrequency.entries.indexOf(settings.recordingFrequency),
-            onSelect = { index ->
-                onSettingsChanged(settings.copy(recordingFrequency = RecordingFrequency.entries[index]))
-                showFrequencyDialog = false
-            },
-            onDismiss = { showFrequencyDialog = false },
-        )
+            onDismiss = { showFrequencySheet = false },
+        ) {
+            RecordingFrequency.entries.forEach { freq ->
+                SettingChoiceRow(
+                    title = frequencyLabel(freq),
+                    subtitle = frequencyDescription(freq),
+                    selected = settings.recordingFrequency == freq,
+                    onClick = {
+                        onSettingsChanged(settings.copy(recordingFrequency = freq))
+                        showFrequencySheet = false
+                    },
+                )
+            }
+        }
     }
 
     LazyColumn(
         modifier = modifier.background(MaterialTheme.colorScheme.background),
-        contentPadding = PaddingValues(horizontal = 20.dp, vertical = 20.dp),
-        verticalArrangement = Arrangement.spacedBy(28.dp),
+        contentPadding = PaddingValues(16.dp),
+        verticalArrangement = Arrangement.spacedBy(24.dp),
     ) {
         item {
             SettingsGroup {
                 SettingNavigationRow(
                     title = stringResource(R.string.appearance),
                     value = appearanceLabel(settings.appearance),
-                    onClick = { showAppearanceDialog = true },
+                    icon = Icons.Default.Palette,
+                    onClick = { showAppearanceSheet = true },
                 )
             }
         }
@@ -1640,12 +1662,13 @@ private fun SettingsScreen(
                 SettingNavigationRow(
                     title = stringResource(R.string.recording_frequency),
                     value = frequencyLabel(settings.recordingFrequency),
-                    onClick = { showFrequencyDialog = true },
+                    icon = Icons.Default.Refresh,
+                    onClick = { showFrequencySheet = true },
                 )
             }
         }
         item {
-            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 SettingsSectionHeader(stringResource(R.string.photo_match_settings))
                 SettingsGroup {
                     SettingStepper(
@@ -1676,7 +1699,7 @@ private fun SettingsScreen(
             }
         }
         item {
-            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 SettingsSectionHeader(stringResource(R.string.export_settings))
                 SettingsGroup {
                     ExportModeSelector(
@@ -1695,39 +1718,29 @@ private fun SettingsScreen(
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun SingleChoiceDialog(
+private fun SettingsBottomSheet(
     title: String,
-    options: List<String>,
-    selectedIndex: Int,
-    onSelect: (Int) -> Unit,
     onDismiss: () -> Unit,
+    content: @Composable ColumnScope.() -> Unit,
 ) {
-    AlertDialog(
+    ModalBottomSheet(
         onDismissRequest = onDismiss,
-        title = { Text(title, style = MaterialTheme.typography.titleLarge) },
-        text = {
-            Column {
-                options.forEachIndexed { index, label ->
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clip(RoundedCornerShape(8.dp))
-                            .clickable { onSelect(index) }
-                            .padding(vertical = 12.dp, horizontal = 4.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        RadioButton(selected = index == selectedIndex, onClick = { onSelect(index) })
-                        Spacer(Modifier.width(12.dp))
-                        Text(label, style = MaterialTheme.typography.bodyLarge)
-                    }
-                }
-            }
-        },
-        confirmButton = {
-            TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) }
-        },
-    )
+        containerColor = MaterialTheme.colorScheme.surface,
+        shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
+    ) {
+        Column(
+            modifier = Modifier.padding(bottom = 32.dp),
+        ) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.titleLarge,
+                modifier = Modifier.padding(horizontal = 24.dp, vertical = 16.dp),
+            )
+            content()
+        }
+    }
 }
 
 @Composable
@@ -1736,16 +1749,17 @@ private fun SettingsSectionHeader(title: String) {
         text = title,
         style = MaterialTheme.typography.titleSmall,
         fontWeight = FontWeight.SemiBold,
-        color = MaterialTheme.colorScheme.onSurface,
-        modifier = Modifier.padding(horizontal = 4.dp),
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
     )
 }
 
 @Composable
 private fun SettingsGroup(content: @Composable ColumnScope.() -> Unit) {
     Surface(
-        shape = RoundedCornerShape(12.dp),
-        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
+        shape = RoundedCornerShape(16.dp),
+        color = MaterialTheme.colorScheme.surfaceContainerLow,
+        tonalElevation = 0.dp,
     ) {
         Column(content = content)
     }
@@ -1755,27 +1769,37 @@ private fun SettingsGroup(content: @Composable ColumnScope.() -> Unit) {
 private fun SettingNavigationRow(
     title: String,
     value: String,
+    icon: ImageVector? = null,
     onClick: () -> Unit,
 ) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(12.dp))
             .clickable(onClick = onClick)
-            .padding(horizontal = 16.dp, vertical = 14.dp),
+            .padding(horizontal = 16.dp, vertical = 16.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
+        if (icon != null) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(22.dp),
+            )
+            Spacer(Modifier.width(16.dp))
+        }
         Text(title, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
         Text(
             value,
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
-        Spacer(Modifier.width(4.dp))
-        Text(
-            "›",
-            style = MaterialTheme.typography.titleLarge,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        Spacer(Modifier.width(8.dp))
+        Icon(
+            Icons.AutoMirrored.Filled.KeyboardArrowRight,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+            modifier = Modifier.size(20.dp),
         )
     }
 }
@@ -1791,13 +1815,13 @@ private fun SettingChoiceRow(
         modifier = Modifier
             .fillMaxWidth()
             .clickable(onClick = onClick)
-            .padding(horizontal = 16.dp, vertical = 10.dp),
+            .padding(horizontal = 24.dp, vertical = 14.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         RadioButton(selected = selected, onClick = onClick)
-        Spacer(Modifier.width(12.dp))
+        Spacer(Modifier.width(16.dp))
         Column(Modifier.weight(1f)) {
-            Text(title, style = MaterialTheme.typography.bodyMedium)
+            Text(title, style = MaterialTheme.typography.bodyLarge)
             if (subtitle != null) {
                 Spacer(Modifier.height(2.dp))
                 Text(subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -1815,14 +1839,15 @@ private fun SettingSwitchRow(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 10.dp),
+            .padding(horizontal = 16.dp, vertical = 14.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text(title, modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
+        Text(title, modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodyLarge)
         Switch(checked = checked, onCheckedChange = onCheckedChange)
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun ExportModeSelector(
     preferCopies: Boolean,
@@ -1832,50 +1857,28 @@ private fun ExportModeSelector(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 12.dp),
+            .padding(horizontal = 16.dp, vertical = 14.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(
             text = stringResource(R.string.export_settings),
-            style = MaterialTheme.typography.bodyMedium,
+            style = MaterialTheme.typography.bodyLarge,
             modifier = Modifier.weight(1f),
         )
-        Surface(
-            shape = RoundedCornerShape(8.dp),
-            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
-            border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
-        ) {
-            Row {
-                val copiesBg = if (preferCopies) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surface
-                val copiesContent = if (preferCopies) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface
-                Surface(
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(topStart = 8.dp, bottomStart = 8.dp))
-                        .clickable(onClick = onSelectCopies),
-                    color = copiesBg,
-                ) {
-                    Text(
-                        text = stringResource(R.string.write_copies),
-                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-                        style = MaterialTheme.typography.labelLarge,
-                        color = copiesContent,
-                    )
-                }
-                val originalsBg = if (!preferCopies) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surface
-                val originalsContent = if (!preferCopies) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface
-                Surface(
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(topEnd = 8.dp, bottomEnd = 8.dp))
-                        .clickable(onClick = onSelectOriginals),
-                    color = originalsBg,
-                ) {
-                    Text(
-                        text = stringResource(R.string.write_originals),
-                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-                        style = MaterialTheme.typography.labelLarge,
-                        color = originalsContent,
-                    )
-                }
+        SingleChoiceSegmentedButtonRow {
+            SegmentedButton(
+                selected = preferCopies,
+                onClick = onSelectCopies,
+                shape = SegmentedButtonDefaults.itemShape(index = 0, count = 2),
+            ) {
+                Text(stringResource(R.string.write_copies))
+            }
+            SegmentedButton(
+                selected = !preferCopies,
+                onClick = onSelectOriginals,
+                shape = SegmentedButtonDefaults.itemShape(index = 1, count = 2),
+            ) {
+                Text(stringResource(R.string.write_originals))
             }
         }
     }
@@ -1890,18 +1893,25 @@ private fun ExportFolderRow(
         modifier = Modifier
             .fillMaxWidth()
             .clickable(onClick = onChooseExportFolder)
-            .padding(horizontal = 16.dp, vertical = 14.dp),
+            .padding(horizontal = 16.dp, vertical = 16.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
+        Icon(
+            Icons.Default.FolderOpen,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.size(22.dp),
+        )
+        Spacer(Modifier.width(16.dp))
         Text(
             text = stringResource(R.string.default_export_folder),
-            style = MaterialTheme.typography.bodyMedium,
+            style = MaterialTheme.typography.bodyLarge,
             modifier = Modifier.weight(1f),
         )
         Icon(
-            Icons.Default.Search,
+            Icons.AutoMirrored.Filled.KeyboardArrowRight,
             contentDescription = stringResource(R.string.choose_folder),
-            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
             modifier = Modifier.size(20.dp),
         )
     }
@@ -1917,36 +1927,43 @@ private fun SettingStepper(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 12.dp),
+            .padding(horizontal = 16.dp, vertical = 14.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text(title, modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
+        Text(title, modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodyLarge)
         Surface(
-            shape = RoundedCornerShape(8.dp),
-            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
-            border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+            shape = RoundedCornerShape(12.dp),
+            color = MaterialTheme.colorScheme.surfaceContainerHigh,
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 IconButton(
                     onClick = { onValueChange((value - 1).coerceIn(range.first, range.last)) },
                     enabled = value > range.first,
-                    modifier = Modifier.size(36.dp),
+                    modifier = Modifier.size(40.dp),
                 ) {
-                    Text("−", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                    Icon(
+                        Icons.Default.Remove,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp),
+                    )
                 }
                 Text(
                     text = value.toString(),
-                    modifier = Modifier.widthIn(min = 36.dp),
+                    modifier = Modifier.widthIn(min = 40.dp),
                     style = MaterialTheme.typography.bodyLarge,
                     fontWeight = FontWeight.SemiBold,
-                    textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                    textAlign = TextAlign.Center,
                 )
                 IconButton(
                     onClick = { onValueChange((value + 1).coerceIn(range.first, range.last)) },
                     enabled = value < range.last,
-                    modifier = Modifier.size(36.dp),
+                    modifier = Modifier.size(40.dp),
                 ) {
-                    Text("+", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                    Icon(
+                        Icons.Default.Add,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp),
+                    )
                 }
             }
         }
