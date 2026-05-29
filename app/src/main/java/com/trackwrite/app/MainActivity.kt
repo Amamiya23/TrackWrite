@@ -19,6 +19,7 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Box
@@ -96,6 +97,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
@@ -1653,6 +1655,16 @@ private fun SettingsScreen(
 ) {
     var showAppearanceDialog by remember { mutableStateOf(false) }
     var showFrequencyDialog by remember { mutableStateOf(false) }
+    val darkTheme = when (settings.appearance) {
+        AppearanceMode.System -> isSystemInDarkTheme()
+        AppearanceMode.Light -> false
+        AppearanceMode.Dark -> true
+    }
+    val settingsGroupColor = if (darkTheme) {
+        MaterialTheme.colorScheme.surfaceContainerLow
+    } else {
+        Color.White
+    }
 
     LazyColumn(
         modifier = modifier.background(MaterialTheme.colorScheme.background),
@@ -1662,7 +1674,7 @@ private fun SettingsScreen(
         item {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 SettingsSectionHeader(stringResource(R.string.general_settings))
-                SettingsGroup {
+                SettingsGroup(containerColor = settingsGroupColor) {
                     SettingNavigationRow(
                         title = stringResource(R.string.appearance),
                         value = appearanceLabel(settings.appearance),
@@ -1687,7 +1699,7 @@ private fun SettingsScreen(
         item {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 SettingsSectionHeader(stringResource(R.string.photo_match_settings))
-                SettingsGroup {
+                SettingsGroup(containerColor = settingsGroupColor) {
                     SettingStepper(
                         title = stringResource(R.string.camera_offset_minutes),
                         value = settings.cameraOffset.toMinutes(),
@@ -1720,7 +1732,7 @@ private fun SettingsScreen(
         item {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 SettingsSectionHeader(stringResource(R.string.export_settings))
-                SettingsGroup {
+                SettingsGroup(containerColor = settingsGroupColor) {
                     ExportModeSelector(
                         preferCopies = settings.preferExportCopies,
                         onSelectCopies = { onSettingsChanged(settings.copy(preferExportCopies = true)) },
@@ -1863,10 +1875,13 @@ private fun SettingsSectionHeader(title: String) {
 }
 
 @Composable
-private fun SettingsGroup(content: @Composable ColumnScope.() -> Unit) {
+private fun SettingsGroup(
+    containerColor: Color,
+    content: @Composable ColumnScope.() -> Unit,
+) {
     Surface(
         shape = RoundedCornerShape(16.dp),
-        color = MaterialTheme.colorScheme.surfaceContainerLow,
+        color = containerColor,
         tonalElevation = 0.dp,
     ) {
         Column(content = content)

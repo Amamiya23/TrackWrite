@@ -135,6 +135,25 @@ locationManager.requestLocationUpdates(provider, frequency.intervalMs, frequency
 
 ## Settings UI Patterns
 
+### Convention: Light Theme Background and Card Surfaces
+**What**: Light and system-light page backgrounds use `MaterialTheme.colorScheme.background`
+pinned to `#F8FAFC` (Slate 50). Light card surfaces should be pure white
+(`#FFFFFF`), and Settings group cards use `Color.White` in light mode instead
+of `surfaceContainerLow`.
+
+**Why**: Material You dynamic light colors can tint `background`, `surface`, and
+`surfaceContainerLow` per device. Pinning these values keeps the app's white
+card on Slate 50 background contrast consistent.
+
+**Example**:
+```kotlin
+dynamicLightColorScheme(context).copy(
+    background = Color(0xFFF8FAFC),
+    surface = Color.White,
+    surfaceContainerLow = Color.White,
+)
+```
+
 ### Convention: Settings Group Structure
 **What**: Group related settings into a single `SettingsGroup` card with `HorizontalDivider` between items. Use `SettingsSectionHeader` above the card for group titles.
 

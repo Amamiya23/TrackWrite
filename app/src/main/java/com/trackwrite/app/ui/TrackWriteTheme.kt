@@ -12,6 +12,9 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import com.trackwrite.app.settings.AppearanceMode
 
+private val LightBackground = Color(0xFFF8FAFC)
+private val LightCard = Color.White
+
 private val LightColors = lightColorScheme(
     primary = Color(0xFF1E293B),
     onPrimary = Color(0xFFFFFFFF),
@@ -29,15 +32,15 @@ private val LightColors = lightColorScheme(
     onError = Color(0xFFFFFFFF),
     errorContainer = Color(0xFFFEE2E2),
     onErrorContainer = Color(0xFF991B1B),
-    background = Color(0xFFEFF2F7),
+    background = LightBackground,
     onBackground = Color(0xFF0F172A),
-    surface = Color(0xFFFFFFFF),
+    surface = LightCard,
     onSurface = Color(0xFF0F172A),
     surfaceVariant = Color(0xFFF1F5F9),
     onSurfaceVariant = Color(0xFF475569),
     outline = Color(0xFFCBD5E1),
     outlineVariant = Color(0xFFE2E8F0),
-    surfaceContainerLow = Color(0xFFF8FAFC),
+    surfaceContainerLow = LightCard,
     surfaceContainer = Color(0xFFEFF2F7),
     surfaceContainerHigh = Color(0xFFE2E8F0),
 )
@@ -86,7 +89,15 @@ fun TrackWriteTheme(
     val colorScheme = when (appearance) {
         AppearanceMode.System -> {
             val context = LocalContext.current
-            if (darkTheme) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
+            if (darkTheme) {
+                dynamicDarkColorScheme(context)
+            } else {
+                dynamicLightColorScheme(context).copy(
+                    background = LightBackground,
+                    surface = LightCard,
+                    surfaceContainerLow = LightCard,
+                )
+            }
         }
         AppearanceMode.Light -> LightColors
         AppearanceMode.Dark -> DarkColors
