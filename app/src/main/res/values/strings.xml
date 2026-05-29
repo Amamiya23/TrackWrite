@@ -31,6 +31,7 @@
     <string name="track_name">Track name</string>
     <string name="track_name_default">Recording</string>
     <string name="cancel">Cancel</string>
+    <string name="ok">OK</string>
     <string name="start">Start</string>
     <string name="track_source">Track source</string>
     <string name="track_history_count">Track history (%1$d)</string>
@@ -109,8 +110,8 @@
     <string name="frequency_balanced_desc">5 seconds, 8 meters</string>
     <string name="frequency_precise_desc">2 seconds, 3 meters</string>
     <string name="photo_match_settings">Photo matching</string>
-    <string name="camera_offset_minutes">Camera offset minutes</string>
-    <string name="max_time_difference_minutes">Max time difference minutes</string>
+    <string name="camera_offset_minutes">Camera offset</string>
+    <string name="max_time_difference_minutes">Max time difference</string>
     <string name="allow_start_fallback">Allow start fallback</string>
     <string name="allow_end_fallback">Allow end fallback</string>
     <string name="export_settings">Export</string>
