@@ -19,7 +19,10 @@ Upgraded the UI of MainActivity and ManualLocationActivity using rounded custom 
 
 ### Main Changes
 
-(Add details)
+- Set light and system-light `colorScheme.background` to Slate 50 (`#F8FAFC`).
+- Set light card surface tokens to `Color.White`, including dynamic system-light overrides.
+- Updated Settings groups to use white cards in light mode while preserving dark mode surfaces.
+- Documented the light background and white card convention in frontend quality guidelines.
 
 ### Git Commits
 
@@ -29,7 +32,8 @@ Upgraded the UI of MainActivity and ManualLocationActivity using rounded custom 
 
 ### Testing
 
-- [OK] (Add test results)
+- [OK] `./gradlew :app:compileDebugKotlin`
+- [OK] `./gradlew testDebugUnitTest :app:lintDebug`
 
 ### Status
 
@@ -98,6 +102,39 @@ Fixed 6 UX critique issues on settings page: merged General card, replaced Refre
 | `cbf55f6` | (see git log) |
 | `1a1200c` | (see git log) |
 | `d7e9ef3` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
+
+
+## Session 4: Light mode background and white settings cards
+
+**Date**: 2026-05-29
+**Task**: Light mode background and white settings cards
+**Branch**: `main`
+
+### Summary
+
+Pinned light/system-light background to Slate 50, forced light settings cards to white, and documented the color convention.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `f267e1c` | (see git log) |
 
 ### Testing
 
