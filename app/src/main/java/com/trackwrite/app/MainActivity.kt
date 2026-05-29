@@ -1765,7 +1765,6 @@ private fun AppearanceDialog(
     onDismiss: () -> Unit,
     onConfirm: (AppearanceMode) -> Unit,
 ) {
-    var pending by remember(selected) { mutableStateOf(selected) }
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(stringResource(R.string.appearance)) },
@@ -1776,14 +1775,14 @@ private fun AppearanceDialog(
                         modifier = Modifier
                             .fillMaxWidth()
                             .selectable(
-                                selected = pending == mode,
-                                onClick = { pending = mode },
+                                selected = selected == mode,
+                                onClick = { onConfirm(mode) },
                             )
                             .padding(vertical = 8.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         RadioButton(
-                            selected = pending == mode,
+                            selected = selected == mode,
                             onClick = null,
                         )
                         Spacer(Modifier.width(16.dp))
@@ -1792,11 +1791,7 @@ private fun AppearanceDialog(
                 }
             }
         },
-        confirmButton = {
-            TextButton(onClick = { onConfirm(pending) }) {
-                Text(stringResource(R.string.ok))
-            }
-        },
+        confirmButton = {},
         dismissButton = {
             TextButton(onClick = onDismiss) {
                 Text(stringResource(R.string.cancel))
@@ -1811,7 +1806,6 @@ private fun FrequencyDialog(
     onDismiss: () -> Unit,
     onConfirm: (RecordingFrequency) -> Unit,
 ) {
-    var pending by remember(selected) { mutableStateOf(selected) }
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(stringResource(R.string.recording_frequency)) },
@@ -1822,14 +1816,14 @@ private fun FrequencyDialog(
                         modifier = Modifier
                             .fillMaxWidth()
                             .selectable(
-                                selected = pending == freq,
-                                onClick = { pending = freq },
+                                selected = selected == freq,
+                                onClick = { onConfirm(freq) },
                             )
                             .padding(vertical = 8.dp),
                         verticalAlignment = Alignment.Top,
                     ) {
                         RadioButton(
-                            selected = pending == freq,
+                            selected = selected == freq,
                             onClick = null,
                         )
                         Spacer(Modifier.width(16.dp))
@@ -1848,11 +1842,7 @@ private fun FrequencyDialog(
                 }
             }
         },
-        confirmButton = {
-            TextButton(onClick = { onConfirm(pending) }) {
-                Text(stringResource(R.string.ok))
-            }
-        },
+        confirmButton = {},
         dismissButton = {
             TextButton(onClick = onDismiss) {
                 Text(stringResource(R.string.cancel))
