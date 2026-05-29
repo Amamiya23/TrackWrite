@@ -19,7 +19,6 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Box
@@ -61,6 +60,7 @@ import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -637,12 +637,18 @@ private fun TrackWriteApp(
                         )
                     }
                 },
-                actions = {
+                navigationIcon = {
                     if (state.showSettings) {
-                        TextButton(onClick = onCloseSettings) {
-                            Text(stringResource(R.string.back))
+                        IconButton(onClick = onCloseSettings) {
+                            Icon(
+                                Icons.AutoMirrored.Filled.ArrowBack,
+                                contentDescription = stringResource(R.string.back),
+                            )
                         }
-                    } else {
+                    }
+                },
+                actions = {
+                    if (!state.showSettings) {
                         IconButton(onClick = onSettings) {
                             Icon(Icons.Default.Settings, contentDescription = stringResource(R.string.settings))
                         }
@@ -1655,16 +1661,7 @@ private fun SettingsScreen(
 ) {
     var showAppearanceDialog by remember { mutableStateOf(false) }
     var showFrequencyDialog by remember { mutableStateOf(false) }
-    val darkTheme = when (settings.appearance) {
-        AppearanceMode.System -> isSystemInDarkTheme()
-        AppearanceMode.Light -> false
-        AppearanceMode.Dark -> true
-    }
-    val settingsGroupColor = if (darkTheme) {
-        MaterialTheme.colorScheme.surfaceContainerLow
-    } else {
-        Color.White
-    }
+    val settingsGroupColor = MaterialTheme.colorScheme.surfaceContainerLow
 
     LazyColumn(
         modifier = modifier.background(MaterialTheme.colorScheme.background),
