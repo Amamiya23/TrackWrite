@@ -147,3 +147,36 @@ Pinned light/system-light background to Slate 50, forced light settings cards to
 ### Next Steps
 
 - None - task complete
+
+
+## Session 5: Settings back button + dark mode fixes
+
+**Date**: 2026-05-29
+**Task**: Settings back button + dark mode fixes
+**Branch**: `main`
+
+### Summary
+
+Moved settings back button from top-right TextButton to top-left ArrowBack icon in TopAppBar.navigationIcon. Replaced greenish-teal dark color scheme with slate-gray palette matching the light theme. Removed conditional dark-mode override for settingsGroupColor, using theme token directly.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `1df4ce2` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
