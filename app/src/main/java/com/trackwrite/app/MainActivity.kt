@@ -40,6 +40,7 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
@@ -1650,8 +1651,8 @@ private fun SettingsScreen(
     onSettingsChanged: (AppSettings) -> Unit,
     onChooseExportFolder: () -> Unit,
 ) {
-    var expandedAppearance by remember { mutableStateOf(false) }
-    var expandedFrequency by remember { mutableStateOf(false) }
+    var showAppearanceDialog by remember { mutableStateOf(false) }
+    var showFrequencyDialog by remember { mutableStateOf(false) }
 
     LazyColumn(
         modifier = modifier.background(MaterialTheme.colorScheme.background),
@@ -1667,27 +1668,8 @@ private fun SettingsScreen(
                         value = appearanceLabel(settings.appearance),
                         icon = Icons.Default.Palette,
                         subtitle = stringResource(R.string.appearance_desc),
-                        onClick = { 
-                            expandedAppearance = !expandedAppearance
-                            if (expandedAppearance) expandedFrequency = false
-                        },
+                        onClick = { showAppearanceDialog = true },
                     )
-                    if (expandedAppearance) {
-                        HorizontalDivider(
-                            color = MaterialTheme.colorScheme.outlineVariant,
-                            modifier = Modifier.padding(horizontal = 16.dp)
-                        )
-                        AppearanceMode.entries.forEach { mode ->
-                            SettingChoiceRow(
-                                title = appearanceLabel(mode),
-                                selected = settings.appearance == mode,
-                                onClick = {
-                                    onSettingsChanged(settings.copy(appearance = mode))
-                                    expandedAppearance = false
-                                },
-                            )
-                        }
-                    }
                     HorizontalDivider(
                         color = MaterialTheme.colorScheme.outlineVariant,
                         modifier = Modifier.padding(horizontal = 16.dp)
@@ -1697,28 +1679,8 @@ private fun SettingsScreen(
                         value = frequencyLabel(settings.recordingFrequency),
                         icon = Icons.Default.Speed,
                         subtitle = stringResource(R.string.recording_frequency_desc),
-                        onClick = { 
-                            expandedFrequency = !expandedFrequency
-                            if (expandedFrequency) expandedAppearance = false
-                        },
+                        onClick = { showFrequencyDialog = true },
                     )
-                    if (expandedFrequency) {
-                        HorizontalDivider(
-                            color = MaterialTheme.colorScheme.outlineVariant,
-                            modifier = Modifier.padding(horizontal = 16.dp)
-                        )
-                        RecordingFrequency.entries.forEach { freq ->
-                            SettingChoiceRow(
-                                title = frequencyLabel(freq),
-                                subtitle = frequencyDescription(freq),
-                                selected = settings.recordingFrequency == freq,
-                                onClick = {
-                                    onSettingsChanged(settings.copy(recordingFrequency = freq))
-                                    expandedFrequency = false
-                                },
-                            )
-                        }
-                    }
                 }
             }
         }
@@ -1773,6 +1735,130 @@ private fun SettingsScreen(
             }
         }
     }
+
+    if (showAppearanceDialog) {
+        AppearanceDialog(
+            selected = settings.appearance,
+            onDismiss = { showAppearanceDialog = false },
+            onConfirm = { mode ->
+                onSettingsChanged(settings.copy(appearance = mode))
+                showAppearanceDialog = false
+            },
+        )
+    }
+
+    if (showFrequencyDialog) {
+        FrequencyDialog(
+            selected = settings.recordingFrequency,
+            onDismiss = { showFrequencyDialog = false },
+            onConfirm = { freq ->
+                onSettingsChanged(settings.copy(recordingFrequency = freq))
+                showFrequencyDialog = false
+            },
+        )
+    }
+}
+
+@Composable
+private fun AppearanceDialog(
+    selected: AppearanceMode,
+    onDismiss: () -> Unit,
+    onConfirm: (AppearanceMode) -> Unit,
+) {
+    var pending by remember(selected) { mutableStateOf(selected) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.appearance)) },
+        text = {
+            Column {
+                AppearanceMode.entries.forEach { mode ->
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .selectable(
+                                selected = pending == mode,
+                                onClick = { pending = mode },
+                            )
+                            .padding(vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        RadioButton(
+                            selected = pending == mode,
+                            onClick = null,
+                        )
+                        Spacer(Modifier.width(16.dp))
+                        Text(appearanceLabel(mode), style = MaterialTheme.typography.bodyLarge)
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = { onConfirm(pending) }) {
+                Text(stringResource(R.string.ok))
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text(stringResource(R.string.cancel))
+            }
+        },
+    )
+}
+
+@Composable
+private fun FrequencyDialog(
+    selected: RecordingFrequency,
+    onDismiss: () -> Unit,
+    onConfirm: (RecordingFrequency) -> Unit,
+) {
+    var pending by remember(selected) { mutableStateOf(selected) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.recording_frequency)) },
+        text = {
+            Column {
+                RecordingFrequency.entries.forEach { freq ->
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .selectable(
+                                selected = pending == freq,
+                                onClick = { pending = freq },
+                            )
+                            .padding(vertical = 8.dp),
+                        verticalAlignment = Alignment.Top,
+                    ) {
+                        RadioButton(
+                            selected = pending == freq,
+                            onClick = null,
+                        )
+                        Spacer(Modifier.width(16.dp))
+                        Column(Modifier.weight(1f)) {
+                            Text(frequencyLabel(freq), style = MaterialTheme.typography.bodyLarge)
+                            val desc = frequencyDescription(freq)
+                            if (desc.isNotEmpty()) {
+                                Text(
+                                    desc,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = { onConfirm(pending) }) {
+                Text(stringResource(R.string.ok))
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text(stringResource(R.string.cancel))
+            }
+        },
+    )
 }
 
 @Composable
