@@ -232,6 +232,14 @@ class ManualLocationActivity : ComponentActivity() {
             searchQueryRequired = getString(R.string.search_query_required),
             noResultsTemplate = getString(R.string.amap_no_results_template),
             foundResultsTemplate = getString(R.string.amap_search_results_found_template),
+            failedToLoad = getString(R.string.amap_script_load_failed),
+            mapErrorPrefix = getString(R.string.amap_error_prefix),
+            notInitialized = getString(R.string.amap_not_initialized),
+            mapSelection = getString(R.string.amap_map_selection),
+            mapTap = getString(R.string.amap_map_tap),
+            notReady = getString(R.string.amap_not_ready),
+            searching = getString(R.string.amap_searching),
+            searchFailedPrefix = getString(R.string.amap_search_failed_prefix),
         )
 
     private inner class MapBridge {

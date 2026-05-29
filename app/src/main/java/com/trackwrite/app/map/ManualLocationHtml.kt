@@ -4,6 +4,14 @@ data class ManualLocationMapText(
     val searchQueryRequired: String,
     val noResultsTemplate: String,
     val foundResultsTemplate: String,
+    val failedToLoad: String,
+    val mapErrorPrefix: String,
+    val notInitialized: String,
+    val mapSelection: String,
+    val mapTap: String,
+    val notReady: String,
+    val searching: String,
+    val searchFailedPrefix: String,
 )
 
 fun mapHtml(amapKey: String, securityJsCode: String, text: ManualLocationMapText): String {
@@ -15,6 +23,14 @@ fun mapHtml(amapKey: String, securityJsCode: String, text: ManualLocationMapText
     val searchQueryRequired = jsString(text.searchQueryRequired)
     val noResultsTemplate = jsString(text.noResultsTemplate)
     val foundResultsTemplate = jsString(text.foundResultsTemplate)
+    val failedToLoad = jsString(text.failedToLoad)
+    val mapErrorPrefix = jsString(text.mapErrorPrefix)
+    val notInitialized = jsString(text.notInitialized)
+    val mapSelection = jsString(text.mapSelection)
+    val mapTap = jsString(text.mapTap)
+    val notReady = jsString(text.notReady)
+    val searching = jsString(text.searching)
+    val searchFailedPrefix = jsString(text.searchFailedPrefix)
 
     return """
 <!doctype html>
@@ -76,13 +92,13 @@ fun mapHtml(amapKey: String, securityJsCode: String, text: ManualLocationMapText
       }
     }
     window.onerror = function(message) {
-      bridgeError('AMap error: ' + message);
+      bridgeError('$mapErrorPrefix' + message);
       return false;
     };
   </script>
   <script
     src="https://webapi.amap.com/maps?v=2.0&key=$amapKey&plugin=AMap.PlaceSearch"
-    onerror="bridgeError('AMap JS failed to load. Check network, Web key, security code, and allowed domain settings.')">
+    onerror="bridgeError('$failedToLoad')">
   </script>
 </head>
 <body>
@@ -104,12 +120,12 @@ fun mapHtml(amapKey: String, securityJsCode: String, text: ManualLocationMapText
       marker.setPosition([lng, lat]);
       map.setCenter([lng, lat]);
       hidePanel();
-      TrackWrite.select(lat, lng, label || 'Map selection');
+      TrackWrite.select(lat, lng, label || '$mapSelection');
     }
 
     function initMap() {
       if (typeof AMap === 'undefined') {
-        bridgeError('AMap did not initialize. Check Web key and TRACKWRITE_AMAP_SECURITY_JS_CODE.');
+        bridgeError('$notInitialized');
         return;
       }
       map = new AMap.Map('map', {
@@ -123,7 +139,7 @@ fun mapHtml(amapKey: String, securityJsCode: String, text: ManualLocationMapText
         }
       });
       map.on('click', function(event) {
-        select(event.lnglat.lng, event.lnglat.lat, 'Map tap');
+        select(event.lnglat.lng, event.lnglat.lat, '$mapTap');
       });
     }
 
@@ -135,10 +151,10 @@ fun mapHtml(amapKey: String, securityJsCode: String, text: ManualLocationMapText
         return;
       }
       if (!map || typeof AMap === 'undefined') {
-        bridgeError('AMap is not ready. Check map loading errors first.');
+        bridgeError('$notReady');
         return;
       }
-      panelMessage('Searching...');
+      panelMessage('$searching');
       AMap.plugin(['AMap.PlaceSearch'], function() {
         var placeSearch = new AMap.PlaceSearch({
           city: '北京',
@@ -153,7 +169,7 @@ fun mapHtml(amapKey: String, securityJsCode: String, text: ManualLocationMapText
         placeSearch.search(query, function(status, result) {
           if (status !== 'complete') {
             var info = resultInfo(result);
-            bridgeError('Search failed: ' + status + (info ? ' (' + info + ')' : ''));
+            bridgeError('$searchFailedPrefix' + status + (info ? ' (' + info + ')' : ''));
             return;
           }
           if (!result.poiList || !result.poiList.pois || !result.poiList.pois.length) {
