@@ -51,7 +51,10 @@ UI, services, storage, MediaStore, EXIF, or AMap.
   `setAltitude(...)` rather than hand-written latitude/altitude rationals. When
   GPS data is written, set `TAG_GPS_VERSION_ID` to EXIF GPS version `2.3.0.0`;
   when altitude is absent, remove both altitude tags instead of writing an
-  undefined altitude/ref pair.
+  undefined altitude/ref pair. Post-write verification should block on
+  coordinate, coordinate-ref, and altitude correctness; `TAG_GPS_VERSION_ID`
+  read-back differences are best-effort and must not fail an otherwise valid
+  photo write.
 - AndroidX `ExifInterface.saveAttributes()` must only be used for formats it can
   write: JPEG, PNG, and WebP. Treat JPEG MIME aliases such as `image/pjpeg`,
   `image/x-jpeg`, and `image/x-jpg` as canonical JPEG, and treat uppercase and

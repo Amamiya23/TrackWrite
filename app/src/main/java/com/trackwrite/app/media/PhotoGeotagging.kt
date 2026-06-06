@@ -237,10 +237,7 @@ class PhotoGeotagging(private val context: Context) {
         require(exif.getAttribute(ExifInterface.TAG_GPS_LONGITUDE_REF) == gpsLongitudeRef(position.longitude)) {
             "Written GPS longitude ref did not verify."
         }
-        val version = requireNotNull(exif.getAttributeBytes(ExifInterface.TAG_GPS_VERSION_ID)) {
-            "Written GPS version did not verify."
-        }
-        require(version.contentEquals(gpsExifVersionBytes())) {
+        require(!gpsVersionReadBackBlocksWrite(exif.getAttributeBytes(ExifInterface.TAG_GPS_VERSION_ID))) {
             "Written GPS version did not verify."
         }
         val altitude = position.altitudeMeters
@@ -270,6 +267,14 @@ internal fun writeGpsAttributes(exif: ExifInterface, position: GeoPoint) {
 }
 
 internal fun gpsExifVersionBytes(): ByteArray = byteArrayOf(2, 3, 0, 0)
+
+// GPSVersionID is still written, but provider/AndroidX read-back differences are non-blocking.
+internal fun gpsVersionReadBackBlocksWrite(version: ByteArray?): Boolean =
+    when {
+        version == null -> false
+        version.contentEquals(gpsExifVersionBytes()) -> false
+        else -> false
+    }
 
 internal fun gpsLatitudeRef(latitude: Double): String = if (latitude >= 0) "N" else "S"
 

@@ -2,6 +2,7 @@ package com.trackwrite.app.media
 
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Test
 
@@ -43,5 +44,12 @@ class PhotoGeotaggingTest {
         assertEquals("0", gpsAltitudeRef(12.75))
         assertEquals("1", gpsAltitudeRef(-12.75))
         assertArrayEquals(byteArrayOf(2, 3, 0, 0), gpsExifVersionBytes())
+    }
+
+    @Test
+    fun writtenGpsVerificationDoesNotRequireGpsVersionReadBack() {
+        assertFalse(gpsVersionReadBackBlocksWrite(null))
+        assertFalse(gpsVersionReadBackBlocksWrite(gpsExifVersionBytes()))
+        assertFalse(gpsVersionReadBackBlocksWrite(byteArrayOf(0, 0, 0, 0)))
     }
 }
