@@ -180,3 +180,36 @@ Moved settings back button from top-right TextButton to top-left ArrowBack icon 
 ### Next Steps
 
 - None - task complete
+
+
+## Session 6: Fix bulk photo GPS EXIF fields
+
+**Date**: 2026-06-06
+**Task**: Fix bulk photo GPS EXIF fields
+**Branch**: `main`
+
+### Summary
+
+Fixed JPG/JPEG GPS EXIF writing so batch photo geotagging writes valid coordinates, refs, GPS version, and altitude handling; added JPEG MIME alias and uppercase extension coverage while preserving RAW rejection.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `f9174c3` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete

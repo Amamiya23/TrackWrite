@@ -8,8 +8,8 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 5
-- **Last Active**: 2026-05-29
+- **Total Sessions**: 6
+- **Last Active**: 2026-06-06
 <!-- @@@/auto:current-status -->
 
 ---
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~182 | Active |
+| `journal-1.md` | ~215 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 6 | 2026-06-06 | Fix bulk photo GPS EXIF fields | `f9174c3` | `main` |
 | 5 | 2026-05-29 | Settings back button + dark mode fixes | `1df4ce2` | `main` |
 | 4 | 2026-05-29 | Light mode background and white settings cards | `f267e1c` | `main` |
 | 3 | 2026-05-29 | Settings MD3 dialogs, theme optimization, version bump | `1026dd4`, `e305430`, `a6b2437`, `cbf55f6`, `1a1200c`, `d7e9ef3` | `main` |
