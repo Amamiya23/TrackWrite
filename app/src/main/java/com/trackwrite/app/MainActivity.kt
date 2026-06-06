@@ -158,6 +158,7 @@ class MainActivity : ComponentActivity() {
     private var matchResults: List<PhotoMatchResult> = emptyList()
     private var pendingManualPhotoIndex: Int? = null
     private var pendingExportMode: ExportFolderMode? = null
+    private var pendingMediaLocationAction: (() -> Unit)? = null
     private var uiState by mutableStateOf(MainUiState())
     private val isBulkOperationRunning: Boolean
         get() = uiState.bulkOperation != null
@@ -165,6 +166,18 @@ class MainActivity : ComponentActivity() {
     private val permissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions(),
     ) { refresh() }
+
+    private val mediaLocationPermissionLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestPermission(),
+    ) { granted ->
+        val action = pendingMediaLocationAction
+        pendingMediaLocationAction = null
+        if (granted) {
+            action?.invoke()
+        } else {
+            log(getString(R.string.media_location_permission_required))
+        }
+    }
 
     private val gpxImportLauncher = registerForActivityResult(
         ActivityResultContracts.OpenDocument(),
@@ -202,18 +215,25 @@ class MainActivity : ComponentActivity() {
                 uri,
                 Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION,
             )
-            settingsStore.setDefaultExportFolderUri(uri.toString())
             when (mode) {
                 ExportFolderMode.SaveDefault -> {
+                    settingsStore.setDefaultExportFolderUri(uri.toString())
                     uiState = uiState.copy(
                         settings = settingsStore.current(),
                         logMessage = getString(R.string.export_folder_saved),
                     )
                 }
-                ExportFolderMode.WriteCopies -> writeCopies(uri)
+                ExportFolderMode.WriteCopies -> {
+                    settingsStore.setDefaultExportFolderUri(uri.toString())
+                    uiState = uiState.copy(settings = settingsStore.current())
+                    writeCopies(uri)
+                }
+                ExportFolderMode.WriteOriginalBackups -> writeOriginals(uri)
             }
         } else if (mode == ExportFolderMode.WriteCopies) {
             log(getString(R.string.export_folder_required))
+        } else if (mode == ExportFolderMode.WriteOriginalBackups) {
+            log(getString(R.string.original_backup_folder_required))
         }
     }
 
@@ -331,7 +351,10 @@ class MainActivity : ComponentActivity() {
                     },
                     onConfirmWrite = {
                         uiState = uiState.copy(showWriteDialog = false)
-                        writeOriginals()
+                        requestMediaLocationPermissionThen {
+                            pendingExportMode = ExportFolderMode.WriteOriginalBackups
+                            exportFolderLauncher.launch(null)
+                        }
                     },
                 )
             }
@@ -501,9 +524,9 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    private fun writeOriginals() {
+    private fun writeOriginals(backupFolderUri: Uri) {
         writePhotos(BulkOperation.WritingOriginals, WriteMode.Originals) { results, onProgress ->
-            geotagging.writeInPlace(results, onProgress)
+            geotagging.writeInPlace(results, backupFolderUri, onProgress)
         }
     }
 
@@ -561,6 +584,15 @@ class MainActivity : ComponentActivity() {
         } else {
             permissionLauncher.launch(permissions.toTypedArray())
         }
+    }
+
+    private fun requestMediaLocationPermissionThen(block: () -> Unit) {
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_MEDIA_LOCATION) == PackageManager.PERMISSION_GRANTED) {
+            block()
+            return
+        }
+        pendingMediaLocationAction = block
+        mediaLocationPermissionLauncher.launch(Manifest.permission.ACCESS_MEDIA_LOCATION)
     }
 
     private fun persistPhotoPermissions(uris: List<Uri>) {
@@ -651,6 +683,7 @@ private enum class MainTab {
 private enum class ExportFolderMode {
     SaveDefault,
     WriteCopies,
+    WriteOriginalBackups,
 }
 
 private enum class WriteMode {
@@ -2343,7 +2376,7 @@ private fun WriteOriginalsDialog(
         text = { Text(stringResource(R.string.write_originals_message)) },
         confirmButton = {
             TextButton(onClick = onConfirm) {
-                Text(stringResource(R.string.write), color = MaterialTheme.colorScheme.error)
+                Text(stringResource(R.string.choose_backup_folder), color = MaterialTheme.colorScheme.error)
             }
         },
         dismissButton = {

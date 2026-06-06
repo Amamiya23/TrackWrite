@@ -2,7 +2,9 @@ package com.trackwrite.app.media
 
 import android.content.ContentResolver
 import android.content.Context
+import android.graphics.BitmapFactory
 import android.net.Uri
+import android.provider.MediaStore
 import android.provider.OpenableColumns
 import androidx.documentfile.provider.DocumentFile
 import androidx.exifinterface.media.ExifInterface
@@ -14,10 +16,12 @@ import com.trackwrite.app.domain.PhotoTrackMatcher
 import com.trackwrite.app.domain.Track
 import java.io.File
 import java.io.FileOutputStream
+import java.io.InputStream
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.Locale
+import kotlinx.coroutines.CancellationException
 import kotlin.math.abs
 
 private const val MIME_TYPE_JPEG = "image/jpeg"
@@ -126,15 +130,14 @@ class PhotoGeotagging(private val context: Context) {
                         context.getString(R.string.photo_write_unsupported_format),
                     )
                 }
-                else -> runCatching {
+                else -> runCatchingStorage {
                     val output = folder.createFile(writableMimeType, result.photo.displayName)
                         ?: error("Could not create output file.")
-                    resolver.openInputStream(result.photo.uri).use { input ->
-                        resolver.openOutputStream(output.uri, "w").use { out ->
-                            requireNotNull(input) { "Could not open source photo." }
-                            requireNotNull(out) { "Could not open output photo." }
-                            input.copyTo(out)
-                        }
+                    val sourceTemp = copyUriToTemp(result.photo.uri, writableMimeType, "trackwrite-copy-")
+                    try {
+                        writeUriFromFile(output.uri, sourceTemp)
+                    } finally {
+                        sourceTemp.delete()
                     }
                     writeGps(output.uri, position, writableMimeType)
                     PhotoWriteOutcome(result.photo.displayName, PhotoWriteOutcome.Status.Written)
@@ -149,14 +152,37 @@ class PhotoGeotagging(private val context: Context) {
 
     fun writeInPlace(
         results: List<PhotoMatchResult>,
+        backupFolderUri: Uri,
         onProgress: (processed: Int) -> Unit = {},
-    ): List<PhotoWriteOutcome> =
-        results.mapIndexed { index, result ->
+    ): List<PhotoWriteOutcome> {
+        val backupFolder = DocumentFile.fromTreeUri(context, backupFolderUri)
+            ?: return listOf(
+                PhotoWriteOutcome(
+                    context.getString(R.string.photo_backup_folder),
+                    PhotoWriteOutcome.Status.Failed,
+                    context.getString(R.string.photo_backup_folder_unavailable),
+                ),
+            )
+        if (!backupFolder.canWrite()) {
+            return listOf(
+                PhotoWriteOutcome(
+                    context.getString(R.string.photo_backup_folder),
+                    PhotoWriteOutcome.Status.Failed,
+                    context.getString(R.string.photo_backup_folder_unavailable),
+                ),
+            )
+        }
+
+        return results.mapIndexed { index, result ->
             val position = result.selectedPosition
             val writableMimeType = result.photo.writableGpsMimeType()
             val outcome = when {
                 position == null -> {
-                    PhotoWriteOutcome(result.photo.displayName, PhotoWriteOutcome.Status.Skipped, "no location")
+                    PhotoWriteOutcome(
+                        result.photo.displayName,
+                        PhotoWriteOutcome.Status.Skipped,
+                        context.getString(R.string.photo_write_no_location),
+                    )
                 }
                 writableMimeType == null -> {
                     PhotoWriteOutcome(
@@ -165,8 +191,8 @@ class PhotoGeotagging(private val context: Context) {
                         context.getString(R.string.photo_write_unsupported_format),
                     )
                 }
-                else -> runCatching {
-                    writeGps(result.photo.uri, position, writableMimeType)
+                else -> runCatchingStorage {
+                    writeGpsWithBackup(result.photo, position, writableMimeType, backupFolder)
                     PhotoWriteOutcome(result.photo.displayName, PhotoWriteOutcome.Status.Written)
                 }.getOrElse { error ->
                     PhotoWriteOutcome(result.photo.displayName, PhotoWriteOutcome.Status.Failed, error.message ?: "write failed")
@@ -175,6 +201,7 @@ class PhotoGeotagging(private val context: Context) {
             onProgress(index + 1)
             outcome
         }
+    }
 
     private fun PhotoCandidate.writableGpsMimeType(): String? =
         gpsWritableMimeType(resolver.getType(uri), displayName)
@@ -192,27 +219,138 @@ class PhotoGeotagging(private val context: Context) {
         }.getOrNull()
 
     private fun writeGps(uri: Uri, position: GeoPoint, mimeType: String) {
-        val temp = File.createTempFile("trackwrite-exif-", tempSuffix(mimeType), context.cacheDir)
+        val sourceTemp = copyUriToTemp(uri, mimeType, "trackwrite-source-")
+        var editedTemp: File? = null
         try {
+            validateImageFile(sourceTemp, mimeType)
+            editedTemp = buildGeotaggedTempCopy(sourceTemp, position, mimeType)
+            writeUriFromFile(uri, editedTemp)
+            validateImageUri(uri, mimeType, position)
+        } finally {
+            sourceTemp.delete()
+            editedTemp?.delete()
+        }
+    }
+
+    private fun writeGpsWithBackup(
+        photo: PhotoCandidate,
+        position: GeoPoint,
+        mimeType: String,
+        backupFolder: DocumentFile,
+    ) {
+        val sourceTemp = runCatchingStorage {
+            copyUriToTemp(photo.uri, mimeType, "trackwrite-original-").also {
+                validateImageFile(it, mimeType)
+            }
+        }.getOrElse { error ->
+            throw IllegalStateException(
+                context.getString(R.string.photo_write_source_validation_failed, error.message.orEmpty()),
+                error,
+            )
+        }
+        var editedTemp: File? = null
+        try {
+            editedTemp = runCatchingStorage {
+                buildGeotaggedTempCopy(sourceTemp, position, mimeType)
+            }.getOrElse { error ->
+                throw IllegalStateException(
+                    context.getString(R.string.photo_write_preflight_validation_failed, error.message.orEmpty()),
+                    error,
+                )
+            }
+            runCatchingStorage {
+                writeBackupFromFile(sourceTemp, photo.displayName, mimeType, backupFolder)
+            }.getOrElse { error ->
+                throw IllegalStateException(
+                    context.getString(R.string.photo_write_backup_failed, error.message.orEmpty()),
+                    error,
+                )
+            }
+            runCatchingStorage {
+                replaceUriFromFile(photo.uri, editedTemp)
+            }.getOrElse { error ->
+                throw IllegalStateException(
+                    context.getString(R.string.photo_write_replace_failed, error.message.orEmpty()),
+                    error,
+                )
+            }
+            runCatchingStorage {
+                validateImageUri(photo.uri, mimeType, position)
+            }.getOrElse { error ->
+                throw IllegalStateException(
+                    context.getString(R.string.photo_write_postcheck_failed, error.message.orEmpty()),
+                    error,
+                )
+            }
+        } finally {
+            sourceTemp.delete()
+            editedTemp?.delete()
+        }
+    }
+
+    private fun copyUriToTemp(uri: Uri, mimeType: String, prefix: String): File {
+        val temp = File.createTempFile(prefix, tempSuffix(mimeType), context.cacheDir)
+        return try {
             resolver.openInputStream(uri).use { input ->
                 FileOutputStream(temp).use { output ->
-                    requireNotNull(input) { "Could not open photo." }
+                    requireNotNull(input) { context.getString(R.string.photo_open_failed) }
                     input.copyTo(output)
                 }
             }
+            temp
+        } catch (error: Throwable) {
+            temp.delete()
+            throw error
+        }
+    }
+
+    private fun buildGeotaggedTempCopy(source: File, position: GeoPoint, mimeType: String): File {
+        val temp = File.createTempFile("trackwrite-exif-", tempSuffix(mimeType), context.cacheDir)
+        return try {
+            source.copyTo(temp, overwrite = true)
             ExifInterface(temp).apply {
                 writeGpsAttributes(this, position)
                 saveAttributes()
             }
-            if (mimeType == MIME_TYPE_JPEG) {
-                verifyWrittenGps(temp, position)
-            }
-            resolver.openOutputStream(uri, "w").use { output ->
-                requireNotNull(output) { "Could not write photo." }
-                temp.inputStream().use { it.copyTo(output) }
-            }
-        } finally {
+            validateImageFile(temp, mimeType, position)
+            temp
+        } catch (error: Throwable) {
             temp.delete()
+            throw error
+        }
+    }
+
+    private fun writeBackupFromFile(
+        source: File,
+        displayName: String,
+        mimeType: String,
+        backupFolder: DocumentFile,
+    ) {
+        val backup = backupFolder.createFile(mimeType, backupDisplayName(displayName))
+            ?: error(context.getString(R.string.photo_backup_create_failed))
+        try {
+            writeUriFromFile(backup.uri, source)
+            validateImageUri(backup.uri, mimeType)
+        } catch (error: Throwable) {
+            backup.delete()
+            throw error
+        }
+    }
+
+    private fun writeUriFromFile(uri: Uri, file: File) {
+        resolver.openOutputStream(uri, "w").use { output ->
+            requireNotNull(output) { context.getString(R.string.photo_write_output_failed) }
+            file.inputStream().use { input -> input.copyTo(output) }
+        }
+    }
+
+    private fun replaceUriFromFile(uri: Uri, file: File) {
+        resolver.openFileDescriptor(uri, "rwt").use { descriptor ->
+            requireNotNull(descriptor) { context.getString(R.string.photo_write_descriptor_failed) }
+            FileOutputStream(descriptor.fileDescriptor).use { output ->
+                file.inputStream().use { input -> input.copyTo(output) }
+                output.fd.sync()
+            }
         }
     }
 
@@ -264,6 +402,64 @@ class PhotoGeotagging(private val context: Context) {
             }
         }
     }
+
+    private fun validateImageFile(file: File, mimeType: String, position: GeoPoint? = null) {
+        require(file.length() > 0L) { context.getString(R.string.photo_write_empty_file) }
+        file.inputStream().use { validateImageSignature(it, mimeType) }
+        validateBitmapBounds(file)
+        if (position != null) verifyWrittenGps(file, position)
+    }
+
+    private fun validateImageUri(uri: Uri, mimeType: String, position: GeoPoint? = null) {
+        resolver.openInputStream(uri).use { input ->
+            requireNotNull(input) { context.getString(R.string.photo_open_failed) }
+            validateImageSignature(input, mimeType)
+        }
+        validateBitmapBounds(uri)
+        if (position != null) {
+            openUnredactedInputStream(uri).use { input ->
+                requireNotNull(input) { context.getString(R.string.photo_open_failed) }
+                val temp = File.createTempFile("trackwrite-verify-", tempSuffix(mimeType), context.cacheDir)
+                try {
+                    FileOutputStream(temp).use { output -> input.copyTo(output) }
+                    verifyWrittenGps(temp, position)
+                } finally {
+                    temp.delete()
+                }
+            }
+        }
+    }
+
+    private fun openUnredactedInputStream(uri: Uri): InputStream? =
+        runCatchingStorage {
+            resolver.openInputStream(MediaStore.setRequireOriginal(uri))
+        }.getOrNull() ?: resolver.openInputStream(uri)
+
+    private fun validateBitmapBounds(file: File) {
+        val options = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        BitmapFactory.decodeFile(file.absolutePath, options)
+        require(options.outWidth > 0 && options.outHeight > 0) {
+            context.getString(R.string.photo_write_decode_failed)
+        }
+    }
+
+    private fun validateBitmapBounds(uri: Uri) {
+        val options = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        resolver.openInputStream(uri).use { input ->
+            requireNotNull(input) { context.getString(R.string.photo_open_failed) }
+            BitmapFactory.decodeStream(input, null, options)
+        }
+        require(options.outWidth > 0 && options.outHeight > 0) {
+            context.getString(R.string.photo_write_decode_failed)
+        }
+    }
+
+    private fun validateImageSignature(input: InputStream, mimeType: String) {
+        val header = readHeader(input)
+        require(imageSignatureMatches(mimeType, header)) {
+            context.getString(R.string.photo_write_signature_failed)
+        }
+    }
 }
 
 internal fun writeGpsAttributes(exif: ExifInterface, position: GeoPoint) {
@@ -292,6 +488,38 @@ internal fun gpsLatitudeRef(latitude: Double): String = if (latitude >= 0) "N" e
 internal fun gpsLongitudeRef(longitude: Double): String = if (longitude >= 0) "E" else "W"
 
 internal fun gpsAltitudeRef(altitude: Double): String = if (altitude < 0) "1" else "0"
+
+internal fun backupDisplayName(displayName: String, now: Instant = Instant.now()): String {
+    val safeName = displayName
+        .replace(Regex("""[\\/:*?"<>|]"""), "_")
+        .ifBlank { "photo" }
+    val timestamp = DateTimeFormatter
+        .ofPattern("yyyyMMdd-HHmmss-SSS", Locale.US)
+        .withZone(ZoneId.systemDefault())
+        .format(now)
+    return "$timestamp-$safeName"
+}
+
+internal fun imageSignatureMatches(mimeType: String, header: ByteArray): Boolean =
+    when (mimeType) {
+        MIME_TYPE_JPEG -> header.size >= 3 &&
+            header[0] == 0xFF.toByte() &&
+            header[1] == 0xD8.toByte() &&
+            header[2] == 0xFF.toByte()
+        MIME_TYPE_PNG -> header.size >= 8 &&
+            header[0] == 0x89.toByte() &&
+            header[1] == 0x50.toByte() &&
+            header[2] == 0x4E.toByte() &&
+            header[3] == 0x47.toByte() &&
+            header[4] == 0x0D.toByte() &&
+            header[5] == 0x0A.toByte() &&
+            header[6] == 0x1A.toByte() &&
+            header[7] == 0x0A.toByte()
+        MIME_TYPE_WEBP -> header.size >= 12 &&
+            header.asciiAt(0, "RIFF") &&
+            header.asciiAt(8, "WEBP")
+        else -> false
+    }
 
 internal fun gpsWritableMimeType(mimeType: String?, displayName: String): String? {
     val normalizedMimeType = mimeType
@@ -323,4 +551,29 @@ private fun tempSuffix(mimeType: String): String =
         MIME_TYPE_PNG -> ".png"
         MIME_TYPE_WEBP -> ".webp"
         else -> ".jpg"
+    }
+
+private fun readHeader(input: InputStream): ByteArray {
+    val header = ByteArray(12)
+    var offset = 0
+    while (offset < header.size) {
+        val count = input.read(header, offset, header.size - offset)
+        if (count <= 0) break
+        offset += count
+    }
+    return header.copyOf(offset)
+}
+
+private fun ByteArray.asciiAt(offset: Int, value: String): Boolean {
+    if (size < offset + value.length) return false
+    return value.indices.all { index -> this[offset + index] == value[index].code.toByte() }
+}
+
+private inline fun <T> runCatchingStorage(block: () -> T): Result<T> =
+    try {
+        Result.success(block())
+    } catch (error: CancellationException) {
+        throw error
+    } catch (error: Throwable) {
+        Result.failure(error)
     }

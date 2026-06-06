@@ -4,7 +4,9 @@ import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
+import java.time.Instant
 
 class PhotoGeotaggingTest {
     @Test
@@ -51,5 +53,66 @@ class PhotoGeotaggingTest {
         assertFalse(gpsVersionReadBackBlocksWrite(null))
         assertFalse(gpsVersionReadBackBlocksWrite(gpsExifVersionBytes()))
         assertFalse(gpsVersionReadBackBlocksWrite(byteArrayOf(0, 0, 0, 0)))
+    }
+
+    @Test
+    fun imageSignatureMatchesSupportedFormats() {
+        assertTrue(imageSignatureMatches("image/jpeg", byteArrayOf(0xFF.toByte(), 0xD8.toByte(), 0xFF.toByte())))
+        assertTrue(
+            imageSignatureMatches(
+                "image/png",
+                byteArrayOf(
+                    0x89.toByte(),
+                    0x50,
+                    0x4E,
+                    0x47,
+                    0x0D,
+                    0x0A,
+                    0x1A,
+                    0x0A,
+                ),
+            ),
+        )
+        assertTrue(
+            imageSignatureMatches(
+                "image/webp",
+                byteArrayOf(
+                    0x52,
+                    0x49,
+                    0x46,
+                    0x46,
+                    0x00,
+                    0x00,
+                    0x00,
+                    0x00,
+                    0x57,
+                    0x45,
+                    0x42,
+                    0x50,
+                ),
+            ),
+        )
+    }
+
+    @Test
+    fun imageSignatureRejectsMismatchedFormats() {
+        assertFalse(imageSignatureMatches("image/jpeg", byteArrayOf(0x89.toByte(), 0x50, 0x4E, 0x47)))
+        assertFalse(imageSignatureMatches("image/png", byteArrayOf(0xFF.toByte(), 0xD8.toByte(), 0xFF.toByte())))
+        assertFalse(imageSignatureMatches("image/webp", byteArrayOf(0x52, 0x49, 0x46, 0x46)))
+        assertFalse(imageSignatureMatches("image/heic", byteArrayOf(0x00, 0x00, 0x00, 0x18)))
+    }
+
+    @Test
+    fun backupDisplayNamePrefixesTimestampAndSanitizesInvalidCharacters() {
+        val name = backupDisplayName(
+            """trip:day/one\photo?.jpg""",
+            Instant.parse("2026-06-06T08:09:10.123Z"),
+        )
+
+        assertTrue(name.endsWith("-trip_day_one_photo_.jpg"))
+        assertFalse(name.contains(":"))
+        assertFalse(name.contains("/"))
+        assertFalse(name.contains("\\"))
+        assertFalse(name.contains("?"))
     }
 }
