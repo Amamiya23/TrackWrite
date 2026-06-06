@@ -60,6 +60,19 @@ UI, services, storage, MediaStore, EXIF, or AMap.
   `image/x-jpeg`, and `image/x-jpg` as canonical JPEG, and treat uppercase and
   lowercase JPEG extensions equivalently. RAW extensions such as NEF/DNG must
   still fail early even when a provider reports a misleading JPEG MIME type.
+- Original photo mutation must require a user-selected backup folder and copy
+  the original bytes there before replacing the source `Uri`. Build and verify
+  an edited temp file first, replace the source through an explicit truncating
+  file-descriptor path such as `ContentResolver.openFileDescriptor(uri, "rwt")`,
+  then reopen and validate the original `Uri` before reporting success. GPS
+  read-back from MediaStore-backed photos must request `ACCESS_MEDIA_LOCATION`
+  and prefer `MediaStore.setRequireOriginal(uri)` so Android's location privacy
+  redaction does not hide the EXIF coordinates during verification. Do not use
+  ambiguous `openOutputStream(uri, "w")` for original replacement. Keep this
+  constraint scoped to destructive original replacement: newly created SAF
+  backup/export files may use `openOutputStream(uri, "w")` because some
+  providers support output streams for new files but not direct `rwt`
+  descriptors.
 - Bulk photo import, EXIF reads, and EXIF writes must run off the Android main
   thread. Keep UI state changes on the main thread, but run `ContentResolver`,
   `DocumentFile`, full-photo copy, and `ExifInterface` work through
@@ -160,7 +173,7 @@ photo.copy(manualLocation = GeoPoint(wgs84.latitude, wgs84.longitude))
 - Storage operations: `PhotoGeotagging.loadPhotos(...)`,
   `PhotoGeotagging.loadPhotosFromFolder(...)`,
   `PhotoGeotagging.exportCopies(...)`, and
-  `PhotoGeotagging.writeInPlace(...)`.
+  `PhotoGeotagging.writeInPlace(results, backupFolderUri, onProgress)`.
 
 ### 3. Contracts
 - The Activity may update Compose state before and after the operation on the
@@ -172,6 +185,20 @@ photo.copy(manualLocation = GeoPoint(wgs84.latitude, wgs84.longitude))
   whether the source format is writable by `ExifInterface.saveAttributes()`.
   Treat only JPEG, PNG, and WebP as writable; do not send RAW formats such as
   NEF/DNG into `saveAttributes()`.
+- Original mutation requires a writable backup SAF tree `Uri`. For each
+  writable photo, copy original bytes to the backup folder before replacing the
+  source `Uri`.
+- Original replacement must use an explicit read/write/truncate descriptor path
+  and then validate the source `Uri` again. A successful byte copy alone is not
+  enough to report `Written`.
+- The explicit `rwt` replacement contract applies only to destructive original
+  replacement. Backup and exported-copy files are newly created SAF documents;
+  write them through the provider's normal output stream, then validate the
+  resulting document bytes.
+- Post-write GPS validation on MediaStore-backed photo `Uri`s requires
+  `ACCESS_MEDIA_LOCATION` and an unredacted stream from
+  `MediaStore.setRequireOriginal(uri)`; otherwise Android may hide location EXIF
+  and make a successful write look like missing GPS metadata.
 - A running bulk operation must block overlapping loads/writes or disable the
   entry buttons until it completes.
 
@@ -180,6 +207,21 @@ photo.copy(manualLocation = GeoPoint(wgs84.latitude, wgs84.longitude))
 - Photo MIME/extension is not writable by AndroidX `ExifInterface` -> return a
   per-photo failed outcome with an unsupported-format reason before copying or
   mutating the file.
+- Original backup folder is missing or not writable -> return a failed outcome
+  before any original mutation starts.
+- Edited temp file cannot be decoded, has a mismatched file signature, or GPS
+  cannot be read back -> return a per-photo failed outcome before replacing the
+  original.
+- Source replacement cannot obtain a direct truncate/write descriptor -> return
+  a per-photo failed outcome after backup and before reporting success.
+- Backup/export copy output stream cannot be opened -> return a failed outcome
+  for that created document path; do not treat it as proof that original
+  replacement would be unsafe.
+- Post-write source validation fails -> return a per-photo failed outcome so the
+  user can inspect the backup copy.
+- User denies `ACCESS_MEDIA_LOCATION` before original writes -> do not start the
+  destructive write flow; explain that the app needs photo-location access to
+  verify GPS metadata after writing.
 - Photo write fails -> return a per-photo failed outcome and continue the batch.
 - Top-level load/write failure -> surface an app error message and clear the
   busy state.
@@ -194,18 +236,30 @@ photo.copy(manualLocation = GeoPoint(wgs84.latitude, wgs84.longitude))
   the usual result sheet.
 - Base: A matched `DSC_1446.NEF` is reported as unsupported before an exported
   copy is created or an original mutation is attempted.
+- Base: Writing originals prompts for a backup folder, backs up each original,
+  validates the edited temp file, replaces the source via `rwt`, and validates
+  the source `Uri` before counting the photo as written.
 - Bad: Calling `loadPhotos(...)`, `exportCopies(...)`, or `writeInPlace(...)`
   directly from an Activity result callback or button handler on the main
   thread.
 - Bad: Copying a RAW file into the export folder, then calling
   `ExifInterface.saveAttributes()` and leaving behind an ungeotagged failed
   copy.
+- Bad: Replacing an original photo through `openOutputStream(uri, "w")` and
+  assuming a completed stream means the storage provider produced a valid image.
+- Bad: Requiring `openFileDescriptor(uri, "rwt")` for newly created backup or
+  export-copy documents and rejecting providers that could have written those
+  non-destructive outputs through an output stream.
 
 ### 6. Tests Required
 - Run `./gradlew :app:compileDebugKotlin` for Activity/Compose/coroutine wiring.
 - Run `./gradlew testDebugUnitTest` to ensure domain matching behavior is
   unchanged.
 - Unit-test the writable format helper: JPEG/PNG/WebP accepted; NEF/DNG rejected.
+- Unit-test pure helpers for backup file naming and image signature checks when
+  original-write validation behavior changes.
+- Manually test original writes on real SAF/MediaStore providers for JPEG, PNG,
+  and WebP because JVM tests cannot model provider-specific descriptor behavior.
 - Run `./gradlew :app:lintDebug` for Android main-thread and resource checks.
 
 ### 7. Wrong vs Correct
@@ -213,12 +267,27 @@ photo.copy(manualLocation = GeoPoint(wgs84.latitude, wgs84.longitude))
 #### Wrong
 ```kotlin
 selectedPhotos = geotagging.loadPhotos(uris)
-val outcomes = geotagging.writeInPlace(matchResults)
+val outcomes = geotagging.writeInPlace(matchResults, onProgress)
 ```
 
 ```kotlin
 // RAW files can be readable but not writable through AndroidX ExifInterface.
 writeGps(rawUri, position)
+```
+
+```kotlin
+// Provider behavior for "w" can be ambiguous for original replacement.
+resolver.openOutputStream(originalUri, "w").use { output ->
+    editedTemp.inputStream().use { it.copyTo(output) }
+}
+```
+
+```kotlin
+// This is a newly created backup file; requiring rwt here rejects some valid
+// SAF providers for no destructive-write benefit.
+resolver.openFileDescriptor(backupUri, "rwt").use { descriptor ->
+    sourceTemp.inputStream().use { it.copyTo(FileOutputStream(descriptor!!.fileDescriptor)) }
+}
 ```
 
 #### Correct
@@ -237,6 +306,28 @@ if (writableMimeType == null) {
     return PhotoWriteOutcome(displayName, Failed, unsupportedFormatReason)
 }
 writeGps(uri, position, writableMimeType)
+```
+
+```kotlin
+val outcomes = geotagging.writeInPlace(matchResults, backupFolderUri, onProgress)
+```
+
+```kotlin
+resolver.openFileDescriptor(originalUri, "rwt").use { descriptor ->
+    FileOutputStream(requireNotNull(descriptor).fileDescriptor).use { output ->
+        editedTemp.inputStream().use { it.copyTo(output) }
+        output.fd.sync()
+    }
+}
+validateImageUri(originalUri, writableMimeType, position)
+```
+
+```kotlin
+resolver.openOutputStream(backupUri, "w").use { output ->
+    requireNotNull(output)
+    sourceTemp.inputStream().use { it.copyTo(output) }
+}
+validateImageUri(backupUri, writableMimeType)
 ```
 
 ---
