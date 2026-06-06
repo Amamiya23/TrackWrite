@@ -115,4 +115,9 @@ class PhotoGeotaggingTest {
         assertFalse(name.contains("\\"))
         assertFalse(name.contains("?"))
     }
+
+    @Test
+    fun defaultBackupRelativePathUsesAppManagedPicturesFolder() {
+        assertEquals("Pictures/TrackWrite Backups", BACKUP_RELATIVE_PATH)
+    }
 }

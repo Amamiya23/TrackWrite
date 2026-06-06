@@ -228,12 +228,9 @@ class MainActivity : ComponentActivity() {
                     uiState = uiState.copy(settings = settingsStore.current())
                     writeCopies(uri)
                 }
-                ExportFolderMode.WriteOriginalBackups -> writeOriginals(uri)
             }
         } else if (mode == ExportFolderMode.WriteCopies) {
             log(getString(R.string.export_folder_required))
-        } else if (mode == ExportFolderMode.WriteOriginalBackups) {
-            log(getString(R.string.original_backup_folder_required))
         }
     }
 
@@ -352,8 +349,7 @@ class MainActivity : ComponentActivity() {
                     onConfirmWrite = {
                         uiState = uiState.copy(showWriteDialog = false)
                         requestMediaLocationPermissionThen {
-                            pendingExportMode = ExportFolderMode.WriteOriginalBackups
-                            exportFolderLauncher.launch(null)
+                            writeOriginals()
                         }
                     },
                 )
@@ -524,9 +520,9 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    private fun writeOriginals(backupFolderUri: Uri) {
+    private fun writeOriginals() {
         writePhotos(BulkOperation.WritingOriginals, WriteMode.Originals) { results, onProgress ->
-            geotagging.writeInPlace(results, backupFolderUri, onProgress)
+            geotagging.writeInPlace(results, onProgress)
         }
     }
 
@@ -683,7 +679,6 @@ private enum class MainTab {
 private enum class ExportFolderMode {
     SaveDefault,
     WriteCopies,
-    WriteOriginalBackups,
 }
 
 private enum class WriteMode {
@@ -2376,7 +2371,7 @@ private fun WriteOriginalsDialog(
         text = { Text(stringResource(R.string.write_originals_message)) },
         confirmButton = {
             TextButton(onClick = onConfirm) {
-                Text(stringResource(R.string.choose_backup_folder), color = MaterialTheme.colorScheme.error)
+                Text(stringResource(R.string.write), color = MaterialTheme.colorScheme.error)
             }
         },
         dismissButton = {

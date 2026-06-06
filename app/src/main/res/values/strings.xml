@@ -83,7 +83,7 @@
     <string name="write_copies">Write copies</string>
     <string name="write_originals">Write originals</string>
     <string name="write_originals_title">Write original photos?</string>
-    <string name="write_originals_message">TrackWrite will ask for a backup folder first, copy each original there, then modify the selected source files. JPEG, PNG, and WebP are supported when the storage provider allows direct writes.</string>
+    <string name="write_originals_message">TrackWrite will save backups in Pictures/TrackWrite Backups before modifying the selected source files. JPEG, PNG, and WebP are supported when the storage provider allows direct writes.</string>
     <string name="write_readiness">Will write %1$d, skip %2$d.</string>
     <string name="writing_copies_progress">Writing photo copies...</string>
     <string name="writing_originals_progress">Writing original photos...</string>
@@ -124,16 +124,14 @@
     <string name="export_settings">Export</string>
     <string name="prefer_export_copies">Prefer exported copies</string>
     <string name="write_copies_default_desc">Create geotagged copies in the default export folder.</string>
-    <string name="write_originals_default_desc">Modify source files in place after choosing a backup folder.</string>
+    <string name="write_originals_default_desc">Modify source files in place after saving app-managed backups.</string>
     <string name="default_export_folder">Default export-copy folder</string>
     <string name="export_folder_unconfigured">No folder configured. You will choose one when writing copies.</string>
     <string name="export_folder_configured">Folder configured.</string>
     <string name="choose_folder">Choose folder</string>
-    <string name="choose_backup_folder">Choose backup folder</string>
     <string name="export_folder_saved">Export folder saved.</string>
     <string name="export_folder_cleared">Export folder cleared.</string>
     <string name="export_folder_required">Choose an export folder to write copies.</string>
-    <string name="original_backup_folder_required">Choose a backup folder before writing originals.</string>
     <string name="about">About</string>
     <string name="version_name">Version 0.1.0</string>
     <string name="settings_saved">Settings saved</string>
@@ -148,8 +146,8 @@
     <string name="media_location_permission_required">Allow photo location access before writing originals so TrackWrite can verify GPS metadata after writing.</string>
     <string name="photo_write_unsupported_format">This file format cannot be written by AndroidX ExifInterface. GPS writes only support JPEG, PNG, and WebP.</string>
     <string name="photo_backup_folder">Backup folder</string>
-    <string name="photo_backup_folder_unavailable">The backup folder is not writable.</string>
     <string name="photo_backup_create_failed">Could not create a backup file.</string>
+    <string name="photo_backup_publish_failed">Could not publish the backup file.</string>
     <string name="photo_open_failed">Could not open the photo.</string>
     <string name="photo_write_no_location">No matched or manual location.</string>
     <string name="photo_write_source_validation_failed">Original check failed before writing: %1$s</string>

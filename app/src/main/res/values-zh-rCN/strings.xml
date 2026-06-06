@@ -83,7 +83,7 @@
     <string name="write_copies">写入副本</string>
     <string name="write_originals">写入原图</string>
     <string name="write_originals_title">写入原始照片？</string>
-    <string name="write_originals_message">TrackWrite 会先要求选择备份文件夹，把每张原图复制到备份文件夹后，再修改所选源文件。存储提供方允许直接写入时支持 JPEG、PNG 和 WebP。</string>
+    <string name="write_originals_message">TrackWrite 会先把备份保存到 Pictures/TrackWrite Backups，再修改所选源文件。存储提供方允许直接写入时支持 JPEG、PNG 和 WebP。</string>
     <string name="write_readiness">将写入 %1$d 张，跳过 %2$d 张。</string>
     <string name="writing_copies_progress">正在写入照片副本...</string>
     <string name="writing_originals_progress">正在写入原始照片...</string>
@@ -124,16 +124,14 @@
     <string name="export_settings">导出</string>
     <string name="prefer_export_copies">优先导出副本</string>
     <string name="write_copies_default_desc">在默认导出文件夹中创建带位置的副本。</string>
-    <string name="write_originals_default_desc">选择备份文件夹后再直接修改源文件。</string>
+    <string name="write_originals_default_desc">保存应用管理的备份后再直接修改源文件。</string>
     <string name="default_export_folder">默认副本导出文件夹</string>
     <string name="export_folder_unconfigured">尚未设置文件夹。写入副本时会要求选择。</string>
     <string name="export_folder_configured">已设置文件夹。</string>
     <string name="choose_folder">选择文件夹</string>
-    <string name="choose_backup_folder">选择备份文件夹</string>
     <string name="export_folder_saved">导出文件夹已保存。</string>
     <string name="export_folder_cleared">导出文件夹已清除。</string>
     <string name="export_folder_required">请选择导出文件夹以写入副本。</string>
-    <string name="original_backup_folder_required">写入原图前请选择备份文件夹。</string>
     <string name="about">关于</string>
     <string name="version_name">版本 0.1.0</string>
     <string name="settings_saved">设置已保存</string>
@@ -148,8 +146,8 @@
     <string name="media_location_permission_required">写入原图前请允许访问照片位置信息，TrackWrite 需要在写入后校验 GPS 元数据。</string>
     <string name="photo_write_unsupported_format">AndroidX ExifInterface 无法写入这种文件格式。GPS 写入仅支持 JPEG、PNG 和 WebP。</string>
     <string name="photo_backup_folder">备份文件夹</string>
-    <string name="photo_backup_folder_unavailable">备份文件夹不可写。</string>
     <string name="photo_backup_create_failed">无法创建备份文件。</string>
+    <string name="photo_backup_publish_failed">无法发布备份文件。</string>
     <string name="photo_open_failed">无法打开照片。</string>
     <string name="photo_write_no_location">没有匹配或手动位置。</string>
     <string name="photo_write_source_validation_failed">写入前原图检查失败：%1$s</string>
