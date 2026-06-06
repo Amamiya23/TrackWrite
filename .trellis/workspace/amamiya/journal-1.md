@@ -56,7 +56,10 @@ Fixed 6 UX critique issues on settings page: merged General card, replaced Refre
 
 ### Main Changes
 
-(Add details)
+- Relaxed JPEG GPSVersionID read-back verification so it no longer blocks otherwise valid GPS writes.
+- Kept strict post-write checks for latitude/longitude, coordinate refs, and altitude metadata.
+- Added a regression test for the non-blocking GPSVersionID read-back policy.
+- Updated backend quality guidance to record the EXIF verification contract.
 
 ### Git Commits
 
@@ -67,7 +70,9 @@ Fixed 6 UX critique issues on settings page: merged General card, replaced Refre
 
 ### Testing
 
-- [OK] (Add test results)
+- [OK] `testDebugUnitTest`
+- [OK] `:app:compileDebugKotlin`
+- [OK] `:app:lintDebug`
 
 ### Status
 
@@ -201,6 +206,39 @@ Fixed JPG/JPEG GPS EXIF writing so batch photo geotagging writes valid coordinat
 | Hash | Message |
 |------|---------|
 | `f9174c3` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
+
+
+## Session 7: Fix photo GPS version verification
+
+**Date**: 2026-06-06
+**Task**: Fix photo GPS version verification
+**Branch**: `main`
+
+### Summary
+
+Relaxed JPEG GPSVersionID read-back verification so valid GPS coordinate writes are not reported as failed; kept coordinate/ref/altitude verification strict and documented the EXIF verification contract.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `4c01f9b` | (see git log) |
 
 ### Testing
 
