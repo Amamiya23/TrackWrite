@@ -47,10 +47,16 @@ UI, services, storage, MediaStore, EXIF, or AMap.
 - Photo EXIF writes must be reported per photo. Exported copies are the safer
   default; in-place original mutation is a separate confirmed action and may fail
   if Android write grants are unavailable.
+- GPS EXIF writes use AndroidX `ExifInterface.setLatLong(...)` and
+  `setAltitude(...)` rather than hand-written latitude/altitude rationals. When
+  GPS data is written, set `TAG_GPS_VERSION_ID` to EXIF GPS version `2.3.0.0`;
+  when altitude is absent, remove both altitude tags instead of writing an
+  undefined altitude/ref pair.
 - AndroidX `ExifInterface.saveAttributes()` must only be used for formats it can
-  write: JPEG, PNG, and WebP. RAW formats such as NEF/DNG may be readable for
-  capture time, but location writes must fail early with a per-photo unsupported
-  format result.
+  write: JPEG, PNG, and WebP. Treat JPEG MIME aliases such as `image/pjpeg`,
+  `image/x-jpeg`, and `image/x-jpg` as canonical JPEG, and treat uppercase and
+  lowercase JPEG extensions equivalently. RAW extensions such as NEF/DNG must
+  still fail early even when a provider reports a misleading JPEG MIME type.
 - Bulk photo import, EXIF reads, and EXIF writes must run off the Android main
   thread. Keep UI state changes on the main thread, but run `ContentResolver`,
   `DocumentFile`, full-photo copy, and `ExifInterface` work through

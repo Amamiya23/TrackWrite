@@ -19,14 +19,20 @@ import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 import kotlin.math.abs
-import kotlin.math.floor
 
 private const val MIME_TYPE_JPEG = "image/jpeg"
 private const val MIME_TYPE_JPG = "image/jpg"
+private const val MIME_TYPE_PJPEG = "image/pjpeg"
+private const val MIME_TYPE_X_JPEG = "image/x-jpeg"
+private const val MIME_TYPE_X_JPG = "image/x-jpg"
 private const val MIME_TYPE_PNG = "image/png"
 private const val MIME_TYPE_WEBP = "image/webp"
 private const val MIME_TYPE_ANY_IMAGE = "image/*"
 private const val MIME_TYPE_OCTET_STREAM = "application/octet-stream"
+private const val GPS_COORDINATE_VERIFY_TOLERANCE = 0.000001
+private const val GPS_ALTITUDE_VERIFY_TOLERANCE = 0.001
+
+private const val GPS_EXIF_VERSION_2_3_0_0 = "2,3,0,0"
 
 private val writableExtensionMimeTypes = mapOf(
     "jpg" to MIME_TYPE_JPEG,
@@ -34,6 +40,8 @@ private val writableExtensionMimeTypes = mapOf(
     "png" to MIME_TYPE_PNG,
     "webp" to MIME_TYPE_WEBP,
 )
+
+private val unsupportedRawExtensions = setOf("dng", "nef")
 
 data class PhotoCandidate(
     val uri: Uri,
@@ -182,12 +190,11 @@ class PhotoGeotagging(private val context: Context) {
                 }
             }
             ExifInterface(temp).apply {
-                setLatLong(position.latitude, position.longitude)
-                position.altitudeMeters?.let { altitude ->
-                    setAttribute(ExifInterface.TAG_GPS_ALTITUDE, rational(abs(altitude)))
-                    setAttribute(ExifInterface.TAG_GPS_ALTITUDE_REF, if (altitude < 0) "1" else "0")
-                }
+                writeGpsAttributes(this, position)
                 saveAttributes()
+            }
+            if (mimeType == MIME_TYPE_JPEG) {
+                verifyWrittenGps(temp, position)
             }
             resolver.openOutputStream(uri, "w").use { output ->
                 requireNotNull(output) { "Could not write photo." }
@@ -215,19 +222,73 @@ class PhotoGeotagging(private val context: Context) {
             .toInstant()
     }
 
-    private fun rational(value: Double): String {
-        val scaled = floor(value * 1000).toInt()
-        return "$scaled/1000"
+    private fun verifyWrittenGps(file: File, position: GeoPoint) {
+        val exif = ExifInterface(file)
+        val latLong = requireNotNull(exif.getLatLong()) { "Could not verify written GPS coordinates." }
+        require(abs(latLong[0] - position.latitude) <= GPS_COORDINATE_VERIFY_TOLERANCE) {
+            "Written GPS latitude did not verify."
+        }
+        require(abs(latLong[1] - position.longitude) <= GPS_COORDINATE_VERIFY_TOLERANCE) {
+            "Written GPS longitude did not verify."
+        }
+        require(exif.getAttribute(ExifInterface.TAG_GPS_LATITUDE_REF) == gpsLatitudeRef(position.latitude)) {
+            "Written GPS latitude ref did not verify."
+        }
+        require(exif.getAttribute(ExifInterface.TAG_GPS_LONGITUDE_REF) == gpsLongitudeRef(position.longitude)) {
+            "Written GPS longitude ref did not verify."
+        }
+        val version = requireNotNull(exif.getAttributeBytes(ExifInterface.TAG_GPS_VERSION_ID)) {
+            "Written GPS version did not verify."
+        }
+        require(version.contentEquals(gpsExifVersionBytes())) {
+            "Written GPS version did not verify."
+        }
+        val altitude = position.altitudeMeters
+        if (altitude == null) {
+            require(exif.getAttribute(ExifInterface.TAG_GPS_ALTITUDE) == null) { "Unexpected GPS altitude was written." }
+            require(exif.getAttribute(ExifInterface.TAG_GPS_ALTITUDE_REF) == null) { "Unexpected GPS altitude ref was written." }
+        } else {
+            require(abs(exif.getAltitude(Double.NaN) - altitude) <= GPS_ALTITUDE_VERIFY_TOLERANCE) {
+                "Written GPS altitude did not verify."
+            }
+            require(exif.getAttribute(ExifInterface.TAG_GPS_ALTITUDE_REF) == gpsAltitudeRef(altitude)) {
+                "Written GPS altitude ref did not verify."
+            }
+        }
     }
 }
+
+internal fun writeGpsAttributes(exif: ExifInterface, position: GeoPoint) {
+    exif.setLatLong(position.latitude, position.longitude)
+    exif.setAttribute(ExifInterface.TAG_GPS_VERSION_ID, GPS_EXIF_VERSION_2_3_0_0)
+    position.altitudeMeters?.let { altitude ->
+        exif.setAltitude(altitude)
+    } ?: run {
+        exif.setAttribute(ExifInterface.TAG_GPS_ALTITUDE, null)
+        exif.setAttribute(ExifInterface.TAG_GPS_ALTITUDE_REF, null)
+    }
+}
+
+internal fun gpsExifVersionBytes(): ByteArray = byteArrayOf(2, 3, 0, 0)
+
+internal fun gpsLatitudeRef(latitude: Double): String = if (latitude >= 0) "N" else "S"
+
+internal fun gpsLongitudeRef(longitude: Double): String = if (longitude >= 0) "E" else "W"
+
+internal fun gpsAltitudeRef(altitude: Double): String = if (altitude < 0) "1" else "0"
 
 internal fun gpsWritableMimeType(mimeType: String?, displayName: String): String? {
     val normalizedMimeType = mimeType
         ?.substringBefore(';')
         ?.trim()
         ?.lowercase(Locale.US)
+    val extension = displayName
+        .substringAfterLast('.', missingDelimiterValue = "")
+        .lowercase(Locale.US)
+    if (extension in unsupportedRawExtensions) return null
+
     when (normalizedMimeType) {
-        MIME_TYPE_JPEG, MIME_TYPE_JPG -> return MIME_TYPE_JPEG
+        MIME_TYPE_JPEG, MIME_TYPE_JPG, MIME_TYPE_PJPEG, MIME_TYPE_X_JPEG, MIME_TYPE_X_JPG -> return MIME_TYPE_JPEG
         MIME_TYPE_PNG -> return MIME_TYPE_PNG
         MIME_TYPE_WEBP -> return MIME_TYPE_WEBP
     }
@@ -238,9 +299,6 @@ internal fun gpsWritableMimeType(mimeType: String?, displayName: String): String
         return null
     }
 
-    val extension = displayName
-        .substringAfterLast('.', missingDelimiterValue = "")
-        .lowercase(Locale.US)
     return writableExtensionMimeTypes[extension]
 }
 
