@@ -6,6 +6,7 @@ import android.net.Uri
 import android.provider.OpenableColumns
 import androidx.documentfile.provider.DocumentFile
 import androidx.exifinterface.media.ExifInterface
+import com.trackwrite.app.R
 import com.trackwrite.app.domain.GeoPoint
 import com.trackwrite.app.domain.MatchOptions
 import com.trackwrite.app.domain.PhotoMatch
@@ -19,6 +20,20 @@ import java.time.format.DateTimeFormatter
 import java.util.Locale
 import kotlin.math.abs
 import kotlin.math.floor
+
+private const val MIME_TYPE_JPEG = "image/jpeg"
+private const val MIME_TYPE_JPG = "image/jpg"
+private const val MIME_TYPE_PNG = "image/png"
+private const val MIME_TYPE_WEBP = "image/webp"
+private const val MIME_TYPE_ANY_IMAGE = "image/*"
+private const val MIME_TYPE_OCTET_STREAM = "application/octet-stream"
+
+private val writableExtensionMimeTypes = mapOf(
+    "jpg" to MIME_TYPE_JPEG,
+    "jpeg" to MIME_TYPE_JPEG,
+    "png" to MIME_TYPE_PNG,
+    "webp" to MIME_TYPE_WEBP,
+)
 
 data class PhotoCandidate(
     val uri: Uri,
@@ -87,11 +102,20 @@ class PhotoGeotagging(private val context: Context) {
 
         return results.map { result ->
             val position = result.selectedPosition
-            if (position == null) {
-                PhotoWriteOutcome(result.photo.displayName, PhotoWriteOutcome.Status.Skipped, "no location")
-            } else {
-                runCatching {
-                    val output = folder.createFile("image/jpeg", result.photo.displayName)
+            val writableMimeType = result.photo.writableGpsMimeType()
+            when {
+                position == null -> {
+                    PhotoWriteOutcome(result.photo.displayName, PhotoWriteOutcome.Status.Skipped, "no location")
+                }
+                writableMimeType == null -> {
+                    PhotoWriteOutcome(
+                        result.photo.displayName,
+                        PhotoWriteOutcome.Status.Failed,
+                        context.getString(R.string.photo_write_unsupported_format),
+                    )
+                }
+                else -> runCatching {
+                    val output = folder.createFile(writableMimeType, result.photo.displayName)
                         ?: error("Could not create output file.")
                     resolver.openInputStream(result.photo.uri).use { input ->
                         resolver.openOutputStream(output.uri, "w").use { out ->
@@ -100,7 +124,7 @@ class PhotoGeotagging(private val context: Context) {
                             input.copyTo(out)
                         }
                     }
-                    writeGps(output.uri, position)
+                    writeGps(output.uri, position, writableMimeType)
                     PhotoWriteOutcome(result.photo.displayName, PhotoWriteOutcome.Status.Written)
                 }.getOrElse { error ->
                     PhotoWriteOutcome(result.photo.displayName, PhotoWriteOutcome.Status.Failed, error.message ?: "export failed")
@@ -112,17 +136,29 @@ class PhotoGeotagging(private val context: Context) {
     fun writeInPlace(results: List<PhotoMatchResult>): List<PhotoWriteOutcome> =
         results.map { result ->
             val position = result.selectedPosition
-            if (position == null) {
-                PhotoWriteOutcome(result.photo.displayName, PhotoWriteOutcome.Status.Skipped, "no location")
-            } else {
-                runCatching {
-                    writeGps(result.photo.uri, position)
+            val writableMimeType = result.photo.writableGpsMimeType()
+            when {
+                position == null -> {
+                    PhotoWriteOutcome(result.photo.displayName, PhotoWriteOutcome.Status.Skipped, "no location")
+                }
+                writableMimeType == null -> {
+                    PhotoWriteOutcome(
+                        result.photo.displayName,
+                        PhotoWriteOutcome.Status.Failed,
+                        context.getString(R.string.photo_write_unsupported_format),
+                    )
+                }
+                else -> runCatching {
+                    writeGps(result.photo.uri, position, writableMimeType)
                     PhotoWriteOutcome(result.photo.displayName, PhotoWriteOutcome.Status.Written)
                 }.getOrElse { error ->
                     PhotoWriteOutcome(result.photo.displayName, PhotoWriteOutcome.Status.Failed, error.message ?: "write failed")
                 }
             }
         }
+
+    private fun PhotoCandidate.writableGpsMimeType(): String? =
+        gpsWritableMimeType(resolver.getType(uri), displayName)
 
     private fun readCapturedAt(uri: Uri): Instant? =
         runCatching {
@@ -136,8 +172,8 @@ class PhotoGeotagging(private val context: Context) {
             }
         }.getOrNull()
 
-    private fun writeGps(uri: Uri, position: GeoPoint) {
-        val temp = File.createTempFile("trackwrite-exif-", ".jpg", context.cacheDir)
+    private fun writeGps(uri: Uri, position: GeoPoint, mimeType: String) {
+        val temp = File.createTempFile("trackwrite-exif-", tempSuffix(mimeType), context.cacheDir)
         try {
             resolver.openInputStream(uri).use { input ->
                 FileOutputStream(temp).use { output ->
@@ -184,3 +220,33 @@ class PhotoGeotagging(private val context: Context) {
         return "$scaled/1000"
     }
 }
+
+internal fun gpsWritableMimeType(mimeType: String?, displayName: String): String? {
+    val normalizedMimeType = mimeType
+        ?.substringBefore(';')
+        ?.trim()
+        ?.lowercase(Locale.US)
+    when (normalizedMimeType) {
+        MIME_TYPE_JPEG, MIME_TYPE_JPG -> return MIME_TYPE_JPEG
+        MIME_TYPE_PNG -> return MIME_TYPE_PNG
+        MIME_TYPE_WEBP -> return MIME_TYPE_WEBP
+    }
+    if (normalizedMimeType != null &&
+        normalizedMimeType != MIME_TYPE_OCTET_STREAM &&
+        normalizedMimeType != MIME_TYPE_ANY_IMAGE
+    ) {
+        return null
+    }
+
+    val extension = displayName
+        .substringAfterLast('.', missingDelimiterValue = "")
+        .lowercase(Locale.US)
+    return writableExtensionMimeTypes[extension]
+}
+
+private fun tempSuffix(mimeType: String): String =
+    when (mimeType) {
+        MIME_TYPE_PNG -> ".png"
+        MIME_TYPE_WEBP -> ".webp"
+        else -> ".jpg"
+    }

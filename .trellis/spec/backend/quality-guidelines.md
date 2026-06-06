@@ -47,6 +47,10 @@ UI, services, storage, MediaStore, EXIF, or AMap.
 - Photo EXIF writes must be reported per photo. Exported copies are the safer
   default; in-place original mutation is a separate confirmed action and may fail
   if Android write grants are unavailable.
+- AndroidX `ExifInterface.saveAttributes()` must only be used for formats it can
+  write: JPEG, PNG, and WebP. RAW formats such as NEF/DNG may be readable for
+  capture time, but location writes must fail early with a per-photo unsupported
+  format result.
 - Bulk photo import, EXIF reads, and EXIF writes must run off the Android main
   thread. Keep UI state changes on the main thread, but run `ContentResolver`,
   `DocumentFile`, full-photo copy, and `ExifInterface` work through
@@ -155,11 +159,18 @@ photo.copy(manualLocation = GeoPoint(wgs84.latitude, wgs84.longitude))
 - `ContentResolver` streams, `DocumentFile.listFiles`, full-file copy, and
   `ExifInterface` reads/writes must execute on `Dispatchers.IO` or an equivalent
   background worker.
+- Before creating exported copies or mutating originals, storage code must check
+  whether the source format is writable by `ExifInterface.saveAttributes()`.
+  Treat only JPEG, PNG, and WebP as writable; do not send RAW formats such as
+  NEF/DNG into `saveAttributes()`.
 - A running bulk operation must block overlapping loads/writes or disable the
   entry buttons until it completes.
 
 ### 4. Validation & Error Matrix
 - Photo has no match/manual location -> return a per-photo skipped outcome.
+- Photo MIME/extension is not writable by AndroidX `ExifInterface` -> return a
+  per-photo failed outcome with an unsupported-format reason before copying or
+  mutating the file.
 - Photo write fails -> return a per-photo failed outcome and continue the batch.
 - Top-level load/write failure -> surface an app error message and clear the
   busy state.
@@ -172,14 +183,20 @@ photo.copy(manualLocation = GeoPoint(wgs84.latitude, wgs84.longitude))
 - Base: Writing 80 matched photos snapshots the result list, disables duplicate
   write entry points, runs file copy/EXIF writes on `Dispatchers.IO`, then shows
   the usual result sheet.
+- Base: A matched `DSC_1446.NEF` is reported as unsupported before an exported
+  copy is created or an original mutation is attempted.
 - Bad: Calling `loadPhotos(...)`, `exportCopies(...)`, or `writeInPlace(...)`
   directly from an Activity result callback or button handler on the main
   thread.
+- Bad: Copying a RAW file into the export folder, then calling
+  `ExifInterface.saveAttributes()` and leaving behind an ungeotagged failed
+  copy.
 
 ### 6. Tests Required
 - Run `./gradlew :app:compileDebugKotlin` for Activity/Compose/coroutine wiring.
 - Run `./gradlew testDebugUnitTest` to ensure domain matching behavior is
   unchanged.
+- Unit-test the writable format helper: JPEG/PNG/WebP accepted; NEF/DNG rejected.
 - Run `./gradlew :app:lintDebug` for Android main-thread and resource checks.
 
 ### 7. Wrong vs Correct
@@ -190,6 +207,11 @@ selectedPhotos = geotagging.loadPhotos(uris)
 val outcomes = geotagging.writeInPlace(matchResults)
 ```
 
+```kotlin
+// RAW files can be readable but not writable through AndroidX ExifInterface.
+writeGps(rawUri, position)
+```
+
 #### Correct
 ```kotlin
 lifecycleScope.launch {
@@ -198,6 +220,14 @@ lifecycleScope.launch {
     }
     selectedPhotos = photos
 }
+```
+
+```kotlin
+val writableMimeType = gpsWritableMimeType(resolver.getType(uri), displayName)
+if (writableMimeType == null) {
+    return PhotoWriteOutcome(displayName, Failed, unsupportedFormatReason)
+}
+writeGps(uri, position, writableMimeType)
 ```
 
 ---

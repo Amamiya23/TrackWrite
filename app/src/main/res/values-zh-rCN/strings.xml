@@ -140,6 +140,7 @@
     <string name="manual_location_cleared">已清除第 %1$d 张照片的手动位置。</string>
     <string name="photo_load_failed">照片加载失败：%1$s</string>
     <string name="photo_write_failed">照片写入失败：%1$s</string>
+    <string name="photo_write_unsupported_format">AndroidX ExifInterface 无法写入这种文件格式。GPS 写入仅支持 JPEG、PNG 和 WebP。</string>
     <string name="gpx_read_failed">无法读取 GPX。</string>
     <string name="gpx_imported">已导入 %1$s。</string>
     <string name="gpx_import_failed">导入失败：%1$s</string>

@@ -140,6 +140,7 @@
     <string name="manual_location_cleared">Manual location cleared for photo %1$d.</string>
     <string name="photo_load_failed">Photo load failed: %1$s</string>
     <string name="photo_write_failed">Photo write failed: %1$s</string>
+    <string name="photo_write_unsupported_format">This file format cannot be written by AndroidX ExifInterface. GPS writes only support JPEG, PNG, and WebP.</string>
     <string name="gpx_read_failed">Could not read GPX.</string>
     <string name="gpx_imported">Imported %1$s.</string>
     <string name="gpx_import_failed">Import failed: %1$s</string>
