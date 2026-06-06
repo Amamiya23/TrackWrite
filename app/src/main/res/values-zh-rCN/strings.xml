@@ -87,6 +87,9 @@
     <string name="write_readiness">将写入 %1$d 张，跳过 %2$d 张。</string>
     <string name="writing_copies_progress">正在写入照片副本...</string>
     <string name="writing_originals_progress">正在写入原始照片...</string>
+    <string name="write_progress_wait">请保持此页面打开，完成后会显示写入结果。</string>
+    <string name="write_progress_count">已处理 %1$d / %2$d 张照片</string>
+    <string name="write_progress_percent">%1$d%%</string>
     <string name="write_missing_location_prompt">还没有照片拥有匹配或手动位置。</string>
     <string name="write_copies_result">副本写入结果</string>
     <string name="write_originals_result">原图写入结果</string>

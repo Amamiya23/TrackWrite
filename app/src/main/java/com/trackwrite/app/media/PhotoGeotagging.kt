@@ -104,14 +104,18 @@ class PhotoGeotagging(private val context: Context) {
             )
         }
 
-    fun exportCopies(results: List<PhotoMatchResult>, targetFolderUri: Uri): List<PhotoWriteOutcome> {
+    fun exportCopies(
+        results: List<PhotoMatchResult>,
+        targetFolderUri: Uri,
+        onProgress: (processed: Int) -> Unit = {},
+    ): List<PhotoWriteOutcome> {
         val folder = DocumentFile.fromTreeUri(context, targetFolderUri)
             ?: return listOf(PhotoWriteOutcome("Export folder", PhotoWriteOutcome.Status.Failed, "Export folder is not available."))
 
-        return results.map { result ->
+        return results.mapIndexed { index, result ->
             val position = result.selectedPosition
             val writableMimeType = result.photo.writableGpsMimeType()
-            when {
+            val outcome = when {
                 position == null -> {
                     PhotoWriteOutcome(result.photo.displayName, PhotoWriteOutcome.Status.Skipped, "no location")
                 }
@@ -138,14 +142,19 @@ class PhotoGeotagging(private val context: Context) {
                     PhotoWriteOutcome(result.photo.displayName, PhotoWriteOutcome.Status.Failed, error.message ?: "export failed")
                 }
             }
+            onProgress(index + 1)
+            outcome
         }
     }
 
-    fun writeInPlace(results: List<PhotoMatchResult>): List<PhotoWriteOutcome> =
-        results.map { result ->
+    fun writeInPlace(
+        results: List<PhotoMatchResult>,
+        onProgress: (processed: Int) -> Unit = {},
+    ): List<PhotoWriteOutcome> =
+        results.mapIndexed { index, result ->
             val position = result.selectedPosition
             val writableMimeType = result.photo.writableGpsMimeType()
-            when {
+            val outcome = when {
                 position == null -> {
                     PhotoWriteOutcome(result.photo.displayName, PhotoWriteOutcome.Status.Skipped, "no location")
                 }
@@ -163,6 +172,8 @@ class PhotoGeotagging(private val context: Context) {
                     PhotoWriteOutcome(result.photo.displayName, PhotoWriteOutcome.Status.Failed, error.message ?: "write failed")
                 }
             }
+            onProgress(index + 1)
+            outcome
         }
 
     private fun PhotoCandidate.writableGpsMimeType(): String? =

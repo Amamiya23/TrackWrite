@@ -87,6 +87,9 @@
     <string name="write_readiness">Will write %1$d, skip %2$d.</string>
     <string name="writing_copies_progress">Writing photo copies...</string>
     <string name="writing_originals_progress">Writing original photos...</string>
+    <string name="write_progress_wait">Keep this screen open. Results will appear when writing finishes.</string>
+    <string name="write_progress_count">%1$d of %2$d photos processed</string>
+    <string name="write_progress_percent">%1$d%%</string>
     <string name="write_missing_location_prompt">No photos have a matched or manual location yet.</string>
     <string name="write_copies_result">Copy write result</string>
     <string name="write_originals_result">Original write result</string>

@@ -81,6 +81,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
@@ -108,6 +109,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.DialogProperties
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
 import com.trackwrite.app.data.TrackRepository
@@ -494,29 +496,36 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun writeCopies(uri: Uri) {
-        writePhotos(BulkOperation.WritingCopies, WriteMode.Copies) { results ->
-            geotagging.exportCopies(results, uri)
+        writePhotos(BulkOperation.WritingCopies, WriteMode.Copies) { results, onProgress ->
+            geotagging.exportCopies(results, uri, onProgress)
         }
     }
 
     private fun writeOriginals() {
-        writePhotos(BulkOperation.WritingOriginals, WriteMode.Originals) { results ->
-            geotagging.writeInPlace(results)
+        writePhotos(BulkOperation.WritingOriginals, WriteMode.Originals) { results, onProgress ->
+            geotagging.writeInPlace(results, onProgress)
         }
     }
 
     private fun writePhotos(
         operation: BulkOperation,
         mode: WriteMode,
-        writeBlock: (List<PhotoMatchResult>) -> List<PhotoWriteOutcome>,
+        writeBlock: (List<PhotoMatchResult>, (Int) -> Unit) -> List<PhotoWriteOutcome>,
     ) {
         if (isBulkOperationRunning) return
         val results = matchResults
-        uiState = uiState.copy(bulkOperation = operation)
+        uiState = uiState.copy(
+            bulkOperation = operation,
+            writeProgress = WriteProgressState(processed = 0, total = results.size),
+        )
         lifecycleScope.launch {
             try {
                 val outcomes = withContext(Dispatchers.IO) {
-                    writeBlock(results)
+                    writeBlock(results) { processed ->
+                        launch(Dispatchers.Main) {
+                            uiState = uiState.copy(writeProgress = WriteProgressState(processed, results.size))
+                        }
+                    }
                 }
                 uiState = uiState.copy(writeResult = WriteResultState.from(outcomes, mode))
                 refresh()
@@ -525,7 +534,7 @@ class MainActivity : ComponentActivity() {
             } catch (error: Exception) {
                 log(getString(R.string.photo_write_failed, error.message.orEmpty()))
             } finally {
-                uiState = uiState.copy(bulkOperation = null)
+                uiState = uiState.copy(bulkOperation = null, writeProgress = null)
             }
         }
     }
@@ -593,6 +602,7 @@ private data class MainUiState(
     val deleteDialog: Track? = null,
     val showWriteDialog: Boolean = false,
     val bulkOperation: BulkOperation? = null,
+    val writeProgress: WriteProgressState? = null,
 )
 
 private data class RenameDialogState(
@@ -604,6 +614,17 @@ private data class WriteReadiness(
     val writeable: Int,
     val skipped: Int,
 )
+
+private data class WriteProgressState(
+    val processed: Int,
+    val total: Int,
+) {
+    val fraction: Float
+        get() = if (total <= 0) 0f else processed.toFloat() / total.toFloat()
+
+    val percent: Int
+        get() = (fraction * 100).toInt().coerceIn(0, 100)
+}
 
 private data class WriteResultState(
     val mode: WriteMode,
@@ -801,6 +822,7 @@ private fun TrackWriteApp(
     RenameTrackDialog(state.renameDialog, onDismissDialog, onConfirmRename)
     DeleteTrackDialog(state.deleteDialog, onDismissDialog, onConfirmDelete)
     WriteOriginalsDialog(state.showWriteDialog, onDismissDialog, onConfirmWrite)
+    WriteProgressDialog(state.bulkOperation, state.writeProgress)
     WriteResultSheet(state.writeResult, onDismissWriteResult)
 }
 
@@ -2329,6 +2351,59 @@ private fun WriteOriginalsDialog(
                 Text(stringResource(R.string.cancel))
             }
         },
+    )
+}
+
+@Composable
+private fun WriteProgressDialog(operation: BulkOperation?, progress: WriteProgressState?) {
+    val writeOperation = when (operation) {
+        BulkOperation.WritingCopies,
+        BulkOperation.WritingOriginals,
+        -> operation
+        else -> return
+    }
+    AlertDialog(
+        onDismissRequest = {},
+        properties = DialogProperties(
+            dismissOnBackPress = false,
+            dismissOnClickOutside = false,
+        ),
+        title = { Text(bulkOperationLabel(writeOperation)) },
+        text = {
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                Text(
+                    text = stringResource(R.string.write_progress_wait),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                LinearProgressIndicator(
+                    progress = { progress?.fraction ?: 0f },
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        text = progress?.let {
+                            stringResource(R.string.write_progress_count, it.processed, it.total)
+                        }.orEmpty(),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Text(
+                        text = stringResource(R.string.write_progress_percent, progress?.percent ?: 0),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+        },
+        confirmButton = {},
     )
 }
 
