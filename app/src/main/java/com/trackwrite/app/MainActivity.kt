@@ -109,6 +109,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.lifecycleScope
 import com.trackwrite.app.data.TrackRepository
 import com.trackwrite.app.domain.GeoPoint
 import com.trackwrite.app.domain.MatchOptions
@@ -132,8 +133,10 @@ import com.trackwrite.app.settings.AppSettingsStore
 import com.trackwrite.app.settings.AppearanceMode
 import com.trackwrite.app.settings.RecordingFrequency
 import com.trackwrite.app.ui.TrackWriteTheme
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.time.Duration
 import java.time.Instant
@@ -154,6 +157,8 @@ class MainActivity : ComponentActivity() {
     private var pendingManualPhotoIndex: Int? = null
     private var pendingExportMode: ExportFolderMode? = null
     private var uiState by mutableStateOf(MainUiState())
+    private val isBulkOperationRunning: Boolean
+        get() = uiState.bulkOperation != null
 
     private val permissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions(),
@@ -174,23 +179,14 @@ class MainActivity : ComponentActivity() {
     private val photoPickerLauncher = registerForActivityResult(
         ActivityResultContracts.OpenMultipleDocuments(),
     ) { uris ->
-        persistPhotoPermissions(uris)
-        selectedPhotos = geotagging.loadPhotos(uris)
-        uiState = uiState.copy(selectedTab = MainTab.Match)
-        matchSelectedPhotos()
+        loadPickedPhotos(uris)
     }
 
     private val folderPickerLauncher = registerForActivityResult(
         ActivityResultContracts.OpenDocumentTree(),
     ) { uri ->
         if (uri != null) {
-            contentResolver.takePersistableUriPermission(
-                uri,
-                Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION,
-            )
-            selectedPhotos = geotagging.loadPhotosFromFolder(uri)
-            uiState = uiState.copy(selectedTab = MainTab.Match)
-            matchSelectedPhotos()
+            loadFolderPhotos(uri)
         }
     }
 
@@ -291,15 +287,19 @@ class MainActivity : ComponentActivity() {
                     onSelectPhotos = { photoPickerLauncher.launch(arrayOf("image/*")) },
                     onSelectFolder = { folderPickerLauncher.launch(null) },
                     onSetManualLocation = { index ->
-                        pendingManualPhotoIndex = index
-                        manualLocationLauncher.launch(Intent(this, ManualLocationActivity::class.java))
+                        if (!isBulkOperationRunning) {
+                            pendingManualPhotoIndex = index
+                            manualLocationLauncher.launch(Intent(this, ManualLocationActivity::class.java))
+                        }
                     },
                     onClearManualLocation = { index ->
-                        selectedPhotos = selectedPhotos.mapIndexed { photoIndex, photo ->
-                            if (photoIndex == index) photo.copy(manualLocation = null) else photo
+                        if (!isBulkOperationRunning) {
+                            selectedPhotos = selectedPhotos.mapIndexed { photoIndex, photo ->
+                                if (photoIndex == index) photo.copy(manualLocation = null) else photo
+                            }
+                            log(getString(R.string.manual_location_cleared, index + 1))
+                            matchSelectedPhotos()
                         }
-                        log(getString(R.string.manual_location_cleared, index + 1))
-                        matchSelectedPhotos()
                     },
                     onWriteDefault = { writeDefault() },
                     onSettingsChanged = { newSettings ->
@@ -357,7 +357,45 @@ class MainActivity : ComponentActivity() {
             photos = selectedPhotos,
             matches = matchResults,
             settings = settings,
+            bulkOperation = uiState.bulkOperation,
         )
+    }
+
+    private fun loadPickedPhotos(uris: List<Uri>) {
+        loadPhotos(BulkOperation.LoadingPhotos) {
+            persistPhotoPermissions(uris)
+            geotagging.loadPhotos(uris)
+        }
+    }
+
+    private fun loadFolderPhotos(uri: Uri) {
+        loadPhotos(BulkOperation.LoadingFolderPhotos) {
+            contentResolver.takePersistableUriPermission(
+                uri,
+                Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION,
+            )
+            geotagging.loadPhotosFromFolder(uri)
+        }
+    }
+
+    private fun loadPhotos(operation: BulkOperation, loadBlock: () -> List<PhotoCandidate>) {
+        if (isBulkOperationRunning) return
+        uiState = uiState.copy(selectedTab = MainTab.Match, bulkOperation = operation)
+        lifecycleScope.launch {
+            try {
+                val photos = withContext(Dispatchers.IO) {
+                    loadBlock()
+                }
+                selectedPhotos = photos
+                matchSelectedPhotos()
+            } catch (error: CancellationException) {
+                throw error
+            } catch (error: Exception) {
+                log(getString(R.string.photo_load_failed, error.message.orEmpty()))
+            } finally {
+                uiState = uiState.copy(bulkOperation = null)
+            }
+        }
     }
 
     private fun persistSettings(settings: AppSettings) {
@@ -432,6 +470,7 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun writeDefault() {
+        if (isBulkOperationRunning) return
         val summary = writeReadiness(matchResults)
         if (summary.writeable == 0) {
             log(getString(R.string.write_missing_location_prompt))
@@ -455,15 +494,40 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun writeCopies(uri: Uri) {
-        val outcomes = geotagging.exportCopies(matchResults, uri)
-        uiState = uiState.copy(writeResult = WriteResultState.from(outcomes, WriteMode.Copies))
-        refresh()
+        writePhotos(BulkOperation.WritingCopies, WriteMode.Copies) { results ->
+            geotagging.exportCopies(results, uri)
+        }
     }
 
     private fun writeOriginals() {
-        val outcomes = geotagging.writeInPlace(matchResults)
-        uiState = uiState.copy(writeResult = WriteResultState.from(outcomes, WriteMode.Originals))
-        refresh()
+        writePhotos(BulkOperation.WritingOriginals, WriteMode.Originals) { results ->
+            geotagging.writeInPlace(results)
+        }
+    }
+
+    private fun writePhotos(
+        operation: BulkOperation,
+        mode: WriteMode,
+        writeBlock: (List<PhotoMatchResult>) -> List<PhotoWriteOutcome>,
+    ) {
+        if (isBulkOperationRunning) return
+        val results = matchResults
+        uiState = uiState.copy(bulkOperation = operation)
+        lifecycleScope.launch {
+            try {
+                val outcomes = withContext(Dispatchers.IO) {
+                    writeBlock(results)
+                }
+                uiState = uiState.copy(writeResult = WriteResultState.from(outcomes, mode))
+                refresh()
+            } catch (error: CancellationException) {
+                throw error
+            } catch (error: Exception) {
+                log(getString(R.string.photo_write_failed, error.message.orEmpty()))
+            } finally {
+                uiState = uiState.copy(bulkOperation = null)
+            }
+        }
     }
 
     private fun isUsableTreeUri(uri: Uri): Boolean =
@@ -528,6 +592,7 @@ private data class MainUiState(
     val renameDialog: RenameDialogState? = null,
     val deleteDialog: Track? = null,
     val showWriteDialog: Boolean = false,
+    val bulkOperation: BulkOperation? = null,
 )
 
 private data class RenameDialogState(
@@ -570,6 +635,13 @@ private enum class ExportFolderMode {
 private enum class WriteMode {
     Copies,
     Originals,
+}
+
+private enum class BulkOperation {
+    LoadingPhotos,
+    LoadingFolderPhotos,
+    WritingCopies,
+    WritingOriginals,
 }
 
 private fun AppSettings.toMatchOptions(): MatchOptions =
@@ -1030,13 +1102,26 @@ private fun MatchScreen(
             }
             item {
                 ActionRow {
-                    PrimaryActionButton(stringResource(R.string.select_photos), Icons.Default.Search, onSelectPhotos)
-                    SecondaryActionButton(stringResource(R.string.select_folder), Icons.Default.Share, onSelectFolder)
+                    PrimaryActionButton(
+                        text = stringResource(R.string.select_photos),
+                        icon = Icons.Default.Search,
+                        onClick = onSelectPhotos,
+                        enabled = state.bulkOperation == null,
+                    )
+                    SecondaryActionButton(
+                        text = stringResource(R.string.select_folder),
+                        icon = Icons.Default.Share,
+                        onClick = onSelectFolder,
+                        enabled = state.bulkOperation == null,
+                    )
                 }
             }
-            if (state.matches.isEmpty()) {
+            state.bulkOperation?.let { operation ->
+                item { BulkOperationPanel(operation) }
+            }
+            if (state.matches.isEmpty() && state.bulkOperation == null) {
                 item { EmptyPanel(stringResource(R.string.no_photos)) }
-            } else {
+            } else if (state.matches.isNotEmpty()) {
                 item {
                     PhotoBatchButton(
                         matches = state.matches,
@@ -1047,11 +1132,12 @@ private fun MatchScreen(
                     ReviewWritePanel(
                         settings = state.settings,
                         readiness = writeReadiness(state.matches),
+                        bulkOperation = state.bulkOperation,
                     )
                 }
             }
         }
-        if (state.matches.isNotEmpty()) {
+        if (state.matches.isNotEmpty() && state.bulkOperation == null) {
             ExtendedFloatingActionButton(
                 onClick = onWriteDefault,
                 modifier = Modifier
@@ -1463,6 +1549,7 @@ private fun MatchPill(photo: PhotoCandidate, match: PhotoMatch?) {
 private fun ReviewWritePanel(
     settings: AppSettings,
     readiness: WriteReadiness,
+    bulkOperation: BulkOperation?,
 ) {
     SectionBlock {
         Spacer(Modifier.height(10.dp))
@@ -1471,8 +1558,41 @@ private fun ReviewWritePanel(
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
+        if (bulkOperation != null) {
+            Spacer(Modifier.height(8.dp))
+            Text(
+                text = bulkOperationLabel(bulkOperation),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.primary,
+            )
+        }
     }
 }
+
+@Composable
+private fun BulkOperationPanel(operation: BulkOperation) {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(8.dp),
+        color = MaterialTheme.colorScheme.primaryContainer,
+    ) {
+        Text(
+            text = bulkOperationLabel(operation),
+            modifier = Modifier.padding(14.dp),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onPrimaryContainer,
+        )
+    }
+}
+
+@Composable
+private fun bulkOperationLabel(operation: BulkOperation): String =
+    when (operation) {
+        BulkOperation.LoadingPhotos -> stringResource(R.string.loading_photos)
+        BulkOperation.LoadingFolderPhotos -> stringResource(R.string.loading_folder_photos)
+        BulkOperation.WritingCopies -> stringResource(R.string.writing_copies_progress)
+        BulkOperation.WritingOriginals -> stringResource(R.string.writing_originals_progress)
+    }
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -1486,8 +1606,8 @@ private fun ActionRow(content: @Composable FlowRowScope.() -> Unit) {
 }
 
 @Composable
-private fun PrimaryActionButton(text: String, icon: ImageVector, onClick: () -> Unit) {
-    Button(onClick = onClick, shape = RoundedCornerShape(8.dp)) {
+private fun PrimaryActionButton(text: String, icon: ImageVector, onClick: () -> Unit, enabled: Boolean = true) {
+    Button(onClick = onClick, enabled = enabled, shape = RoundedCornerShape(8.dp)) {
         Icon(icon, contentDescription = null, modifier = Modifier.size(18.dp))
         Spacer(Modifier.width(8.dp))
         Text(text)
@@ -1495,8 +1615,8 @@ private fun PrimaryActionButton(text: String, icon: ImageVector, onClick: () -> 
 }
 
 @Composable
-private fun SecondaryActionButton(text: String, icon: ImageVector, onClick: () -> Unit) {
-    OutlinedButton(onClick = onClick, shape = RoundedCornerShape(8.dp)) {
+private fun SecondaryActionButton(text: String, icon: ImageVector, onClick: () -> Unit, enabled: Boolean = true) {
+    OutlinedButton(onClick = onClick, enabled = enabled, shape = RoundedCornerShape(8.dp)) {
         Icon(icon, contentDescription = null, modifier = Modifier.size(18.dp))
         Spacer(Modifier.width(8.dp))
         Text(text)
@@ -1504,9 +1624,10 @@ private fun SecondaryActionButton(text: String, icon: ImageVector, onClick: () -
 }
 
 @Composable
-private fun DangerActionButton(text: String, icon: ImageVector, onClick: () -> Unit) {
+private fun DangerActionButton(text: String, icon: ImageVector, onClick: () -> Unit, enabled: Boolean = true) {
     OutlinedButton(
         onClick = onClick,
+        enabled = enabled,
         shape = RoundedCornerShape(8.dp),
         colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error),
     ) {
@@ -1517,9 +1638,10 @@ private fun DangerActionButton(text: String, icon: ImageVector, onClick: () -> U
 }
 
 @Composable
-private fun DangerFilledButton(text: String, icon: ImageVector, onClick: () -> Unit) {
+private fun DangerFilledButton(text: String, icon: ImageVector, onClick: () -> Unit, enabled: Boolean = true) {
     Button(
         onClick = onClick,
+        enabled = enabled,
         shape = RoundedCornerShape(8.dp),
         colors = ButtonDefaults.buttonColors(
             containerColor = MaterialTheme.colorScheme.error,

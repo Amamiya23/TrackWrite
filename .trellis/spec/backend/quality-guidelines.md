@@ -47,6 +47,10 @@ UI, services, storage, MediaStore, EXIF, or AMap.
 - Photo EXIF writes must be reported per photo. Exported copies are the safer
   default; in-place original mutation is a separate confirmed action and may fail
   if Android write grants are unavailable.
+- Bulk photo import, EXIF reads, and EXIF writes must run off the Android main
+  thread. Keep UI state changes on the main thread, but run `ContentResolver`,
+  `DocumentFile`, full-photo copy, and `ExifInterface` work through
+  `Dispatchers.IO` or an equivalent background worker.
 - Manual photo fallback opens a dedicated location picker. It uses
   `TRACKWRITE_AMAP_WEB_KEY` plus `TRACKWRITE_AMAP_SECURITY_JS_CODE` for AMap JS
   search/map-tap binding. Do not hardcode Android SDK keys, Web JS keys, or Web
@@ -128,6 +132,72 @@ photo.copy(manualLocation = GeoPoint(amapLatitude, amapLongitude))
 ```kotlin
 val wgs84 = AmapCoordinateConverter.gcj02ToWgs84(amapLatitude, amapLongitude)
 photo.copy(manualLocation = GeoPoint(wgs84.latitude, wgs84.longitude))
+```
+
+## Scenario: Bulk Photo Storage Work
+
+### 1. Scope / Trigger
+- Trigger: loading or writing multiple photo `Uri`s, especially batches large
+  enough to read or rewrite many EXIF payloads.
+
+### 2. Signatures
+- UI entry: `MainActivity` receives `List<Uri>` from
+  `ActivityResultContracts.OpenMultipleDocuments` or a folder `Uri` from
+  `ActivityResultContracts.OpenDocumentTree`.
+- Storage operations: `PhotoGeotagging.loadPhotos(...)`,
+  `PhotoGeotagging.loadPhotosFromFolder(...)`,
+  `PhotoGeotagging.exportCopies(...)`, and
+  `PhotoGeotagging.writeInPlace(...)`.
+
+### 3. Contracts
+- The Activity may update Compose state before and after the operation on the
+  main thread.
+- `ContentResolver` streams, `DocumentFile.listFiles`, full-file copy, and
+  `ExifInterface` reads/writes must execute on `Dispatchers.IO` or an equivalent
+  background worker.
+- A running bulk operation must block overlapping loads/writes or disable the
+  entry buttons until it completes.
+
+### 4. Validation & Error Matrix
+- Photo has no match/manual location -> return a per-photo skipped outcome.
+- Photo write fails -> return a per-photo failed outcome and continue the batch.
+- Top-level load/write failure -> surface an app error message and clear the
+  busy state.
+- Activity is destroyed -> lifecycle cancellation should not be swallowed as a
+  successful result.
+
+### 5. Good/Base/Bad Cases
+- Good: Selecting 80 photos shows a loading state while EXIF reads run on
+  `Dispatchers.IO`; the UI remains responsive.
+- Base: Writing 80 matched photos snapshots the result list, disables duplicate
+  write entry points, runs file copy/EXIF writes on `Dispatchers.IO`, then shows
+  the usual result sheet.
+- Bad: Calling `loadPhotos(...)`, `exportCopies(...)`, or `writeInPlace(...)`
+  directly from an Activity result callback or button handler on the main
+  thread.
+
+### 6. Tests Required
+- Run `./gradlew :app:compileDebugKotlin` for Activity/Compose/coroutine wiring.
+- Run `./gradlew testDebugUnitTest` to ensure domain matching behavior is
+  unchanged.
+- Run `./gradlew :app:lintDebug` for Android main-thread and resource checks.
+
+### 7. Wrong vs Correct
+
+#### Wrong
+```kotlin
+selectedPhotos = geotagging.loadPhotos(uris)
+val outcomes = geotagging.writeInPlace(matchResults)
+```
+
+#### Correct
+```kotlin
+lifecycleScope.launch {
+    val photos = withContext(Dispatchers.IO) {
+        geotagging.loadPhotos(uris)
+    }
+    selectedPhotos = photos
+}
 ```
 
 ---

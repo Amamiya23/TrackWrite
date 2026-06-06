@@ -58,6 +58,8 @@
     <string name="select_photos">选择照片</string>
     <string name="select_folder">选择文件夹</string>
     <string name="no_photos">还没有选择照片</string>
+    <string name="loading_photos">正在加载所选照片...</string>
+    <string name="loading_folder_photos">正在加载文件夹照片...</string>
     <string name="photo_batch_count">已选择 %1$d 张照片</string>
     <string name="photo_batch_stats">%1$d 已匹配 · %2$d 未匹配 · %3$d 手动</string>
     <string name="photos_need_attention">%1$d 张需要处理</string>
@@ -83,6 +85,8 @@
     <string name="write_originals_title">写入原始照片？</string>
     <string name="write_originals_message">这会直接修改所选源文件。</string>
     <string name="write_readiness">将写入 %1$d 张，跳过 %2$d 张。</string>
+    <string name="writing_copies_progress">正在写入照片副本...</string>
+    <string name="writing_originals_progress">正在写入原始照片...</string>
     <string name="write_missing_location_prompt">还没有照片拥有匹配或手动位置。</string>
     <string name="write_copies_result">副本写入结果</string>
     <string name="write_originals_result">原图写入结果</string>
@@ -134,6 +138,8 @@
     <string name="manual_location_bound">已为第 %1$d 张照片绑定手动位置。</string>
     <string name="manual_location_bound_with_label">已为第 %1$d 张照片绑定手动位置：%2$s</string>
     <string name="manual_location_cleared">已清除第 %1$d 张照片的手动位置。</string>
+    <string name="photo_load_failed">照片加载失败：%1$s</string>
+    <string name="photo_write_failed">照片写入失败：%1$s</string>
     <string name="gpx_read_failed">无法读取 GPX。</string>
     <string name="gpx_imported">已导入 %1$s。</string>
     <string name="gpx_import_failed">导入失败：%1$s</string>
