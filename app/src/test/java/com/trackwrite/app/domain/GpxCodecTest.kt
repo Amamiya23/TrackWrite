@@ -54,4 +54,27 @@ class GpxCodecTest {
             // Expected: GPX imports are user-supplied XML and must not allow DTD/XXE.
         }
     }
+
+    @Test
+    fun rejectsTrackPointCountOverLimit() {
+        val points = (0..2).joinToString("\n") { index ->
+            """
+                <trkpt lat="30.$index" lon="120.$index">
+                    <time>2026-05-26T10:0${index}:00Z</time>
+                </trkpt>
+            """.trimIndent()
+        }
+        val xml = """
+            <gpx version="1.1" creator="test">
+                <trk><trkseg>$points</trkseg></trk>
+            </gpx>
+        """.trimIndent()
+
+        try {
+            codec.decode("too-many", xml, maxTrackPoints = 2)
+            fail("Expected GPX parser to reject files over the configured point limit.")
+        } catch (error: IllegalArgumentException) {
+            assertTrue(error.message.orEmpty().contains("more than 2"))
+        }
+    }
 }

@@ -12,6 +12,8 @@
     <string name="status_recording">记录中</string>
     <string name="status_paused">已暂停</string>
     <string name="status_stopped">未记录</string>
+    <string name="recording_stopped_title">记录已停止</string>
+    <string name="recording_track_unavailable">当前轨迹已不可用。</string>
     <string name="record_confidence_recent">最近轨迹点：%1$d 秒前，来源 %2$s。</string>
     <string name="record_confidence_stale">最近轨迹点：%1$d 秒前，来源 %2$s。请检查天空视野或定位服务。</string>
     <string name="record_confidence_waiting">正在等待首次定位，来源 %1$s。</string>
@@ -48,6 +50,7 @@
     <string name="rename_track">重命名 %1$s</string>
     <string name="delete">删除</string>
     <string name="delete_track">删除 %1$s</string>
+    <string name="delete_active_recording_blocked">请先停止记录，再删除当前轨迹。</string>
     <string name="no_tracks">还没有轨迹</string>
     <string name="selected">已选择</string>
     <string name="active">当前</string>
@@ -161,6 +164,7 @@
     <string name="photo_write_decode_failed">写入后图片无法解码。</string>
     <string name="photo_write_signature_failed">文件头与预期图片格式不匹配。</string>
     <string name="gpx_read_failed">无法读取 GPX。</string>
+    <string name="gpx_file_too_large">GPX 文件超过 %1$d MB。</string>
     <string name="gpx_imported">已导入 %1$s。</string>
     <string name="gpx_import_failed">导入失败：%1$s</string>
     <string name="gpx_exported">已导出 %1$s。</string>

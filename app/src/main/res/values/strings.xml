@@ -12,6 +12,8 @@
     <string name="status_recording">Recording</string>
     <string name="status_paused">Paused</string>
     <string name="status_stopped">Stopped</string>
+    <string name="recording_stopped_title">Recording stopped</string>
+    <string name="recording_track_unavailable">The active track is no longer available.</string>
     <string name="record_confidence_recent">Last point %1$d s ago via %2$s.</string>
     <string name="record_confidence_stale">Last point %1$d s ago via %2$s. Check sky view or location service.</string>
     <string name="record_confidence_waiting">Waiting for first location fix via %1$s.</string>
@@ -48,6 +50,7 @@
     <string name="rename_track">Rename %1$s</string>
     <string name="delete">Delete</string>
     <string name="delete_track">Delete %1$s</string>
+    <string name="delete_active_recording_blocked">Stop recording before deleting the active track.</string>
     <string name="no_tracks">No tracks yet</string>
     <string name="selected">Selected</string>
     <string name="active">Active</string>
@@ -161,6 +164,7 @@
     <string name="photo_write_decode_failed">The image could not be decoded after writing.</string>
     <string name="photo_write_signature_failed">The file header does not match the expected image format.</string>
     <string name="gpx_read_failed">Could not read GPX.</string>
+    <string name="gpx_file_too_large">GPX file is larger than %1$d MB.</string>
     <string name="gpx_imported">Imported %1$s.</string>
     <string name="gpx_import_failed">Import failed: %1$s</string>
     <string name="gpx_exported">Exported %1$s.</string>

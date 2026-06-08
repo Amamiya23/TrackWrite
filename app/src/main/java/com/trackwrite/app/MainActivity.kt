@@ -140,10 +140,14 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.io.ByteArrayOutputStream
 import java.time.Duration
 import java.time.Instant
 import java.util.Locale
 import java.util.UUID
+
+private const val MAX_GPX_IMPORT_BYTES = 10 * 1024 * 1024
+private const val MAX_GPX_IMPORT_POINTS = 50_000
 
 class MainActivity : ComponentActivity() {
     private lateinit var repository: TrackRepository
@@ -340,11 +344,19 @@ class MainActivity : ComponentActivity() {
                         refresh()
                     },
                     onConfirmDelete = { track ->
-                        repository.deleteTrack(track.id)
-                        if (recordTrackId == track.id) recordTrackId = null
-                        if (matchTrackId == track.id) matchTrackId = null
-                        uiState = uiState.copy(deleteDialog = null)
-                        refresh()
+                        val recording = stateStore.current()
+                        if (recording.trackId == track.id && recording.status != RecordingStatus.Stopped) {
+                            uiState = uiState.copy(
+                                deleteDialog = null,
+                                logMessage = getString(R.string.delete_active_recording_blocked),
+                            )
+                        } else {
+                            repository.deleteTrack(track.id)
+                            if (recordTrackId == track.id) recordTrackId = null
+                            if (matchTrackId == track.id) matchTrackId = null
+                            uiState = uiState.copy(deleteDialog = null)
+                            refresh()
+                        }
                     },
                     onConfirmWrite = {
                         uiState = uiState.copy(showWriteDialog = false)
@@ -455,15 +467,44 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun importGpx(uri: Uri) {
-        runCatching {
-            val xml = contentResolver.openInputStream(uri)?.bufferedReader()?.use { it.readText() }
-                ?: error(getString(R.string.gpx_read_failed))
-            val track = gpx.importTrack(UUID.randomUUID().toString(), xml)
-            repository.saveTrack(track)
-            matchTrackId = track.id
-            log(getString(R.string.gpx_imported, track.name))
-            refresh()
-        }.onFailure { log(getString(R.string.gpx_import_failed, it.message.orEmpty())) }
+        lifecycleScope.launch {
+            try {
+                val track = withContext(Dispatchers.IO) {
+                    val xml = readGpxTextWithLimit(uri)
+                    gpx.importTrack(
+                        id = UUID.randomUUID().toString(),
+                        xml = xml,
+                        maxTrackPoints = MAX_GPX_IMPORT_POINTS,
+                    ).also(repository::saveTrack)
+                }
+                matchTrackId = track.id
+                log(getString(R.string.gpx_imported, track.name))
+                refresh()
+            } catch (error: CancellationException) {
+                throw error
+            } catch (error: Exception) {
+                log(getString(R.string.gpx_import_failed, error.message.orEmpty()))
+            }
+        }
+    }
+
+    private fun readGpxTextWithLimit(uri: Uri): String {
+        val output = ByteArrayOutputStream()
+        val chunk = ByteArray(DEFAULT_BUFFER_SIZE)
+        var totalBytes = 0
+        contentResolver.openInputStream(uri).use { input ->
+            requireNotNull(input) { getString(R.string.gpx_read_failed) }
+            while (true) {
+                val count = input.read(chunk)
+                if (count < 0) break
+                totalBytes += count
+                check(totalBytes <= MAX_GPX_IMPORT_BYTES) {
+                    getString(R.string.gpx_file_too_large, MAX_GPX_IMPORT_BYTES / (1024 * 1024))
+                }
+                output.write(chunk, 0, count)
+            }
+        }
+        return output.toByteArray().toString(Charsets.UTF_8)
     }
 
     private fun promptExport() {
@@ -1527,7 +1568,13 @@ private fun PhotoThumbnail(uri: Uri) {
     var bitmap by remember(uri) { mutableStateOf<androidx.compose.ui.graphics.ImageBitmap?>(null) }
     LaunchedEffect(uri) {
         bitmap = withContext(Dispatchers.IO) {
-            decodeSampledThumbnail(context.contentResolver, uri, targetSizePx)
+            try {
+                decodeSampledThumbnail(context.contentResolver, uri, targetSizePx)
+            } catch (error: CancellationException) {
+                throw error
+            } catch (_: Exception) {
+                null
+            }
         }
     }
     Box(

@@ -10,8 +10,8 @@ import java.io.File
 class GpxFileActions(private val context: Context) {
     private val codec = GpxCodec()
 
-    fun importTrack(id: String, xml: String): Track =
-        codec.decode(id, xml)
+    fun importTrack(id: String, xml: String, maxTrackPoints: Int = Int.MAX_VALUE): Track =
+        codec.decode(id, xml, maxTrackPoints)
 
     fun encode(track: Track): String =
         codec.encode(track)

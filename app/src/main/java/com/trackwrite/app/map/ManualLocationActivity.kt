@@ -4,12 +4,14 @@ import android.annotation.SuppressLint
 import android.app.Activity
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.net.Uri
 import android.os.Bundle
 import android.util.TypedValue
 import android.view.Gravity
 import android.view.ViewGroup
 import android.webkit.WebSettings
 import android.webkit.JavascriptInterface
+import android.webkit.WebResourceRequest
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.widget.FrameLayout
@@ -136,7 +138,10 @@ class ManualLocationActivity : ComponentActivity() {
             settings.javaScriptEnabled = true
             settings.domStorageEnabled = true
             settings.cacheMode = WebSettings.LOAD_NO_CACHE
-            webViewClient = WebViewClient()
+            webViewClient = object : WebViewClient() {
+                override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean =
+                    blockDisallowedNavigation(view, request.url)
+            }
             addJavascriptInterface(MapBridge(), "TrackWrite")
             doOnLayout {
                 loadDataWithBaseURL(
@@ -217,6 +222,12 @@ class ManualLocationActivity : ComponentActivity() {
         )
     }
 
+    private fun blockDisallowedNavigation(view: WebView, uri: Uri?): Boolean {
+        if (isAllowedAmapNavigation(uri?.scheme, uri?.host)) return false
+        view.removeJavascriptInterface("TrackWrite")
+        return true
+    }
+
     private fun amapWebKey(): String {
         val appInfo = packageManager.getApplicationInfo(packageName, PackageManager.GET_META_DATA)
         return appInfo.metaData?.getString("com.trackwrite.amap.web_key").orEmpty()
@@ -268,6 +279,10 @@ class ManualLocationActivity : ComponentActivity() {
 
         @JavascriptInterface
         fun select(latitude: Double, longitude: Double, label: String?) {
+            if (!isValidAmapBridgeCoordinate(latitude, longitude)) {
+                error(getString(R.string.manual_location_invalid))
+                return
+            }
             val wgs84 = AmapCoordinateConverter.gcj02ToWgs84(latitude, longitude)
             runOnUiThread {
                 this@ManualLocationActivity.selectWgs84(
@@ -292,6 +307,16 @@ class ManualLocationActivity : ComponentActivity() {
         const val EXTRA_LABEL = "label"
     }
 }
+
+internal fun isAllowedAmapNavigation(scheme: String?, host: String?): Boolean =
+    scheme.equals("https", ignoreCase = true) &&
+        host.equals("webapi.amap.com", ignoreCase = true)
+
+internal fun isValidAmapBridgeCoordinate(latitude: Double, longitude: Double): Boolean =
+    latitude.isFinite() &&
+        longitude.isFinite() &&
+        latitude in -90.0..90.0 &&
+        longitude in -180.0..180.0
 
 private data class ManualLocationUiState(
     val hasAmapKey: Boolean = false,

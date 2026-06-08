@@ -1,6 +1,7 @@
 package com.trackwrite.app.map
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -36,5 +37,23 @@ class AmapCoordinateConverterTest {
 
         assertTrue(result.latitude < 39.91022649807321)
         assertTrue(result.longitude < 116.4037135824225)
+    }
+
+    @Test
+    fun amapNavigationAllowsOnlyExpectedHttpsOrigin() {
+        assertTrue(isAllowedAmapNavigation("https", "webapi.amap.com"))
+        assertTrue(isAllowedAmapNavigation("HTTPS", "WEBAPI.AMAP.COM"))
+        assertFalse(isAllowedAmapNavigation("http", "webapi.amap.com"))
+        assertFalse(isAllowedAmapNavigation("https", "amap.com"))
+        assertFalse(isAllowedAmapNavigation("https", "evil.example"))
+    }
+
+    @Test
+    fun amapBridgeCoordinateValidationRejectsInvalidValues() {
+        assertTrue(isValidAmapBridgeCoordinate(39.9, 116.4))
+        assertFalse(isValidAmapBridgeCoordinate(Double.NaN, 116.4))
+        assertFalse(isValidAmapBridgeCoordinate(39.9, Double.POSITIVE_INFINITY))
+        assertFalse(isValidAmapBridgeCoordinate(91.0, 116.4))
+        assertFalse(isValidAmapBridgeCoordinate(39.9, 181.0))
     }
 }

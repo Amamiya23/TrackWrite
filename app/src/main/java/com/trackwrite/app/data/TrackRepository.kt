@@ -33,6 +33,16 @@ class TrackRepository(context: Context) {
             dao.getTrack(id)?.toTrack(dao.listPoints(id))
         }
 
+    fun trackExists(id: String): Boolean =
+        db {
+            dao.trackExists(id) > 0
+        }
+
+    fun countPoints(trackId: String): Int =
+        db {
+            dao.countPoints(trackId)
+        }
+
     fun saveTrack(track: Track) {
         db {
             dao.replaceTrack(

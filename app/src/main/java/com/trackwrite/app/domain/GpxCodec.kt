@@ -52,7 +52,8 @@ class GpxCodec {
         }
     }
 
-    fun decode(id: String, xml: String): Track {
+    fun decode(id: String, xml: String, maxTrackPoints: Int = Int.MAX_VALUE): Track {
+        require(maxTrackPoints > 0) { "GPX track point limit must be positive." }
         val factory = DocumentBuilderFactory.newInstance().apply {
             isNamespaceAware = true
             setFeature("http://apache.org/xml/features/disallow-doctype-decl", true)
@@ -69,6 +70,9 @@ class GpxCodec {
             ?: "Imported track"
 
         val points = document.getElementsByTagNameNS("*", "trkpt").let { nodes ->
+            require(nodes.length <= maxTrackPoints) {
+                "GPX file has more than $maxTrackPoints track points."
+            }
             List(nodes.length) { index ->
                 val element = nodes.item(index) as Element
                 TrackPoint(

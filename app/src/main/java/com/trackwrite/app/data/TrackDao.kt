@@ -14,8 +14,14 @@ interface TrackDao {
     @Query("SELECT * FROM tracks WHERE id = :id")
     fun getTrack(id: String): TrackEntity?
 
+    @Query("SELECT COUNT(*) FROM tracks WHERE id = :id")
+    fun trackExists(id: String): Int
+
     @Query("SELECT * FROM track_points WHERE trackId = :trackId ORDER BY recordedAt ASC")
     fun listPoints(trackId: String): List<TrackPointEntity>
+
+    @Query("SELECT COUNT(*) FROM track_points WHERE trackId = :trackId")
+    fun countPoints(trackId: String): Int
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     fun upsertTrack(track: TrackEntity)

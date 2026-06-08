@@ -29,6 +29,7 @@ class TrackingService : Service(), LocationListener {
     private lateinit var stateStore: RecordingStateStore
     private lateinit var settingsStore: AppSettingsStore
     private lateinit var locationManager: LocationManager
+    private var pointCount: Int = 0
 
     override fun onCreate() {
         super.onCreate()
@@ -47,7 +48,7 @@ class TrackingService : Service(), LocationListener {
             ACTION_STOP -> stopRecording()
             else -> recoverIfNeeded()
         }
-        return START_REDELIVER_INTENT
+        return START_STICKY
     }
 
     override fun onBind(intent: Intent?): IBinder? = null
@@ -60,18 +61,28 @@ class TrackingService : Service(), LocationListener {
     override fun onLocationChanged(location: Location) {
         val state = stateStore.current()
         if (state.status != RecordingStatus.Recording || state.trackId == null) return
+        if (!repository.trackExists(state.trackId)) {
+            stopUnavailableRecording()
+            return
+        }
         val recordedAtMillis = location.time.takeIf { it > 0L } ?: System.currentTimeMillis()
-        repository.appendPoint(
-            trackId = state.trackId,
-            point = TrackPoint(
-                position = GeoPoint(
-                    latitude = location.latitude,
-                    longitude = location.longitude,
-                    altitudeMeters = if (location.hasAltitude()) location.altitude else null,
+        try {
+            repository.appendPoint(
+                trackId = state.trackId,
+                point = TrackPoint(
+                    position = GeoPoint(
+                        latitude = location.latitude,
+                        longitude = location.longitude,
+                        altitudeMeters = if (location.hasAltitude()) location.altitude else null,
+                    ),
+                    recordedAt = Instant.ofEpochMilli(recordedAtMillis),
                 ),
-                recordedAt = Instant.ofEpochMilli(recordedAtMillis),
-            ),
-        )
+            )
+        } catch (_: RuntimeException) {
+            stopUnavailableRecording()
+            return
+        }
+        pointCount += 1
         stateStore.set(
             trackId = state.trackId,
             status = RecordingStatus.Recording,
@@ -79,14 +90,35 @@ class TrackingService : Service(), LocationListener {
             provider = location.provider,
             issue = RecordingIssue.None,
         )
-        updateNotification("Recording", "Captured ${repository.getTrack(state.trackId)?.points?.size ?: 0} points")
+        updateNotification("Recording", "Captured $pointCount points")
     }
 
     @Deprecated("Deprecated by Android framework")
     override fun onStatusChanged(provider: String?, status: Int, extras: Bundle?) = Unit
 
     private fun startRecording(name: String) {
+        val current = stateStore.current()
+        if (current.trackId != null &&
+            current.status != RecordingStatus.Stopped &&
+            repository.trackExists(current.trackId)
+        ) {
+            pointCount = repository.countPoints(current.trackId)
+            when (current.status) {
+                RecordingStatus.Recording -> {
+                    startForeground(NOTIFICATION_ID, notification("Recording", "Recovered recording"))
+                    requestLocationUpdates()
+                }
+                RecordingStatus.Paused -> {
+                    startForeground(NOTIFICATION_ID, notification("Paused", "Recording is paused"))
+                    locationManager.removeUpdates(this)
+                }
+                RecordingStatus.Stopped -> Unit
+            }
+            return
+        }
+
         val track = repository.createTrack(name.ifBlank { "Recording ${Instant.now()}" })
+        pointCount = 0
         stateStore.set(
             trackId = track.id,
             status = RecordingStatus.Recording,
@@ -108,6 +140,11 @@ class TrackingService : Service(), LocationListener {
     private fun resumeRecording() {
         val current = stateStore.current()
         if (current.trackId == null) return
+        if (!repository.trackExists(current.trackId)) {
+            stopUnavailableRecording()
+            return
+        }
+        pointCount = repository.countPoints(current.trackId)
         stateStore.set(current.trackId, RecordingStatus.Recording, issue = RecordingIssue.WaitingForFix)
         startForeground(NOTIFICATION_ID, notification("Recording", "Waiting for GPS fix"))
         requestLocationUpdates()
@@ -129,6 +166,11 @@ class TrackingService : Service(), LocationListener {
     private fun recoverIfNeeded() {
         val current = stateStore.current()
         if (current.status == RecordingStatus.Recording && current.trackId != null) {
+            if (!repository.trackExists(current.trackId)) {
+                stopUnavailableRecording()
+                return
+            }
+            pointCount = repository.countPoints(current.trackId)
             startForeground(NOTIFICATION_ID, notification("Recovered recording", "Waiting for GPS fix"))
             requestLocationUpdates()
         }
@@ -164,7 +206,29 @@ class TrackingService : Service(), LocationListener {
             provider = provider,
             issue = if (current.lastPointRecordedAtMillis == null) RecordingIssue.WaitingForFix else RecordingIssue.None,
         )
+        locationManager.removeUpdates(this)
         locationManager.requestLocationUpdates(provider, frequency.intervalMs, frequency.distanceMeters, this)
+    }
+
+    private fun stopUnavailableRecording() {
+        pointCount = 0
+        stateStore.set(
+            trackId = null,
+            status = RecordingStatus.Stopped,
+            lastPointRecordedAtMillis = null,
+            provider = null,
+            issue = RecordingIssue.None,
+        )
+        locationManager.removeUpdates(this)
+        startForeground(
+            NOTIFICATION_ID,
+            notification(
+                getString(R.string.recording_stopped_title),
+                getString(R.string.recording_track_unavailable),
+            ),
+        )
+        stopForeground(STOP_FOREGROUND_REMOVE)
+        stopSelf()
     }
 
     private fun notification(title: String, text: String) =
