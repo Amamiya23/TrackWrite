@@ -215,10 +215,7 @@ class MainActivity : ComponentActivity() {
         val mode = pendingExportMode
         pendingExportMode = null
         if (uri != null && mode != null) {
-            contentResolver.takePersistableUriPermission(
-                uri,
-                Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION,
-            )
+            persistTreePermission(uri)
             when (mode) {
                 ExportFolderMode.SaveDefault -> {
                     settingsStore.setDefaultExportFolderUri(uri.toString())
@@ -391,6 +388,7 @@ class MainActivity : ComponentActivity() {
             matches = matchResults,
             settings = settings,
             bulkOperation = uiState.bulkOperation,
+            recordingClockMillis = System.currentTimeMillis(),
         )
     }
 
@@ -439,6 +437,7 @@ class MainActivity : ComponentActivity() {
         settingsStore.setAllowStartFallback(settings.allowStartFallback)
         settingsStore.setAllowEndFallback(settings.allowEndFallback)
         settingsStore.setPreferExportCopies(settings.preferExportCopies)
+        settingsStore.setDefaultExportFolderUri(settings.defaultExportFolderUri)
         uiState = uiState.copy(settings = settings, logMessage = getString(R.string.settings_saved))
         matchSelectedPhotos()
     }
@@ -602,6 +601,19 @@ class MainActivity : ComponentActivity() {
     private fun isUsableTreeUri(uri: Uri): Boolean =
         DocumentFile.fromTreeUri(this, uri)?.canWrite() == true
 
+    private fun persistTreePermission(uri: Uri) {
+        runCatching {
+            contentResolver.takePersistableUriPermission(
+                uri,
+                Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION,
+            )
+        }.recoverCatching {
+            contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
+        }.recoverCatching {
+            contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
+    }
+
     private fun recordTrack(): Track? =
         recordTrackId?.let(repository::getTrack) ?: stateStore.current().trackId?.let(repository::getTrack)
 
@@ -672,6 +684,7 @@ private data class MainUiState(
     val showWriteDialog: Boolean = false,
     val bulkOperation: BulkOperation? = null,
     val writeProgress: WriteProgressState? = null,
+    val recordingClockMillis: Long = System.currentTimeMillis(),
 )
 
 private data class RenameDialogState(
@@ -911,10 +924,10 @@ private fun RecordScreen(
     onShowTrackHistory: () -> Unit,
     onDismissTrackHistory: () -> Unit,
 ) {
-    LaunchedEffect(state.recording.status) {
-        while (state.recording.status == RecordingStatus.Recording) {
-            delay(2_000)
+    LaunchedEffect(state.recording.status, state.recording.trackId) {
+        while (state.recording.status == RecordingStatus.Recording && state.recording.trackId != null) {
             onRefreshRecording()
+            delay(1_000)
         }
     }
     val activeTrack = state.recording.trackId?.let { id -> state.tracks.firstOrNull { it.id == id } }
@@ -982,12 +995,14 @@ private fun RecordingPanel(
             )
         }
         Spacer(Modifier.height(18.dp))
+        val stats = selectedTrack?.stats()
+        val duration = activeRecordingDuration(state, selectedTrack) ?: stats?.duration ?: Duration.ZERO
         MetricGrid(
             listOf(
                 stringResource(R.string.active_track) to (selectedTrack?.name ?: stringResource(R.string.none)),
                 stringResource(R.string.points_captured) to ((selectedTrack?.points?.size ?: 0).toString()),
-                stringResource(R.string.duration) to formatDuration(selectedTrack?.stats()?.duration ?: Duration.ZERO),
-                stringResource(R.string.distance) to formatDistance(selectedTrack?.stats()?.distanceMeters ?: 0.0),
+                stringResource(R.string.duration) to formatDuration(duration),
+                stringResource(R.string.distance) to formatDistance(stats?.distanceMeters ?: 0.0),
             ),
         )
         Spacer(Modifier.height(18.dp))
@@ -2235,12 +2250,14 @@ private fun ExportFolderRow(
     folderUri: String?,
     onChooseExportFolder: () -> Unit,
 ) {
+    val folderLabel = remember(folderUri) { folderUri?.let(::displayTreeUri) }
+    val subtitle = folderLabel ?: stringResource(R.string.export_folder_unconfigured)
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .clickable(onClick = onChooseExportFolder)
             .padding(horizontal = 16.dp, vertical = 16.dp),
-        verticalAlignment = Alignment.CenterVertically,
+        verticalAlignment = Alignment.Top,
     ) {
         Icon(
             Icons.Default.FolderOpen,
@@ -2249,16 +2266,27 @@ private fun ExportFolderRow(
             modifier = Modifier.size(22.dp),
         )
         Spacer(Modifier.width(16.dp))
-        Text(
-            text = stringResource(R.string.default_export_folder),
-            style = MaterialTheme.typography.bodyLarge,
-            modifier = Modifier.weight(1f),
-        )
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = stringResource(R.string.default_export_folder),
+                style = MaterialTheme.typography.bodyLarge,
+            )
+            Spacer(Modifier.height(2.dp))
+            Text(
+                text = subtitle,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
         Icon(
             Icons.AutoMirrored.Filled.KeyboardArrowRight,
             contentDescription = stringResource(R.string.choose_folder),
             tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
-            modifier = Modifier.size(20.dp),
+            modifier = Modifier
+                .padding(top = 2.dp)
+                .size(20.dp),
         )
     }
 }
@@ -2585,6 +2613,14 @@ private fun recordingConfidenceTone(recording: RecordingSnapshot): PillTone =
         else -> PillTone.Neutral
     }
 
+private fun activeRecordingDuration(state: MainUiState, track: Track?): Duration? {
+    if (state.recording.status != RecordingStatus.Recording) return null
+    if (state.recording.trackId == null || state.recording.trackId != track?.id) return null
+    val startTime = track.startTime ?: return Duration.ZERO
+    val elapsed = Duration.between(startTime, Instant.ofEpochMilli(state.recordingClockMillis))
+    return if (elapsed.isNegative) Duration.ZERO else elapsed
+}
+
 @Composable
 private fun recordingConfidenceText(recording: RecordingSnapshot, settings: AppSettings): String {
     val provider = recording.provider?.uppercase(Locale.ROOT) ?: stringResource(R.string.provider_unknown)
@@ -2639,6 +2675,15 @@ private fun writeReadiness(matches: List<PhotoMatchResult>): WriteReadiness =
         writeable = matches.count { it.selectedPosition != null },
         skipped = matches.count { it.selectedPosition == null },
     )
+
+private fun displayTreeUri(value: String): String =
+    runCatching {
+        val uri = Uri.parse(value)
+        (uri.pathSegments.dropWhile { it != "tree" }.drop(1).firstOrNull() ?: uri.lastPathSegment ?: value)
+            .removePrefix("primary:")
+            .replace(':', '/')
+            .ifBlank { uri.lastPathSegment ?: value }
+    }.getOrDefault(value)
 
 private fun formatDuration(duration: Duration): String {
     val hours = duration.toHours()

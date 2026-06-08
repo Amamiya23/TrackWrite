@@ -178,6 +178,16 @@ SettingsGroup {
 
 **Why**: Prevents user confusion about what the number represents (minutes vs seconds vs meters).
 
+### Convention: Persisted Folder Settings Show the Saved Value
+**What**: When a Settings row stores a SAF folder URI or another path-like value,
+persist the selected value immediately and render a readable saved value in the
+row subtitle. For SAF tree URIs, display the decoded tree id (for example,
+`Download/TrackWrite`) rather than a generic "configured" label.
+
+**Why**: Folder settings are hard to verify from memory. Showing the persisted
+value confirms that the selection survived and helps users spot the wrong
+destination before writing files.
+
 ### Don't: Redundant Labels
 **Problem**:
 ```kotlin
