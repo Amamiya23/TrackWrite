@@ -251,3 +251,36 @@ Relaxed JPEG GPSVersionID read-back verification so valid GPS coordinate writes 
 ### Next Steps
 
 - None - task complete
+
+
+## Session 8: Fix settings folder display and recording duration refresh
+
+**Date**: 2026-06-08
+**Task**: Fix settings folder display and recording duration refresh
+**Branch**: `main`
+
+### Summary
+
+Persist and display the default export-copy folder value, refresh active recording duration every second, update frontend settings guidance, and verify compile, unit tests, and lint.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `4993c00` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
