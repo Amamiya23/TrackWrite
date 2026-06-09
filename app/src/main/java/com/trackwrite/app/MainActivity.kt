@@ -15,6 +15,7 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.documentfile.provider.DocumentFile
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -35,60 +36,32 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.Edit
-import androidx.compose.material.icons.filled.FolderOpen
-import androidx.compose.material.icons.filled.LocationOn
-import androidx.compose.material.icons.filled.Palette
-import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.Speed
 import androidx.compose.material.icons.filled.Remove
-import androidx.compose.material.icons.filled.Search
-import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material.icons.filled.Share
-import androidx.compose.material.icons.filled.Pause
-import androidx.compose.material.icons.filled.Stop
-import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
-import androidx.compose.material3.NavigationBar
-import androidx.compose.material3.NavigationBarItem
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.SegmentedButton
-import androidx.compose.material3.SegmentedButtonDefaults
-import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -98,8 +71,15 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
@@ -108,6 +88,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.DialogProperties
 import androidx.core.content.ContextCompat
@@ -145,6 +126,7 @@ import java.time.Duration
 import java.time.Instant
 import java.util.Locale
 import java.util.UUID
+import kotlin.math.min
 
 private const val MAX_GPX_IMPORT_BYTES = 10 * 1024 * 1024
 private const val MAX_GPX_IMPORT_POINTS = 50_000
@@ -280,7 +262,7 @@ class MainActivity : ComponentActivity() {
             TrackWriteTheme(uiState.settings.appearance) {
                 TrackWriteApp(
                     state = uiState,
-                    onTabSelected = { uiState = uiState.copy(selectedTab = it) },
+                    onTabSelected = { uiState = uiState.copy(selectedTab = it, showSettings = false) },
                     onSettings = { uiState = uiState.copy(showSettings = true) },
                     onCloseSettings = { uiState = uiState.copy(showSettings = false) },
                     onStartRecording = { uiState = uiState.copy(startDialogName = defaultTrackName()) },
@@ -755,7 +737,6 @@ private fun AppSettings.toMatchOptions(): MatchOptions =
         allowEndFallback = allowEndFallback,
     )
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun TrackWriteApp(
     state: MainUiState,
@@ -796,61 +777,26 @@ private fun TrackWriteApp(
 ) {
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = {
-                    Column {
-                        Text(
-                            text = stringResource(
-                                when {
-                                    state.showSettings -> R.string.settings
-                                    state.selectedTab == MainTab.Record -> R.string.tab_record
-                                    else -> R.string.tab_match
-                                },
-                            ),
-                            style = MaterialTheme.typography.titleLarge,
-                            fontWeight = FontWeight.SemiBold,
-                        )
-                    }
-                },
-                navigationIcon = {
-                    if (state.showSettings) {
-                        IconButton(onClick = onCloseSettings) {
-                            Icon(
-                                Icons.AutoMirrored.Filled.ArrowBack,
-                                contentDescription = stringResource(R.string.back),
-                            )
-                        }
-                    }
-                },
-                actions = {
-                    if (!state.showSettings) {
-                        IconButton(onClick = onSettings) {
-                            Icon(Icons.Default.Settings, contentDescription = stringResource(R.string.settings))
-                        }
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.background,
+            TrackWriteTopBar(
+                title = stringResource(
+                    when {
+                        state.showSettings -> R.string.settings
+                        state.selectedTab == MainTab.Record -> R.string.tab_record
+                        else -> R.string.tab_match
+                    },
                 ),
+                showSettingsAction = !state.showSettings,
+                onSettings = onSettings,
             )
         },
         bottomBar = {
-            if (!state.showSettings) {
-                NavigationBar(containerColor = MaterialTheme.colorScheme.surface) {
-                    NavigationBarItem(
-                        selected = state.selectedTab == MainTab.Record,
-                        onClick = { onTabSelected(MainTab.Record) },
-                        icon = { Icon(Icons.Default.LocationOn, contentDescription = null) },
-                        label = { Text(stringResource(R.string.tab_record)) },
-                    )
-                    NavigationBarItem(
-                        selected = state.selectedTab == MainTab.Match,
-                        onClick = { onTabSelected(MainTab.Match) },
-                        icon = { Icon(Icons.Default.Search, contentDescription = null) },
-                        label = { Text(stringResource(R.string.tab_match)) },
-                    )
-                }
-            }
+            TrackWriteBottomBar(
+                selectedTab = state.selectedTab,
+                settingsSelected = state.showSettings,
+                onRecord = { onTabSelected(MainTab.Record) },
+                onMatch = { onTabSelected(MainTab.Match) },
+                onSettings = onSettings,
+            )
         },
     ) { padding ->
         if (state.showSettings) {
@@ -909,6 +855,361 @@ private fun TrackWriteApp(
 }
 
 @Composable
+private fun TrackWriteTopBar(
+    title: String,
+    showSettingsAction: Boolean,
+    onSettings: () -> Unit,
+) {
+    Surface(color = MaterialTheme.colorScheme.background) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .statusBarsPadding()
+                .padding(start = 18.dp, end = 18.dp, top = 3.dp, bottom = 10.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(2.dp),
+            ) {
+                Text(
+                    text = stringResource(R.string.app_name),
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                )
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.headlineSmall,
+                    fontWeight = FontWeight.ExtraBold,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+            if (showSettingsAction) {
+                Spacer(Modifier.width(12.dp))
+                Surface(
+                    modifier = Modifier
+                        .size(42.dp)
+                        .clip(RoundedCornerShape(10.dp))
+                        .clickable(onClick = onSettings),
+                    shape = RoundedCornerShape(10.dp),
+                    color = MaterialTheme.colorScheme.surface,
+                    border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        TrackWriteLineIcon(
+                            icon = TrackWriteIcon.Settings,
+                            tint = MaterialTheme.colorScheme.onSurface,
+                            modifier = Modifier.size(19.dp),
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun TrackWriteBottomBar(
+    selectedTab: MainTab,
+    settingsSelected: Boolean,
+    onRecord: () -> Unit,
+    onMatch: () -> Unit,
+    onSettings: () -> Unit,
+) {
+    val barColor = MaterialTheme.colorScheme.surfaceContainer.copy(alpha = 0.78f)
+    val materialWash = MaterialTheme.colorScheme.surface.copy(alpha = 0.34f)
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(barColor)
+            .background(materialWash),
+    ) {
+        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.55f))
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(62.dp)
+                .padding(start = 24.dp, end = 24.dp, top = 7.dp, bottom = 10.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            BottomNavItem(
+                selected = !settingsSelected && selectedTab == MainTab.Record,
+                icon = TrackWriteIcon.Record,
+                label = stringResource(R.string.tab_record),
+                onClick = onRecord,
+                modifier = Modifier.weight(1f),
+            )
+            BottomNavItem(
+                selected = !settingsSelected && selectedTab == MainTab.Match,
+                icon = TrackWriteIcon.Photo,
+                label = stringResource(R.string.tab_match),
+                onClick = onMatch,
+                modifier = Modifier.weight(1f),
+            )
+            BottomNavItem(
+                selected = settingsSelected,
+                icon = TrackWriteIcon.Settings,
+                label = stringResource(R.string.settings),
+                onClick = onSettings,
+                modifier = Modifier.weight(1f),
+            )
+        }
+    }
+}
+
+@Composable
+private fun BottomNavItem(
+    selected: Boolean,
+    icon: TrackWriteIcon,
+    label: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val contentColor = if (selected) {
+        MaterialTheme.colorScheme.primary
+    } else {
+        MaterialTheme.colorScheme.onSurfaceVariant
+    }
+    Surface(
+        modifier = modifier
+            .height(45.dp)
+            .clip(RoundedCornerShape(14.dp))
+            .clickable(onClick = onClick),
+        shape = RoundedCornerShape(14.dp),
+        color = if (selected) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.82f) else Color.Transparent,
+    ) {
+        Column(
+            modifier = Modifier.padding(vertical = 5.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center,
+        ) {
+            TrackWriteLineIcon(
+                icon = icon,
+                tint = contentColor,
+                modifier = Modifier.size(18.dp),
+            )
+            Spacer(Modifier.height(2.dp))
+            Text(
+                text = label,
+                style = MaterialTheme.typography.labelSmall,
+                fontWeight = FontWeight.SemiBold,
+                color = contentColor,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+    }
+}
+
+private enum class TrackWriteIcon {
+    Target,
+    Satellite,
+    Pause,
+    Warning,
+    Lock,
+    History,
+    Route,
+    Record,
+    Photo,
+    Folder,
+    Settings,
+    File,
+    Empty,
+    Close,
+}
+
+@Composable
+private fun TrackWriteLineIcon(
+    icon: TrackWriteIcon,
+    tint: Color,
+    modifier: Modifier = Modifier,
+) {
+    Canvas(modifier = modifier) {
+        val unit = min(size.width, size.height) / 24f
+        val left = (size.width - unit * 24f) / 2f
+        val top = (size.height - unit * 24f) / 2f
+        val strokeWidth = 2f * unit
+        val stroke = Stroke(width = strokeWidth, cap = StrokeCap.Round, join = StrokeJoin.Round)
+        fun p(x: Float, y: Float) = Offset(left + x * unit, top + y * unit)
+        fun line(x1: Float, y1: Float, x2: Float, y2: Float) {
+            drawLine(tint, p(x1, y1), p(x2, y2), strokeWidth = strokeWidth, cap = StrokeCap.Round)
+        }
+        fun Path.m(x: Float, y: Float) = moveTo(p(x, y).x, p(x, y).y)
+        fun Path.l(x: Float, y: Float) = lineTo(p(x, y).x, p(x, y).y)
+        fun Path.c(x1: Float, y1: Float, x2: Float, y2: Float, x3: Float, y3: Float) =
+            cubicTo(p(x1, y1).x, p(x1, y1).y, p(x2, y2).x, p(x2, y2).y, p(x3, y3).x, p(x3, y3).y)
+        fun Path.q(x1: Float, y1: Float, x2: Float, y2: Float) =
+            quadraticTo(p(x1, y1).x, p(x1, y1).y, p(x2, y2).x, p(x2, y2).y)
+        fun rectTopLeft(x: Float, y: Float) = p(x, y)
+        fun rectSize(width: Float, height: Float) = Size(width * unit, height * unit)
+        fun corner(radius: Float) = CornerRadius(radius * unit, radius * unit)
+
+        when (icon) {
+            TrackWriteIcon.Target -> {
+                drawCircle(tint, radius = 8f * unit, center = p(12f, 12f), style = stroke)
+                drawCircle(tint, radius = 2f * unit, center = p(12f, 12f), style = stroke)
+                line(12f, 2f, 12f, 5f)
+                line(12f, 19f, 12f, 22f)
+                line(2f, 12f, 5f, 12f)
+                line(19f, 12f, 22f, 12f)
+            }
+            TrackWriteIcon.Satellite -> {
+                line(7f, 7f, 17f, 17f)
+                line(9f, 5f, 19f, 15f)
+                line(5f, 9f, 15f, 19f)
+                line(14f, 4f, 20f, 10f)
+                line(4f, 14f, 10f, 20f)
+            }
+            TrackWriteIcon.Pause -> {
+                line(9f, 5f, 9f, 19f)
+                line(15f, 5f, 15f, 19f)
+            }
+            TrackWriteIcon.Warning -> {
+                val path = Path().apply {
+                    m(12f, 3.2f)
+                    l(21.2f, 20f)
+                    l(2.8f, 20f)
+                    close()
+                }
+                drawPath(path, tint, style = stroke)
+                line(12f, 9f, 12f, 13f)
+                drawCircle(tint, radius = 0.45f * unit, center = p(12f, 17f))
+            }
+            TrackWriteIcon.Lock -> {
+                drawRoundRect(
+                    color = tint,
+                    topLeft = rectTopLeft(5f, 11f),
+                    size = rectSize(14f, 9f),
+                    cornerRadius = corner(2f),
+                    style = stroke,
+                )
+                val shackle = Path().apply {
+                    m(8f, 11f)
+                    l(8f, 8f)
+                    c(8f, 5.8f, 9.8f, 4f, 12f, 4f)
+                    c(14.2f, 4f, 16f, 5.8f, 16f, 8f)
+                    l(16f, 11f)
+                }
+                drawPath(shackle, tint, style = stroke)
+            }
+            TrackWriteIcon.History -> {
+                drawArc(
+                    color = tint,
+                    startAngle = 210f,
+                    sweepAngle = 305f,
+                    useCenter = false,
+                    topLeft = rectTopLeft(3f, 3f),
+                    size = rectSize(18f, 18f),
+                    style = stroke,
+                )
+                line(3f, 4f, 3f, 9f)
+                line(3f, 9f, 8f, 9f)
+                line(12f, 7f, 12f, 12f)
+                line(12f, 12f, 15f, 14f)
+            }
+            TrackWriteIcon.Route -> {
+                val path = Path().apply {
+                    m(5f, 19f)
+                    c(9f, 11f, 15f, 23f, 19f, 15f)
+                }
+                drawPath(path, tint, style = stroke)
+                drawCircle(tint, radius = 2f * unit, center = p(5f, 19f), style = stroke)
+                drawCircle(tint, radius = 2f * unit, center = p(19f, 15f), style = stroke)
+            }
+            TrackWriteIcon.Record -> {
+                drawCircle(tint, radius = 7f * unit, center = p(12f, 12f), style = stroke)
+                drawCircle(tint, radius = 3f * unit, center = p(12f, 12f), style = stroke)
+            }
+            TrackWriteIcon.Photo -> {
+                val body = Path().apply {
+                    m(4f, 8f)
+                    q(4f, 6f, 6f, 6f)
+                    l(9f, 6f)
+                    l(10.5f, 4f)
+                    l(13.5f, 4f)
+                    l(15f, 6f)
+                    l(18f, 6f)
+                    q(20f, 6f, 20f, 8f)
+                    l(20f, 18f)
+                    q(20f, 20f, 18f, 20f)
+                    l(6f, 20f)
+                    q(4f, 20f, 4f, 18f)
+                    close()
+                }
+                drawPath(body, tint, style = stroke)
+                drawCircle(tint, radius = 3.2f * unit, center = p(12f, 13f), style = stroke)
+            }
+            TrackWriteIcon.Folder -> {
+                val folder = Path().apply {
+                    m(4f, 8f)
+                    q(4f, 6f, 6f, 6f)
+                    l(9f, 6f)
+                    l(11f, 8f)
+                    l(18f, 8f)
+                    q(20f, 8f, 20f, 10f)
+                    l(20f, 18f)
+                    q(20f, 20f, 18f, 20f)
+                    l(6f, 20f)
+                    q(4f, 20f, 4f, 18f)
+                    close()
+                }
+                drawPath(folder, tint, style = stroke)
+            }
+            TrackWriteIcon.Settings -> {
+                drawCircle(tint, radius = 4f * unit, center = p(12f, 12f), style = stroke)
+                line(4f, 12f, 6f, 12f)
+                line(18f, 12f, 20f, 12f)
+                line(12f, 4f, 12f, 6f)
+                line(12f, 18f, 12f, 20f)
+                line(6.4f, 6.4f, 7.8f, 7.8f)
+                line(16.2f, 16.2f, 17.6f, 17.6f)
+                line(17.6f, 6.4f, 16.2f, 7.8f)
+                line(7.8f, 16.2f, 6.4f, 17.6f)
+            }
+            TrackWriteIcon.File -> {
+                val file = Path().apply {
+                    m(14f, 2f)
+                    l(6f, 2f)
+                    q(4f, 2f, 4f, 4f)
+                    l(4f, 20f)
+                    q(4f, 22f, 6f, 22f)
+                    l(18f, 22f)
+                    q(20f, 22f, 20f, 20f)
+                    l(20f, 8f)
+                    close()
+                }
+                drawPath(file, tint, style = stroke)
+                line(14f, 2f, 14f, 8f)
+                line(14f, 8f, 20f, 8f)
+            }
+            TrackWriteIcon.Empty -> {
+                line(4f, 6f, 20f, 6f)
+                val bin = Path().apply {
+                    m(6f, 6f)
+                    l(6f, 18f)
+                    q(6f, 20f, 8f, 20f)
+                    l(16f, 20f)
+                    q(18f, 20f, 18f, 18f)
+                    l(18f, 6f)
+                }
+                drawPath(bin, tint, style = stroke)
+                line(10f, 11f, 14f, 11f)
+            }
+            TrackWriteIcon.Close -> {
+                line(6f, 6f, 18f, 18f)
+                line(18f, 6f, 6f, 18f)
+            }
+        }
+    }
+}
+
+@Composable
 private fun RecordScreen(
     modifier: Modifier,
     state: MainUiState,
@@ -932,15 +1233,16 @@ private fun RecordScreen(
     }
     val activeTrack = state.recording.trackId?.let { id -> state.tracks.firstOrNull { it.id == id } }
     val selectedTrack = state.tracks.firstOrNull { it.id == state.recordTrackId }
+    val displayTrack = activeTrack ?: selectedTrack
     LazyColumn(
         modifier = modifier
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background),
-        contentPadding = androidx.compose.foundation.layout.PaddingValues(20.dp),
-        verticalArrangement = Arrangement.spacedBy(18.dp),
+        contentPadding = PaddingValues(start = 18.dp, top = 6.dp, end = 18.dp, bottom = 24.dp),
+        verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
         item {
-            RecordingPanel(state, activeTrack, onStartRecording, onPause, onResume, onStop)
+            RecordingPanel(state, displayTrack, onStartRecording, onPause, onResume, onStop)
         }
         item {
             TrackHistoryButton(
@@ -964,7 +1266,6 @@ private fun RecordScreen(
     }
 }
 
-@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun RecordingPanel(
     state: MainUiState,
@@ -974,56 +1275,211 @@ private fun RecordingPanel(
     onResume: () -> Unit,
     onStop: () -> Unit,
 ) {
-    SectionBlock {
+    val tone = recordingProofTone(state.recording, state.settings, state.recordingClockMillis)
+    SurfaceCard(
+        containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+        borderColor = toneBorderColor(tone),
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            StatusPill(statusLabel(state.recording.status), tone)
+            Text(
+                text = recordingSignalNote(state.recording, state.settings, state.recordingClockMillis),
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = TextAlign.End,
+            )
+        }
+        Spacer(Modifier.height(12.dp))
+        Text(
+            text = recordingProofTitle(state.recording, state.settings, state.recordingClockMillis),
+            style = MaterialTheme.typography.titleLarge,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.onSurface,
+        )
+        Spacer(Modifier.height(12.dp))
+        RecordingEvidenceRow(state.recording, state.settings, state.recordingClockMillis)
+        Spacer(Modifier.height(14.dp))
+        RecordingActionRow(
+            status = state.recording.status,
+            onStartRecording = onStartRecording,
+            onPause = onPause,
+            onResume = onResume,
+            onStop = onStop,
+        )
+    }
+
+    Spacer(Modifier.height(12.dp))
+    TrackMetricsPanel(state, selectedTrack, tone)
+}
+
+@Composable
+private fun RecordingEvidenceRow(
+    recording: RecordingSnapshot,
+    settings: AppSettings,
+    nowMillis: Long,
+) {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(10.dp),
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f),
+    ) {
+        Row(
+            modifier = Modifier.padding(12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            Surface(
+                shape = RoundedCornerShape(8.dp),
+                color = MaterialTheme.colorScheme.surface,
+            ) {
+                TrackWriteLineIcon(
+                    icon = recordingEvidenceIcon(recording),
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier
+                        .padding(7.dp)
+                        .size(18.dp),
+                )
+            }
+            Column(Modifier.weight(1f)) {
+                Text(
+                    text = recordingEvidenceTitle(recording, nowMillis),
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
+                Spacer(Modifier.height(2.dp))
+                RecordingConfidenceLine(recording, settings)
+            }
+        }
+    }
+}
+
+@Composable
+private fun RecordingActionRow(
+    status: RecordingStatus,
+    onStartRecording: () -> Unit,
+    onPause: () -> Unit,
+    onResume: () -> Unit,
+    onStop: () -> Unit,
+) {
+    when (status) {
+        RecordingStatus.Stopped -> {
+            PrimaryActionButton(
+                text = stringResource(R.string.start_recording),
+                onClick = onStartRecording,
+                modifier = Modifier.fillMaxWidth(),
+            )
+        }
+        RecordingStatus.Recording -> {
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
+                PrimaryActionButton(
+                    text = stringResource(R.string.pause),
+                    onClick = onPause,
+                    modifier = Modifier.weight(1f),
+                )
+                DangerActionButton(
+                    text = stringResource(R.string.stop),
+                    onClick = onStop,
+                )
+            }
+        }
+        RecordingStatus.Paused -> {
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
+                PrimaryActionButton(
+                    text = stringResource(R.string.resume),
+                    onClick = onResume,
+                    modifier = Modifier.weight(1f),
+                )
+                DangerActionButton(
+                    text = stringResource(R.string.stop),
+                    onClick = onStop,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun TrackMetricsPanel(
+    state: MainUiState,
+    selectedTrack: Track?,
+    tone: PillTone,
+) {
+    SurfaceCard(containerColor = MaterialTheme.colorScheme.surfaceContainerLow) {
+        val stats = selectedTrack?.stats()
+        val duration = activeRecordingDuration(state, selectedTrack) ?: stats?.duration ?: Duration.ZERO
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.Top,
         ) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text(stringResource(R.string.record_title), style = MaterialTheme.typography.titleMedium)
-                Spacer(Modifier.height(8.dp))
-                StatusPill(statusLabel(state.recording.status), statusTone(state.recording.status))
-                Spacer(Modifier.height(10.dp))
-                RecordingConfidenceLine(state.recording, state.settings)
-            }
-            Icon(
-                imageVector = Icons.Default.LocationOn,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.size(36.dp),
+            Text(
+                text = selectedTrack?.name ?: stringResource(R.string.track_name_default),
+                modifier = Modifier.weight(1f),
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Spacer(Modifier.width(10.dp))
+            StatusPill(trackUseLabel(state.recording, tone), trackUseTone(state.recording, tone))
+        }
+        Spacer(Modifier.height(12.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+            CompactMetric(
+                label = stringResource(R.string.points_captured),
+                value = (selectedTrack?.points?.size ?: 0).toString(),
+                modifier = Modifier.weight(1f),
+            )
+            CompactMetric(
+                label = stringResource(R.string.duration),
+                value = formatDuration(duration),
+                modifier = Modifier.weight(1f),
+            )
+            CompactMetric(
+                label = stringResource(R.string.distance),
+                value = formatDistance(stats?.distanceMeters ?: 0.0),
+                modifier = Modifier.weight(1f),
             )
         }
-        Spacer(Modifier.height(18.dp))
-        val stats = selectedTrack?.stats()
-        val duration = activeRecordingDuration(state, selectedTrack) ?: stats?.duration ?: Duration.ZERO
-        MetricGrid(
-            listOf(
-                stringResource(R.string.active_track) to (selectedTrack?.name ?: stringResource(R.string.none)),
-                stringResource(R.string.points_captured) to ((selectedTrack?.points?.size ?: 0).toString()),
-                stringResource(R.string.duration) to formatDuration(duration),
-                stringResource(R.string.distance) to formatDistance(stats?.distanceMeters ?: 0.0),
-            ),
-        )
-        Spacer(Modifier.height(18.dp))
-        when (state.recording.status) {
-            RecordingStatus.Stopped -> {
-                ActionRow {
-                    PrimaryActionButton(stringResource(R.string.start_recording), Icons.Default.PlayArrow, onStartRecording)
-                }
-            }
-            RecordingStatus.Recording -> {
-                ActionRow {
-                    SecondaryActionButton(stringResource(R.string.pause), Icons.Default.Pause, onPause)
-                    DangerActionButton(stringResource(R.string.stop), Icons.Default.Stop, onStop)
-                }
-            }
-            RecordingStatus.Paused -> {
-                ActionRow {
-                    PrimaryActionButton(stringResource(R.string.resume), Icons.Default.PlayArrow, onResume)
-                    DangerActionButton(stringResource(R.string.stop), Icons.Default.Stop, onStop)
-                }
-            }
+    }
+}
+
+@Composable
+private fun CompactMetric(
+    label: String,
+    value: String,
+    modifier: Modifier = Modifier,
+) {
+    Surface(
+        modifier = modifier.heightIn(min = 64.dp),
+        shape = RoundedCornerShape(10.dp),
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f),
+    ) {
+        Column(
+            modifier = Modifier.padding(10.dp),
+            verticalArrangement = Arrangement.Center,
+        ) {
+            Text(
+                text = value,
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.Bold,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Spacer(Modifier.height(4.dp))
+            Text(
+                text = label,
+                style = MaterialTheme.typography.labelSmall,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
         }
     }
 }
@@ -1034,7 +1490,7 @@ private fun RecordingConfidenceLine(recording: RecordingSnapshot, settings: AppS
     Text(
         text = detail,
         style = MaterialTheme.typography.bodySmall,
-        color = when (recordingConfidenceTone(recording)) {
+        color = when (recordingProofTone(recording, settings, System.currentTimeMillis())) {
             PillTone.Error -> MaterialTheme.colorScheme.error
             PillTone.Warning -> MaterialTheme.colorScheme.tertiary
             else -> MaterialTheme.colorScheme.onSurfaceVariant
@@ -1051,16 +1507,28 @@ private fun TrackHistoryButton(
     Surface(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(12.dp))
+            .clip(RoundedCornerShape(14.dp))
             .clickable(onClick = onClick),
-        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
+        color = MaterialTheme.colorScheme.surfaceContainerLow,
+        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
     ) {
         Row(
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 16.dp),
             verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(14.dp),
         ) {
-            Icon(Icons.Default.LocationOn, contentDescription = null, modifier = Modifier.size(20.dp))
-            Spacer(Modifier.width(12.dp))
+            Surface(
+                shape = RoundedCornerShape(10.dp),
+                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f),
+            ) {
+                TrackWriteLineIcon(
+                    icon = TrackWriteIcon.History,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier
+                        .padding(10.dp)
+                        .size(22.dp),
+                )
+            }
             Column(Modifier.weight(1f)) {
                 Text(
                     text = stringResource(R.string.track_history_count, trackCount),
@@ -1068,7 +1536,7 @@ private fun TrackHistoryButton(
                     fontWeight = FontWeight.Medium,
                 )
                 if (selectedTrack != null) {
-                    Spacer(Modifier.height(2.dp))
+                    Spacer(Modifier.height(4.dp))
                     Text(
                         text = selectedTrack.name,
                         style = MaterialTheme.typography.bodySmall,
@@ -1078,11 +1546,60 @@ private fun TrackHistoryButton(
                     )
                 }
             }
-            Text(
-                "›",
-                style = MaterialTheme.typography.titleLarge,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            Icon(
+                Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.65f),
+                modifier = Modifier.size(20.dp),
             )
+        }
+    }
+}
+
+@Composable
+private fun DrawerHeader(
+    title: String,
+    subtitle: String? = null,
+    onDismiss: () -> Unit,
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(Modifier.weight(1f)) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.ExtraBold,
+                color = MaterialTheme.colorScheme.onSurface,
+            )
+            if (subtitle != null) {
+                Spacer(Modifier.height(3.dp))
+                Text(
+                    text = subtitle,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+        }
+        Surface(
+            modifier = Modifier
+                .size(36.dp)
+                .clip(RoundedCornerShape(10.dp))
+                .clickable(onClick = onDismiss),
+            shape = RoundedCornerShape(10.dp),
+            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f),
+        ) {
+            Box(contentAlignment = Alignment.Center) {
+                TrackWriteLineIcon(
+                    icon = TrackWriteIcon.Close,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(16.dp),
+                )
+            }
         }
     }
 }
@@ -1102,73 +1619,106 @@ private fun TrackHistorySheet(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 20.dp, vertical = 12.dp),
-            verticalArrangement = Arrangement.spacedBy(4.dp),
+                .padding(horizontal = 18.dp, vertical = 10.dp),
         ) {
-            Text(
-                text = stringResource(R.string.track_history_count, tracks.size),
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.SemiBold,
-                modifier = Modifier.padding(bottom = 12.dp),
+            val selectedTrack = tracks.firstOrNull { it.id == selectedTrackId }
+            DrawerHeader(
+                title = stringResource(R.string.track_history_count, tracks.size),
+                subtitle = selectedTrack?.let { stringResource(R.string.track_current_label, it.name) },
+                onDismiss = onDismiss,
             )
+            Spacer(Modifier.height(14.dp))
             if (tracks.isEmpty()) {
-                Text(
-                    text = stringResource(R.string.no_tracks),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(vertical = 20.dp),
+                EmptyStateBlock(
+                    title = stringResource(R.string.no_tracks),
+                    body = stringResource(R.string.track_history_empty_help),
                 )
             } else {
-                tracks.forEach { track ->
-                    val selected = track.id == selectedTrackId
-                    val stats = track.stats()
-                    Surface(
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(8.dp),
-                        color = if (selected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface,
-                    ) {
-                        Row(
-                            modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            Column(Modifier.weight(1f)) {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Text(
-                                        text = track.name,
-                                        style = MaterialTheme.typography.bodyLarge,
-                                        fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis,
-                                        modifier = Modifier.weight(1f, fill = false),
-                                    )
-                                    if (selected) {
-                                        Spacer(Modifier.width(8.dp))
-                                        StatusPill(stringResource(R.string.selected), PillTone.Success)
-                                    }
-                                }
-                                Spacer(Modifier.height(2.dp))
-                                Text(
-                                    text = "${track.points.size} ${stringResource(R.string.points_short)} · ${formatDuration(stats.duration)} · ${formatDistance(stats.distanceMeters)}",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                )
-                            }
-                            Row {
-                                IconButton(onClick = { onTrackSelected(track.id); onExportGpx() }, modifier = Modifier.size(48.dp)) {
-                                    Icon(Icons.Default.Share, contentDescription = stringResource(R.string.export_track_gpx, track.name), modifier = Modifier.size(18.dp))
-                                }
-                                IconButton(onClick = { onTrackSelected(track.id); onRenameTrack() }, modifier = Modifier.size(48.dp)) {
-                                    Icon(Icons.Default.Edit, contentDescription = stringResource(R.string.rename_track, track.name), modifier = Modifier.size(18.dp))
-                                }
-                                IconButton(onClick = { onTrackSelected(track.id); onDeleteTrack() }, modifier = Modifier.size(48.dp)) {
-                                    Icon(Icons.Default.Delete, contentDescription = stringResource(R.string.delete_track, track.name), modifier = Modifier.size(18.dp), tint = MaterialTheme.colorScheme.error)
-                                }
-                            }
-                        }
+                LazyColumn(
+                    modifier = Modifier.heightIn(max = 460.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    itemsIndexed(tracks) { _, track ->
+                        TrackManagementRow(
+                            track = track,
+                            selected = track.id == selectedTrackId,
+                            onSelect = { onTrackSelected(track.id) },
+                            onExportGpx = { onTrackSelected(track.id); onExportGpx() },
+                            onRenameTrack = { onTrackSelected(track.id); onRenameTrack() },
+                            onDeleteTrack = { onTrackSelected(track.id); onDeleteTrack() },
+                        )
                     }
                 }
             }
-            Spacer(Modifier.height(16.dp))
+            Spacer(Modifier.height(18.dp))
+        }
+    }
+}
+
+@Composable
+private fun TrackManagementRow(
+    track: Track,
+    selected: Boolean,
+    onSelect: () -> Unit,
+    onExportGpx: () -> Unit,
+    onRenameTrack: () -> Unit,
+    onDeleteTrack: () -> Unit,
+) {
+    val stats = track.stats()
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(14.dp))
+            .clickable(onClick = onSelect),
+        shape = RoundedCornerShape(14.dp),
+        color = if (selected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f),
+        border = if (selected) {
+            androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.35f))
+        } else {
+            null
+        },
+    ) {
+        Column(Modifier.padding(horizontal = 14.dp, vertical = 15.dp)) {
+            Row(verticalAlignment = Alignment.Top) {
+                Column(Modifier.weight(1f)) {
+                    Text(
+                        text = track.name,
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        text = "${track.points.size} ${stringResource(R.string.points_short)} · ${formatDuration(stats.duration)} · ${formatDistance(stats.distanceMeters)}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                if (selected) {
+                    Spacer(Modifier.width(8.dp))
+                    StatusPill(stringResource(R.string.selected), PillTone.Success)
+                }
+            }
+            Spacer(Modifier.height(12.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                SoftActionButton(
+                    text = stringResource(R.string.export_gpx),
+                    onClick = onExportGpx,
+                    modifier = Modifier.weight(1f),
+                )
+                SoftActionButton(
+                    text = stringResource(R.string.rename),
+                    onClick = onRenameTrack,
+                    modifier = Modifier.weight(1f),
+                )
+                SoftActionButton(
+                    text = stringResource(R.string.delete),
+                    onClick = onDeleteTrack,
+                    modifier = Modifier.weight(1f),
+                    danger = true,
+                )
+            }
         }
     }
 }
@@ -1192,78 +1742,45 @@ private fun MatchScreen(
     onWriteDefault: () -> Unit,
 ) {
     val selectedTrack = state.matchTrackId?.let { id -> state.tracks.firstOrNull { it.id == id } }
-    Box(modifier = modifier.fillMaxSize()) {
-        LazyColumn(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(MaterialTheme.colorScheme.background),
-            contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 20.dp, bottom = 80.dp),
-            verticalArrangement = Arrangement.spacedBy(18.dp),
-        ) {
+    LazyColumn(
+        modifier = modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.background),
+        contentPadding = PaddingValues(start = 18.dp, top = 6.dp, end = 18.dp, bottom = 24.dp),
+        verticalArrangement = Arrangement.spacedBy(14.dp),
+    ) {
+        item {
+            TrackSourceButton(
+                selectedTrack = selectedTrack,
+                onClick = onShowTrackSource,
+            )
+        }
+        if (state.matches.isEmpty()) {
             item {
-                TrackSourceButton(
-                    selectedTrack = selectedTrack,
-                    onClick = onShowTrackSource,
+                PhotoInputPanel(
+                    bulkOperation = state.bulkOperation,
+                    onSelectPhotos = onSelectPhotos,
+                    onSelectFolder = onSelectFolder,
+                )
+            }
+        } else {
+            item {
+                PhotoBatchButton(
+                    matches = state.matches,
+                    onClick = onShowPhotoBatch,
                 )
             }
             item {
-                ActionRow {
-                    PrimaryActionButton(
-                        text = stringResource(R.string.select_photos),
-                        icon = Icons.Default.Search,
-                        onClick = onSelectPhotos,
-                        enabled = state.bulkOperation == null,
-                    )
-                    SecondaryActionButton(
-                        text = stringResource(R.string.select_folder),
-                        icon = Icons.Default.Share,
-                        onClick = onSelectFolder,
-                        enabled = state.bulkOperation == null,
-                    )
-                }
-            }
-            state.bulkOperation?.let { operation ->
-                item { BulkOperationPanel(operation) }
-            }
-            if (state.matches.isEmpty() && state.bulkOperation == null) {
-                item { EmptyPanel(stringResource(R.string.no_photos)) }
-            } else if (state.matches.isNotEmpty()) {
-                item {
-                    PhotoBatchButton(
-                        matches = state.matches,
-                        onClick = onShowPhotoBatch,
-                    )
-                }
-                item {
-                    ReviewWritePanel(
-                        settings = state.settings,
-                        readiness = writeReadiness(state.matches),
-                        bulkOperation = state.bulkOperation,
-                    )
-                }
+                WriteActionPanel(
+                    settings = state.settings,
+                    readiness = writeReadiness(state.matches),
+                    bulkOperation = state.bulkOperation,
+                    onWriteDefault = onWriteDefault,
+                )
             }
         }
-        if (state.matches.isNotEmpty() && state.bulkOperation == null) {
-            ExtendedFloatingActionButton(
-                onClick = onWriteDefault,
-                modifier = Modifier
-                    .align(Alignment.BottomEnd)
-                    .padding(20.dp),
-                shape = RoundedCornerShape(12.dp),
-                containerColor = if (state.settings.preferExportCopies) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.errorContainer,
-                contentColor = if (state.settings.preferExportCopies) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onErrorContainer,
-            ) {
-                Icon(
-                    if (state.settings.preferExportCopies) Icons.Default.Share else Icons.Default.Warning,
-                    contentDescription = null,
-                    modifier = Modifier.size(18.dp),
-                )
-                Spacer(Modifier.width(8.dp))
-                Text(
-                    if (state.settings.preferExportCopies) stringResource(R.string.write_copies) else stringResource(R.string.write_originals),
-                    fontWeight = FontWeight.SemiBold,
-                )
-            }
+        state.bulkOperation?.let { operation ->
+            item { BulkOperationPanel(operation) }
         }
     }
 
@@ -1292,53 +1809,156 @@ private fun TrackSourceButton(
     selectedTrack: Track?,
     onClick: () -> Unit,
 ) {
+    if (selectedTrack == null) {
+        Surface(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(14.dp))
+                .clickable(onClick = onClick),
+            color = MaterialTheme.colorScheme.surfaceContainerLow,
+            border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+        ) {
+            Column(
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 22.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                TrackWriteLineIcon(
+                    icon = TrackWriteIcon.Route,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(22.dp),
+                )
+                Text(
+                    text = stringResource(R.string.no_tracks),
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.ExtraBold,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    textAlign = TextAlign.Center,
+                )
+                Text(
+                    text = stringResource(R.string.no_match_track_help),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    textAlign = TextAlign.Center,
+                )
+            }
+        }
+        return
+    }
+
+    val stats = selectedTrack.stats()
     Surface(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(12.dp))
+            .clip(RoundedCornerShape(14.dp))
             .clickable(onClick = onClick),
-        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
+        color = MaterialTheme.colorScheme.surfaceContainerLow,
+        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
     ) {
-        Row(
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Icon(Icons.Default.LocationOn, contentDescription = null, modifier = Modifier.size(20.dp))
-            Spacer(Modifier.width(12.dp))
-            Column(Modifier.weight(1f)) {
-                if (selectedTrack != null) {
-                    val stats = selectedTrack.stats()
-                    Text(
-                        text = selectedTrack.name,
-                        style = MaterialTheme.typography.bodyLarge,
-                        fontWeight = FontWeight.Medium,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                    Spacer(Modifier.height(2.dp))
-                    Text(
-                        text = "${selectedTrack.points.size} ${stringResource(R.string.points_short)} · ${formatDuration(stats.duration)} · ${formatDistance(stats.distanceMeters)}",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                } else {
-                    Text(
-                        text = stringResource(R.string.match_track_source),
-                        style = MaterialTheme.typography.bodyLarge,
-                        fontWeight = FontWeight.Medium,
-                    )
-                    Spacer(Modifier.height(2.dp))
-                    Text(
-                        text = stringResource(R.string.no_match_track_help),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
+        Column(modifier = Modifier.padding(16.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = stringResource(R.string.match_track_source),
+                    style = MaterialTheme.typography.labelSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.weight(1f),
+                )
+                Icon(
+                    Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.65f),
+                    modifier = Modifier.size(18.dp),
+                )
             }
+            Spacer(Modifier.height(12.dp))
             Text(
-                "›",
-                style = MaterialTheme.typography.titleLarge,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                text = selectedTrack.name,
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.ExtraBold,
+                color = MaterialTheme.colorScheme.onSurface,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Spacer(Modifier.height(14.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                CompactMetric(
+                    label = stringResource(R.string.points_short),
+                    value = selectedTrack.points.size.toString(),
+                    modifier = Modifier.weight(1f),
+                )
+                CompactMetric(
+                    label = stringResource(R.string.duration),
+                    value = formatDuration(stats.duration),
+                    modifier = Modifier.weight(1f),
+                )
+                CompactMetric(
+                    label = stringResource(R.string.distance),
+                    value = formatDistance(stats.distanceMeters),
+                    modifier = Modifier.weight(1f),
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun PhotoInputPanel(
+    bulkOperation: BulkOperation?,
+    onSelectPhotos: () -> Unit,
+    onSelectFolder: () -> Unit,
+) {
+    Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
+        PhotoInputButton(
+            text = stringResource(R.string.select_photos),
+            icon = TrackWriteIcon.Photo,
+            onClick = onSelectPhotos,
+            enabled = bulkOperation == null,
+            modifier = Modifier.weight(1f),
+        )
+        PhotoInputButton(
+            text = stringResource(R.string.select_folder),
+            icon = TrackWriteIcon.Folder,
+            onClick = onSelectFolder,
+            enabled = bulkOperation == null,
+            modifier = Modifier.weight(1f),
+        )
+    }
+}
+
+@Composable
+private fun PhotoInputButton(
+    text: String,
+    icon: TrackWriteIcon,
+    enabled: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Surface(
+        modifier = modifier
+            .heightIn(min = 62.dp)
+            .clip(RoundedCornerShape(10.dp))
+            .clickable(enabled = enabled, onClick = onClick),
+        color = MaterialTheme.colorScheme.surfaceContainerLow,
+        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+    ) {
+        Column(
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 15.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(7.dp, Alignment.CenterVertically),
+        ) {
+            TrackWriteLineIcon(
+                icon = icon,
+                tint = MaterialTheme.colorScheme.onSurface.copy(alpha = if (enabled) 1f else 0.45f),
+                modifier = Modifier.size(22.dp),
+            )
+            Text(
+                text = text,
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = if (enabled) 1f else 0.45f),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
             )
         }
     }
@@ -1357,75 +1977,93 @@ private fun TrackSourceSheet(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 20.dp, vertical = 12.dp),
-            verticalArrangement = Arrangement.spacedBy(4.dp),
+                .padding(horizontal = 18.dp, vertical = 10.dp),
         ) {
-            Text(
-                text = stringResource(R.string.match_track_source),
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.SemiBold,
-                modifier = Modifier.padding(bottom = 12.dp),
+            DrawerHeader(
+                title = stringResource(R.string.match_track_source),
+                onDismiss = onDismiss,
             )
+            Spacer(Modifier.height(14.dp))
+            SoftActionButton(
+                text = stringResource(R.string.import_gpx),
+                onClick = { onImportGpx() },
+                modifier = Modifier.fillMaxWidth(),
+                icon = TrackWriteIcon.File,
+                minHeight = 48.dp,
+            )
+            Spacer(Modifier.height(14.dp))
             if (tracks.isEmpty()) {
-                Text(
-                    text = stringResource(R.string.no_tracks),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(vertical = 20.dp),
+                EmptyStateBlock(
+                    title = stringResource(R.string.no_tracks),
+                    body = stringResource(R.string.no_match_track_help),
                 )
             } else {
-                tracks.forEach { track ->
-                    val selected = track.id == selectedTrackId
-                    val stats = track.stats()
-                    Surface(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clip(RoundedCornerShape(8.dp))
-                            .clickable { onTrackSelected(track.id); onDismiss() },
-                        color = if (selected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface,
-                        border = if (selected) androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.primary) else null,
-                    ) {
-                        Row(
-                            modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            Column(Modifier.weight(1f)) {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Text(
-                                        text = track.name,
-                                        style = MaterialTheme.typography.bodyLarge,
-                                        fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis,
-                                        modifier = Modifier.weight(1f, fill = false),
-                                    )
-                                    if (selected) {
-                                        Spacer(Modifier.width(8.dp))
-                                        StatusPill(stringResource(R.string.selected), PillTone.Success)
-                                    }
-                                }
-                                Spacer(Modifier.height(2.dp))
-                                Text(
-                                    text = "${track.points.size} ${stringResource(R.string.points_short)} · ${formatDuration(stats.duration)} · ${formatDistance(stats.distanceMeters)}",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                )
-                            }
-                        }
+                LazyColumn(
+                    modifier = Modifier.heightIn(max = 400.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    itemsIndexed(tracks) { _, track ->
+                        SelectableTrackRow(
+                            track = track,
+                            selected = track.id == selectedTrackId,
+                            onClick = { onTrackSelected(track.id); onDismiss() },
+                        )
                     }
                 }
             }
-            Spacer(Modifier.height(12.dp))
-            OutlinedButton(
-                onClick = { onImportGpx() },
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(8.dp),
-            ) {
-                Icon(Icons.Default.Share, contentDescription = null, modifier = Modifier.size(18.dp))
-                Spacer(Modifier.width(8.dp))
-                Text(stringResource(R.string.import_gpx))
+            Spacer(Modifier.height(18.dp))
+        }
+    }
+}
+
+@Composable
+private fun SelectableTrackRow(
+    track: Track,
+    selected: Boolean,
+    onClick: () -> Unit,
+) {
+    val stats = track.stats()
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(14.dp))
+            .clickable(onClick = onClick),
+        shape = RoundedCornerShape(14.dp),
+        color = if (selected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f),
+        border = if (selected) {
+            androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.35f))
+        } else {
+            null
+        },
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 15.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(Modifier.weight(1f)) {
+                Text(
+                    text = track.name,
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Bold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    text = "${track.points.size} ${stringResource(R.string.points_short)} · ${formatDuration(stats.duration)} · ${formatDistance(stats.distanceMeters)}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
             }
-            Spacer(Modifier.height(16.dp))
+            if (selected) {
+                Spacer(Modifier.width(10.dp))
+                Icon(
+                    Icons.Default.Check,
+                    contentDescription = stringResource(R.string.selected),
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(20.dp),
+                )
+            }
         }
     }
 }
@@ -1438,39 +2076,41 @@ private fun PhotoBatchButton(
     val manualCount = matches.count { it.photo.manualLocation != null }
     val matchedCount = matches.count { it.selectedPosition != null }
     val unmatchedCount = matches.size - matchedCount
+    val readiness = writeReadiness(matches)
     Surface(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(12.dp))
+            .clip(RoundedCornerShape(14.dp))
             .clickable(onClick = onClick),
-        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
+        color = MaterialTheme.colorScheme.surfaceContainerLow,
+        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
     ) {
-        Row(
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Column(Modifier.weight(1f)) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
                     text = stringResource(R.string.photo_batch_count, matches.size),
-                    style = MaterialTheme.typography.bodyLarge,
-                    fontWeight = FontWeight.Medium,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.weight(1f),
                 )
-                Spacer(Modifier.height(2.dp))
-                Text(
-                    text = stringResource(R.string.photo_batch_stats, matchedCount, unmatchedCount, manualCount),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                Icon(
+                    Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.65f),
+                    modifier = Modifier.size(20.dp),
                 )
+            }
+            Spacer(Modifier.height(14.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                CompactMetric(stringResource(R.string.matched), matchedCount.toString(), Modifier.weight(1f))
+                CompactMetric(stringResource(R.string.unmatched), unmatchedCount.toString(), Modifier.weight(1f))
+                CompactMetric(stringResource(R.string.manual), manualCount.toString(), Modifier.weight(1f))
+                CompactMetric(stringResource(R.string.skipped_count), readiness.skipped.toString(), Modifier.weight(1f))
             }
             if (unmatchedCount > 0) {
+                Spacer(Modifier.height(12.dp))
                 StatusPill(stringResource(R.string.photos_need_attention, unmatchedCount), PillTone.Warning)
-                Spacer(Modifier.width(8.dp))
             }
-            Text(
-                "›",
-                style = MaterialTheme.typography.titleLarge,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
         }
     }
 }
@@ -1488,29 +2128,112 @@ private fun PhotoBatchSheet(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 20.dp, vertical = 12.dp),
+                .padding(horizontal = 18.dp, vertical = 10.dp),
         ) {
-            Text(
-                text = stringResource(R.string.photo_batch_count, matches.size),
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.SemiBold,
-                modifier = Modifier.padding(bottom = 12.dp),
+            val manualCount = matches.count { it.photo.manualLocation != null }
+            val matchedCount = matches.count { it.selectedPosition != null }
+            val unmatchedCount = matches.size - matchedCount
+            DrawerHeader(
+                title = stringResource(R.string.photo_batch_count, matches.size),
+                subtitle = stringResource(R.string.photo_batch_stats, matchedCount, unmatchedCount, manualCount),
+                onDismiss = onDismiss,
             )
-            LazyColumn(
-                modifier = Modifier.heightIn(max = 400.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                itemsIndexed(matches) { index, result ->
-                    PhotoMatchRow(
-                        index = index,
-                        result = result,
-                        highlighted = index == highlightedPhotoIndex,
-                        onSetManualLocation = { onSetManualLocation(index) },
-                        onClearManualLocation = { onClearManualLocation(index) },
-                    )
+            Spacer(Modifier.height(14.dp))
+            if (matches.isEmpty()) {
+                EmptyStateBlock(
+                    title = stringResource(R.string.no_photos),
+                    body = stringResource(R.string.photo_input_help),
+                )
+            } else {
+                LazyColumn(
+                    modifier = Modifier.heightIn(max = 470.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    itemsIndexed(matches) { index, result ->
+                        PhotoMatchRow(
+                            index = index,
+                            result = result,
+                            highlighted = index == highlightedPhotoIndex,
+                            onSetManualLocation = { onSetManualLocation(index) },
+                            onClearManualLocation = { onClearManualLocation(index) },
+                        )
+                    }
                 }
             }
-            Spacer(Modifier.height(16.dp))
+            Spacer(Modifier.height(18.dp))
+        }
+    }
+}
+
+@Composable
+private fun WriteActionPanel(
+    settings: AppSettings,
+    readiness: WriteReadiness,
+    bulkOperation: BulkOperation?,
+    onWriteDefault: () -> Unit,
+) {
+    val preferCopies = settings.preferExportCopies
+    val modeTone = if (preferCopies) PillTone.Success else PillTone.Error
+    val modeLabel = stringResource(if (preferCopies) R.string.safe_default else R.string.dangerous_action)
+    SurfaceCard(
+        containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+        borderColor = if (preferCopies) MaterialTheme.colorScheme.outlineVariant else MaterialTheme.colorScheme.error.copy(alpha = 0.25f),
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                text = stringResource(R.string.write_area_title),
+                modifier = Modifier.weight(1f),
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.ExtraBold,
+                color = MaterialTheme.colorScheme.onSurface,
+            )
+            StatusPill(modeLabel, modeTone)
+        }
+        Spacer(Modifier.height(7.dp))
+        Text(
+            text = if (readiness.writeable == 0) {
+                stringResource(R.string.write_no_writeable)
+            } else {
+                stringResource(R.string.write_readiness, readiness.writeable, readiness.skipped)
+            },
+            modifier = Modifier.fillMaxWidth(),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign = TextAlign.Start,
+        )
+        if (!preferCopies) {
+            Spacer(Modifier.height(10.dp))
+            Surface(
+                shape = RoundedCornerShape(6.dp),
+                color = MaterialTheme.colorScheme.errorContainer,
+            ) {
+                Text(
+                    text = stringResource(R.string.write_originals_default_desc),
+                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 9.dp),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onErrorContainer,
+                )
+            }
+        }
+        Spacer(Modifier.height(10.dp))
+        if (preferCopies) {
+            PrimaryActionButton(
+                text = stringResource(R.string.write_copies),
+                onClick = onWriteDefault,
+                modifier = Modifier.fillMaxWidth(),
+                enabled = bulkOperation == null,
+            )
+        } else {
+            DangerActionButton(
+                text = stringResource(R.string.write_originals),
+                onClick = onWriteDefault,
+                modifier = Modifier.fillMaxWidth(),
+                enabled = bulkOperation == null,
+            )
         }
     }
 }
@@ -1529,7 +2252,7 @@ private fun PhotoMatchRow(
     SurfaceCard(
         containerColor = if (highlighted) MaterialTheme.colorScheme.tertiaryContainer else MaterialTheme.colorScheme.surface,
     ) {
-        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+        Row(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
             PhotoThumbnail(photo.uri)
             Column(modifier = Modifier.weight(1f)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -1543,32 +2266,32 @@ private fun PhotoMatchRow(
                     )
                     MatchPill(photo, match)
                 }
-                Spacer(Modifier.height(6.dp))
+                Spacer(Modifier.height(8.dp))
                 Text(
                     text = "${stringResource(R.string.captured)}: ${photo.capturedAt ?: stringResource(R.string.no_exif_time)}",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
-                Spacer(Modifier.height(6.dp))
+                Spacer(Modifier.height(8.dp))
                 Text(
                     text = matchDetail(photo, match),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurface,
                 )
-                Spacer(Modifier.height(10.dp))
+                Spacer(Modifier.height(12.dp))
                 ActionRow {
-                    OutlinedButton(onClick = onSetManualLocation) {
-                        Icon(Icons.Default.LocationOn, contentDescription = null, modifier = Modifier.size(18.dp))
-                        Spacer(Modifier.width(6.dp))
-                        Text(stringResource(R.string.set_location))
-                    }
+                    SoftActionButton(
+                        text = stringResource(R.string.set_location),
+                        onClick = onSetManualLocation,
+                        minHeight = 36.dp,
+                    )
                     if (photo.manualLocation != null) {
-                        OutlinedButton(
+                        SoftActionButton(
+                            text = stringResource(R.string.clear),
                             onClick = onClearManualLocation,
-                            colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error),
-                        ) {
-                            Text(stringResource(R.string.clear))
-                        }
+                            danger = true,
+                            minHeight = 36.dp,
+                        )
                     }
                 }
             }
@@ -1579,7 +2302,7 @@ private fun PhotoMatchRow(
 @Composable
 private fun PhotoThumbnail(uri: Uri) {
     val context = LocalContext.current
-    val targetSizePx = with(LocalDensity.current) { 64.dp.roundToPx() }
+    val targetSizePx = with(LocalDensity.current) { 70.dp.roundToPx() }
     var bitmap by remember(uri) { mutableStateOf<androidx.compose.ui.graphics.ImageBitmap?>(null) }
     LaunchedEffect(uri) {
         bitmap = withContext(Dispatchers.IO) {
@@ -1594,7 +2317,7 @@ private fun PhotoThumbnail(uri: Uri) {
     }
     Box(
         modifier = Modifier
-            .size(64.dp)
+            .size(70.dp)
             .clip(RoundedCornerShape(8.dp))
             .background(MaterialTheme.colorScheme.surfaceVariant),
         contentAlignment = Alignment.Center,
@@ -1608,7 +2331,11 @@ private fun PhotoThumbnail(uri: Uri) {
                 contentScale = ContentScale.Crop,
             )
         } else {
-            Icon(Icons.Default.Search, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+            TrackWriteLineIcon(
+                icon = TrackWriteIcon.Photo,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(22.dp),
+            )
         }
     }
 }
@@ -1658,30 +2385,6 @@ private fun MatchPill(photo: PhotoCandidate, match: PhotoMatch?) {
 }
 
 @Composable
-private fun ReviewWritePanel(
-    settings: AppSettings,
-    readiness: WriteReadiness,
-    bulkOperation: BulkOperation?,
-) {
-    SectionBlock {
-        Spacer(Modifier.height(10.dp))
-        Text(
-            text = stringResource(R.string.write_readiness, readiness.writeable, readiness.skipped),
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-        if (bulkOperation != null) {
-            Spacer(Modifier.height(8.dp))
-            Text(
-                text = bulkOperationLabel(bulkOperation),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.primary,
-            )
-        }
-    }
-}
-
-@Composable
 private fun BulkOperationPanel(operation: BulkOperation) {
     Surface(
         modifier = Modifier.fillMaxWidth(),
@@ -1690,7 +2393,7 @@ private fun BulkOperationPanel(operation: BulkOperation) {
     ) {
         Text(
             text = bulkOperationLabel(operation),
-            modifier = Modifier.padding(14.dp),
+            modifier = Modifier.padding(16.dp),
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onPrimaryContainer,
         )
@@ -1718,105 +2421,184 @@ private fun ActionRow(content: @Composable FlowRowScope.() -> Unit) {
 }
 
 @Composable
-private fun PrimaryActionButton(text: String, icon: ImageVector, onClick: () -> Unit, enabled: Boolean = true) {
-    Button(onClick = onClick, enabled = enabled, shape = RoundedCornerShape(8.dp)) {
-        Icon(icon, contentDescription = null, modifier = Modifier.size(18.dp))
-        Spacer(Modifier.width(8.dp))
-        Text(text)
-    }
-}
-
-@Composable
-private fun SecondaryActionButton(text: String, icon: ImageVector, onClick: () -> Unit, enabled: Boolean = true) {
-    OutlinedButton(onClick = onClick, enabled = enabled, shape = RoundedCornerShape(8.dp)) {
-        Icon(icon, contentDescription = null, modifier = Modifier.size(18.dp))
-        Spacer(Modifier.width(8.dp))
-        Text(text)
-    }
-}
-
-@Composable
-private fun DangerActionButton(text: String, icon: ImageVector, onClick: () -> Unit, enabled: Boolean = true) {
-    OutlinedButton(
-        onClick = onClick,
-        enabled = enabled,
-        shape = RoundedCornerShape(8.dp),
-        colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error),
+private fun PrimaryActionButton(
+    text: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true,
+) {
+    Surface(
+        modifier = modifier
+            .heightIn(min = 44.dp)
+            .clip(RoundedCornerShape(10.dp))
+            .clickable(enabled = enabled, onClick = onClick),
+        shape = RoundedCornerShape(10.dp),
+        color = MaterialTheme.colorScheme.primary.copy(alpha = if (enabled) 1f else 0.45f),
     ) {
-        Icon(icon, contentDescription = null, modifier = Modifier.size(18.dp))
-        Spacer(Modifier.width(8.dp))
-        Text(text)
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = 14.dp),
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(
+                text = text,
+                style = MaterialTheme.typography.labelLarge,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onPrimary,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
     }
 }
 
 @Composable
-private fun DangerFilledButton(text: String, icon: ImageVector, onClick: () -> Unit, enabled: Boolean = true) {
-    Button(
-        onClick = onClick,
-        enabled = enabled,
-        shape = RoundedCornerShape(8.dp),
-        colors = ButtonDefaults.buttonColors(
-            containerColor = MaterialTheme.colorScheme.error,
-            contentColor = MaterialTheme.colorScheme.onError,
-        ),
+private fun DangerActionButton(
+    text: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true,
+) {
+    Surface(
+        modifier = modifier
+            .widthIn(min = 72.dp)
+            .heightIn(min = 44.dp)
+            .clip(RoundedCornerShape(10.dp))
+            .clickable(enabled = enabled, onClick = onClick),
+        shape = RoundedCornerShape(10.dp),
+        color = MaterialTheme.colorScheme.errorContainer.copy(alpha = if (enabled) 1f else 0.45f),
+        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.error.copy(alpha = 0.22f)),
     ) {
-        Icon(icon, contentDescription = null, modifier = Modifier.size(18.dp))
-        Spacer(Modifier.width(8.dp))
-        Text(text)
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = 14.dp),
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(
+                text = text,
+                style = MaterialTheme.typography.labelLarge,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onErrorContainer.copy(alpha = if (enabled) 1f else 0.55f),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
     }
 }
 
 @Composable
-private fun SectionBlock(content: @Composable ColumnScope.() -> Unit) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 2.dp),
-        content = content,
-    )
+private fun SoftActionButton(
+    text: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    danger: Boolean = false,
+    icon: TrackWriteIcon? = null,
+    minHeight: Dp = 38.dp,
+    enabled: Boolean = true,
+) {
+    val contentColor = if (danger) {
+        MaterialTheme.colorScheme.onErrorContainer
+    } else {
+        MaterialTheme.colorScheme.onSurface
+    }
+    val containerColor = if (danger) {
+        MaterialTheme.colorScheme.errorContainer
+    } else {
+        MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f)
+    }
+    Surface(
+        modifier = modifier
+            .heightIn(min = minHeight)
+            .clip(RoundedCornerShape(10.dp))
+            .clickable(enabled = enabled, onClick = onClick),
+        shape = RoundedCornerShape(10.dp),
+        color = containerColor.copy(alpha = if (enabled) 1f else 0.45f),
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = 10.dp),
+            horizontalArrangement = Arrangement.Center,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            if (icon != null) {
+                TrackWriteLineIcon(
+                    icon = icon,
+                    tint = if (danger) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(16.dp),
+                )
+                Spacer(Modifier.width(7.dp))
+            }
+            Text(
+                text = text,
+                style = MaterialTheme.typography.labelSmall,
+                fontWeight = FontWeight.ExtraBold,
+                color = contentColor.copy(alpha = if (enabled) 1f else 0.55f),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                textAlign = TextAlign.Center,
+            )
+        }
+    }
 }
 
 @Composable
 private fun SurfaceCard(
     containerColor: androidx.compose.ui.graphics.Color = MaterialTheme.colorScheme.surface,
+    borderColor: androidx.compose.ui.graphics.Color = MaterialTheme.colorScheme.outlineVariant,
     content: @Composable ColumnScope.() -> Unit,
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(8.dp),
+        shape = RoundedCornerShape(14.dp),
         colors = CardDefaults.cardColors(containerColor = containerColor),
         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
-        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
+        border = androidx.compose.foundation.BorderStroke(1.dp, borderColor),
     ) {
         Column(
-            modifier = Modifier.padding(16.dp),
+            modifier = Modifier.padding(18.dp),
             content = content,
         )
     }
 }
 
 @Composable
-private fun EmptyPanel(text: String) {
+private fun EmptyStateBlock(
+    title: String,
+    body: String,
+    modifier: Modifier = Modifier,
+) {
     Surface(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(8.dp),
-        color = MaterialTheme.colorScheme.surfaceVariant,
+        modifier = modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(14.dp),
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f),
     ) {
-        Text(
-            text = text,
-            modifier = Modifier.padding(18.dp),
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-    }
-}
-
-@Composable
-private fun SectionHeader(text: String, icon: ImageVector) {
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
-        Spacer(Modifier.width(8.dp))
-        Text(text, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+        Column(
+            modifier = Modifier.padding(20.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            TrackWriteLineIcon(
+                icon = TrackWriteIcon.Empty,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(28.dp),
+            )
+            Spacer(Modifier.height(14.dp))
+            Text(
+                text = title,
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.Bold,
+                textAlign = TextAlign.Center,
+            )
+            Spacer(Modifier.height(4.dp))
+            Text(
+                text = body,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = TextAlign.Center,
+            )
+        }
     }
 }
 
@@ -1876,16 +2658,28 @@ private fun StatusPill(label: String, tone: PillTone) {
         PillTone.Neutral -> MaterialTheme.colorScheme.surfaceVariant to MaterialTheme.colorScheme.onSurfaceVariant
     }
     Surface(shape = RoundedCornerShape(6.dp), color = colors.first) {
-        Text(
-            text = label,
+        Row(
             modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-            style = MaterialTheme.typography.labelSmall,
-            fontWeight = FontWeight.SemiBold,
-            color = colors.second,
-        )
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(6.dp)
+                    .clip(RoundedCornerShape(999.dp))
+                    .background(colors.second),
+            )
+            Text(
+                text = label,
+                style = MaterialTheme.typography.labelSmall,
+                fontWeight = FontWeight.SemiBold,
+                color = colors.second,
+            )
+        }
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun SettingsScreen(
     modifier: Modifier,
@@ -1893,25 +2687,23 @@ private fun SettingsScreen(
     onSettingsChanged: (AppSettings) -> Unit,
     onChooseExportFolder: () -> Unit,
 ) {
-    var showAppearanceDialog by remember { mutableStateOf(false) }
-    var showFrequencyDialog by remember { mutableStateOf(false) }
+    var showAppearanceSheet by remember { mutableStateOf(false) }
+    var showFrequencySheet by remember { mutableStateOf(false) }
     val settingsGroupColor = MaterialTheme.colorScheme.surfaceContainerLow
 
     LazyColumn(
         modifier = modifier.background(MaterialTheme.colorScheme.background),
-        contentPadding = PaddingValues(16.dp),
-        verticalArrangement = Arrangement.spacedBy(24.dp),
+        contentPadding = PaddingValues(start = 18.dp, top = 4.dp, end = 18.dp, bottom = 24.dp),
+        verticalArrangement = Arrangement.spacedBy(2.dp),
     ) {
         item {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Column {
                 SettingsSectionHeader(stringResource(R.string.general_settings))
                 SettingsGroup(containerColor = settingsGroupColor) {
                     SettingNavigationRow(
                         title = stringResource(R.string.appearance),
                         value = appearanceLabel(settings.appearance),
-                        icon = Icons.Default.Palette,
-                        subtitle = stringResource(R.string.appearance_desc),
-                        onClick = { showAppearanceDialog = true },
+                        onClick = { showAppearanceSheet = true },
                     )
                     HorizontalDivider(
                         color = MaterialTheme.colorScheme.outlineVariant,
@@ -1920,15 +2712,14 @@ private fun SettingsScreen(
                     SettingNavigationRow(
                         title = stringResource(R.string.recording_frequency),
                         value = frequencyLabel(settings.recordingFrequency),
-                        icon = Icons.Default.Speed,
-                        subtitle = stringResource(R.string.recording_frequency_desc),
-                        onClick = { showFrequencyDialog = true },
+                        subtitle = frequencyDescription(settings.recordingFrequency),
+                        onClick = { showFrequencySheet = true },
                     )
                 }
             }
         }
         item {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Column {
                 SettingsSectionHeader(stringResource(R.string.photo_match_settings))
                 SettingsGroup(containerColor = settingsGroupColor) {
                     SettingStepper(
@@ -1961,7 +2752,7 @@ private fun SettingsScreen(
             }
         }
         item {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Column {
                 SettingsSectionHeader(stringResource(R.string.export_settings))
                 SettingsGroup(containerColor = settingsGroupColor) {
                     ExportModeSelector(
@@ -1979,129 +2770,52 @@ private fun SettingsScreen(
         }
     }
 
-    if (showAppearanceDialog) {
-        AppearanceDialog(
-            selected = settings.appearance,
-            onDismiss = { showAppearanceDialog = false },
-            onConfirm = { mode ->
-                onSettingsChanged(settings.copy(appearance = mode))
-                showAppearanceDialog = false
-            },
-        )
+    if (showAppearanceSheet) {
+        SettingChoiceSheet(
+            title = stringResource(R.string.appearance),
+            onDismiss = { showAppearanceSheet = false },
+        ) {
+            AppearanceMode.entries.forEach { mode ->
+                SettingChoiceRow(
+                    title = appearanceLabel(mode),
+                    selected = settings.appearance == mode,
+                    onClick = {
+                        onSettingsChanged(settings.copy(appearance = mode))
+                        showAppearanceSheet = false
+                    },
+                )
+            }
+        }
     }
 
-    if (showFrequencyDialog) {
-        FrequencyDialog(
-            selected = settings.recordingFrequency,
-            onDismiss = { showFrequencyDialog = false },
-            onConfirm = { freq ->
-                onSettingsChanged(settings.copy(recordingFrequency = freq))
-                showFrequencyDialog = false
-            },
-        )
+    if (showFrequencySheet) {
+        SettingChoiceSheet(
+            title = stringResource(R.string.recording_frequency),
+            onDismiss = { showFrequencySheet = false },
+        ) {
+            RecordingFrequency.entries.forEach { freq ->
+                SettingChoiceRow(
+                    title = frequencyLabel(freq),
+                    subtitle = frequencyDescription(freq),
+                    selected = settings.recordingFrequency == freq,
+                    onClick = {
+                        onSettingsChanged(settings.copy(recordingFrequency = freq))
+                        showFrequencySheet = false
+                    },
+                )
+            }
+        }
     }
-}
-
-@Composable
-private fun AppearanceDialog(
-    selected: AppearanceMode,
-    onDismiss: () -> Unit,
-    onConfirm: (AppearanceMode) -> Unit,
-) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(stringResource(R.string.appearance)) },
-        text = {
-            Column {
-                AppearanceMode.entries.forEach { mode ->
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .selectable(
-                                selected = selected == mode,
-                                onClick = { onConfirm(mode) },
-                            )
-                            .padding(vertical = 8.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        RadioButton(
-                            selected = selected == mode,
-                            onClick = null,
-                        )
-                        Spacer(Modifier.width(16.dp))
-                        Text(appearanceLabel(mode), style = MaterialTheme.typography.bodyLarge)
-                    }
-                }
-            }
-        },
-        confirmButton = {},
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text(stringResource(R.string.cancel))
-            }
-        },
-    )
-}
-
-@Composable
-private fun FrequencyDialog(
-    selected: RecordingFrequency,
-    onDismiss: () -> Unit,
-    onConfirm: (RecordingFrequency) -> Unit,
-) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(stringResource(R.string.recording_frequency)) },
-        text = {
-            Column {
-                RecordingFrequency.entries.forEach { freq ->
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .selectable(
-                                selected = selected == freq,
-                                onClick = { onConfirm(freq) },
-                            )
-                            .padding(vertical = 8.dp),
-                        verticalAlignment = Alignment.Top,
-                    ) {
-                        RadioButton(
-                            selected = selected == freq,
-                            onClick = null,
-                        )
-                        Spacer(Modifier.width(16.dp))
-                        Column(Modifier.weight(1f)) {
-                            Text(frequencyLabel(freq), style = MaterialTheme.typography.bodyLarge)
-                            val desc = frequencyDescription(freq)
-                            if (desc.isNotEmpty()) {
-                                Text(
-                                    desc,
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                )
-                            }
-                        }
-                    }
-                }
-            }
-        },
-        confirmButton = {},
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text(stringResource(R.string.cancel))
-            }
-        },
-    )
 }
 
 @Composable
 private fun SettingsSectionHeader(title: String) {
     Text(
         text = title,
-        style = MaterialTheme.typography.titleSmall,
-        fontWeight = FontWeight.SemiBold,
+        style = MaterialTheme.typography.labelSmall,
+        fontWeight = FontWeight.Bold,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
-        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+        modifier = Modifier.padding(start = 0.dp, top = 18.dp, bottom = 8.dp),
     )
 }
 
@@ -2111,9 +2825,10 @@ private fun SettingsGroup(
     content: @Composable ColumnScope.() -> Unit,
 ) {
     Surface(
-        shape = RoundedCornerShape(16.dp),
+        shape = RoundedCornerShape(14.dp),
         color = containerColor,
         tonalElevation = 0.dp,
+        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
     ) {
         Column(content = content)
     }
@@ -2123,49 +2838,51 @@ private fun SettingsGroup(
 private fun SettingNavigationRow(
     title: String,
     value: String,
-    icon: ImageVector? = null,
     subtitle: String? = null,
     onClick: () -> Unit,
 ) {
-    Row(
+    Column(
         modifier = Modifier
             .fillMaxWidth()
             .clickable(onClick = onClick)
             .padding(horizontal = 16.dp, vertical = 16.dp),
-        verticalAlignment = if (subtitle != null) Alignment.Top else Alignment.CenterVertically,
     ) {
-        if (icon != null) {
-            Icon(
-                imageVector = icon,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.size(22.dp),
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                text = title,
+                modifier = Modifier.weight(1f),
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurface,
             )
-            Spacer(Modifier.width(16.dp))
+            Text(
+                text = value,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = TextAlign.End,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Icon(
+                Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.62f),
+                modifier = Modifier.size(18.dp),
+            )
         }
-        Column(modifier = Modifier.weight(1f)) {
-            Text(title, style = MaterialTheme.typography.bodyLarge)
-            if (subtitle != null) {
-                Spacer(Modifier.height(2.dp))
-                Text(
-                    subtitle,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
+        if (subtitle != null) {
+            Spacer(Modifier.height(5.dp))
+            Text(
+                subtitle,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+            )
         }
-        Text(
-            value,
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-        Spacer(Modifier.width(8.dp))
-        Icon(
-            Icons.AutoMirrored.Filled.KeyboardArrowRight,
-            contentDescription = null,
-            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
-            modifier = Modifier.size(20.dp),
-        )
     }
 }
 
@@ -2176,21 +2893,74 @@ private fun SettingChoiceRow(
     selected: Boolean,
     onClick: () -> Unit,
 ) {
-    Row(
+    Surface(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(onClick = onClick)
-            .padding(horizontal = 16.dp, vertical = 14.dp),
-        verticalAlignment = Alignment.CenterVertically,
+            .clip(RoundedCornerShape(14.dp))
+            .clickable(onClick = onClick),
+        shape = RoundedCornerShape(14.dp),
+        color = if (selected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f),
+        border = if (selected) {
+            androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.35f))
+        } else {
+            null
+        },
     ) {
-        RadioButton(selected = selected, onClick = null)
-        Spacer(Modifier.width(16.dp))
-        Column(Modifier.weight(1f)) {
-            Text(title, style = MaterialTheme.typography.bodyLarge)
-            if (subtitle != null) {
-                Spacer(Modifier.height(2.dp))
-                Text(subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Row(
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
+            verticalAlignment = Alignment.Top,
+        ) {
+            Column(Modifier.weight(1f)) {
+                Text(title, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
+                if (subtitle != null) {
+                    Spacer(Modifier.height(4.dp))
+                    Text(subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
             }
+            Spacer(Modifier.width(10.dp))
+            Surface(
+                modifier = Modifier.size(20.dp),
+                shape = RoundedCornerShape(10.dp),
+                color = if (selected) MaterialTheme.colorScheme.primary else Color.Transparent,
+                border = androidx.compose.foundation.BorderStroke(
+                    2.dp,
+                    if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant,
+                ),
+            ) {
+                if (selected) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(
+                            Icons.Default.Check,
+                            contentDescription = stringResource(R.string.selected),
+                            tint = MaterialTheme.colorScheme.onPrimary,
+                            modifier = Modifier.size(12.dp),
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun SettingChoiceSheet(
+    title: String,
+    onDismiss: () -> Unit,
+    content: @Composable ColumnScope.() -> Unit,
+) {
+    ModalBottomSheet(onDismissRequest = onDismiss) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(start = 18.dp, end = 18.dp, top = 6.dp, bottom = 20.dp),
+        ) {
+            DrawerHeader(
+                title = title,
+                onDismiss = onDismiss,
+            )
+            Spacer(Modifier.height(14.dp))
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp), content = content)
         }
     }
 }
@@ -2204,15 +2974,42 @@ private fun SettingSwitchRow(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 14.dp),
+            .clickable { onCheckedChange(!checked) }
+            .padding(horizontal = 16.dp, vertical = 16.dp),
         verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
     ) {
-        Text(title, modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodyLarge)
-        Switch(checked = checked, onCheckedChange = onCheckedChange)
+        Text(
+            title,
+            modifier = Modifier.weight(1f),
+            style = MaterialTheme.typography.bodyMedium,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.onSurface,
+        )
+        MockupSwitch(checked = checked)
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun MockupSwitch(checked: Boolean) {
+    Box(
+        modifier = Modifier
+            .width(44.dp)
+            .height(24.dp)
+            .clip(RoundedCornerShape(12.dp))
+            .background(if (checked) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant)
+            .padding(2.dp),
+    ) {
+        Surface(
+            modifier = Modifier
+                .size(20.dp)
+                .align(if (checked) Alignment.CenterEnd else Alignment.CenterStart),
+            shape = RoundedCornerShape(10.dp),
+            color = MaterialTheme.colorScheme.surface,
+        ) {}
+    }
+}
+
 @Composable
 private fun ExportModeSelector(
     preferCopies: Boolean,
@@ -2222,25 +3019,79 @@ private fun ExportModeSelector(
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 14.dp),
+            .padding(horizontal = 16.dp, vertical = 16.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
-        SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
-            SegmentedButton(
+        Text(
+            text = stringResource(R.string.prefer_export_copies),
+            style = MaterialTheme.typography.bodyMedium,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.onSurface,
+        )
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(10.dp))
+                .clip(RoundedCornerShape(10.dp)),
+        ) {
+            SegmentOption(
+                text = stringResource(R.string.write_copies),
                 selected = preferCopies,
                 onClick = onSelectCopies,
-                shape = SegmentedButtonDefaults.itemShape(index = 0, count = 2),
                 modifier = Modifier.weight(1f),
-            ) {
-                Text(stringResource(R.string.write_copies))
-            }
-            SegmentedButton(
+            )
+            Box(
+                modifier = Modifier
+                    .width(1.dp)
+                    .height(42.dp)
+                    .background(MaterialTheme.colorScheme.outlineVariant)
+            )
+            SegmentOption(
+                text = stringResource(R.string.write_originals),
                 selected = !preferCopies,
                 onClick = onSelectOriginals,
-                shape = SegmentedButtonDefaults.itemShape(index = 1, count = 2),
                 modifier = Modifier.weight(1f),
+            )
+        }
+        if (!preferCopies) {
+            Surface(
+                shape = RoundedCornerShape(6.dp),
+                color = MaterialTheme.colorScheme.errorContainer,
             ) {
-                Text(stringResource(R.string.write_originals))
+                Text(
+                    text = stringResource(R.string.write_originals_default_desc),
+                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 9.dp),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onErrorContainer,
+                )
             }
+        }
+    }
+}
+
+@Composable
+private fun SegmentOption(
+    text: String,
+    selected: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Surface(
+        modifier = modifier
+            .height(42.dp)
+            .clickable(onClick = onClick),
+        color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surface,
+    ) {
+        Box(contentAlignment = Alignment.Center) {
+            Text(
+                text = text,
+                modifier = Modifier.padding(horizontal = 8.dp),
+                style = MaterialTheme.typography.bodySmall,
+                fontWeight = FontWeight.Bold,
+                color = if (selected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
         }
     }
 }
@@ -2257,29 +3108,25 @@ private fun ExportFolderRow(
             .fillMaxWidth()
             .clickable(onClick = onChooseExportFolder)
             .padding(horizontal = 16.dp, vertical = 16.dp),
-        verticalAlignment = Alignment.Top,
+        verticalAlignment = Alignment.CenterVertically,
     ) {
-        Icon(
-            Icons.Default.FolderOpen,
-            contentDescription = null,
-            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.size(22.dp),
-        )
-        Spacer(Modifier.width(16.dp))
         Column(modifier = Modifier.weight(1f)) {
             Text(
                 text = stringResource(R.string.default_export_folder),
-                style = MaterialTheme.typography.bodyLarge,
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurface,
             )
-            Spacer(Modifier.height(2.dp))
+            Spacer(Modifier.height(4.dp))
             Text(
                 text = subtitle,
                 style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 2,
+                color = if (folderLabel == null) MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
         }
+        Spacer(Modifier.width(10.dp))
         Icon(
             Icons.AutoMirrored.Filled.KeyboardArrowRight,
             contentDescription = stringResource(R.string.choose_folder),
@@ -2302,46 +3149,80 @@ private fun SettingStepper(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 14.dp),
+            .padding(horizontal = 16.dp, vertical = 16.dp),
         verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
     ) {
-        Text(title, modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodyLarge)
+        Text(
+            title,
+            modifier = Modifier.weight(1f),
+            style = MaterialTheme.typography.bodyMedium,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.onSurface,
+        )
         Surface(
-            shape = RoundedCornerShape(12.dp),
-            color = MaterialTheme.colorScheme.surfaceContainerHigh,
+            shape = RoundedCornerShape(10.dp),
+            color = MaterialTheme.colorScheme.surface,
+            border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                IconButton(
-                    onClick = { onValueChange((value - 1).coerceIn(range.first, range.last)) },
+                StepperButton(
+                    icon = Icons.Default.Remove,
+                    contentDescription = stringResource(R.string.decrease_setting, title),
                     enabled = value > range.first,
-                    modifier = Modifier.size(48.dp),
-                ) {
-                    Icon(
-                        Icons.Default.Remove,
-                        contentDescription = stringResource(R.string.decrease_setting, title),
-                        modifier = Modifier.size(18.dp),
-                    )
-                }
+                    onClick = { onValueChange((value - 1).coerceIn(range.first, range.last)) },
+                )
+                Box(
+                    modifier = Modifier
+                        .width(1.dp)
+                        .height(36.dp)
+                        .background(MaterialTheme.colorScheme.outlineVariant)
+                )
                 Text(
                     text = "$value $unit",
-                    modifier = Modifier.widthIn(min = 40.dp),
-                    style = MaterialTheme.typography.bodyLarge,
-                    fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier
+                        .widthIn(min = 54.dp)
+                        .padding(horizontal = 6.dp),
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.ExtraBold,
                     textAlign = TextAlign.Center,
                 )
-                IconButton(
-                    onClick = { onValueChange((value + 1).coerceIn(range.first, range.last)) },
+                Box(
+                    modifier = Modifier
+                        .width(1.dp)
+                        .height(36.dp)
+                        .background(MaterialTheme.colorScheme.outlineVariant)
+                )
+                StepperButton(
+                    icon = Icons.Default.Add,
+                    contentDescription = stringResource(R.string.increase_setting, title),
                     enabled = value < range.last,
-                    modifier = Modifier.size(48.dp),
-                ) {
-                    Icon(
-                        Icons.Default.Add,
-                        contentDescription = stringResource(R.string.increase_setting, title),
-                        modifier = Modifier.size(18.dp),
-                    )
-                }
+                    onClick = { onValueChange((value + 1).coerceIn(range.first, range.last)) },
+                )
             }
         }
+    }
+}
+
+@Composable
+private fun StepperButton(
+    icon: ImageVector,
+    contentDescription: String,
+    enabled: Boolean,
+    onClick: () -> Unit,
+) {
+    Box(
+        modifier = Modifier
+            .size(36.dp)
+            .clickable(enabled = enabled, onClick = onClick),
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(
+            icon,
+            contentDescription = contentDescription,
+            tint = MaterialTheme.colorScheme.onSurface.copy(alpha = if (enabled) 1f else 0.35f),
+            modifier = Modifier.size(16.dp),
+        )
     }
 }
 
@@ -2552,13 +3433,11 @@ private fun WriteResultSheet(
                     )
                 }
             }
-            Button(
+            PrimaryActionButton(
+                text = stringResource(R.string.close),
                 onClick = onDismiss,
                 modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(8.dp),
-            ) {
-                Text(stringResource(R.string.close))
-            }
+            )
             Spacer(Modifier.height(12.dp))
         }
     }
@@ -2589,18 +3468,79 @@ private fun frequencyDescription(frequency: RecordingFrequency): String =
     }
 
 @Composable
+private fun recordingProofTitle(
+    recording: RecordingSnapshot,
+    settings: AppSettings,
+    nowMillis: Long,
+): String =
+    when {
+        recording.issue == RecordingIssue.PermissionMissing -> stringResource(R.string.recording_unavailable_title)
+        recording.issue == RecordingIssue.LocationDisabled -> stringResource(R.string.recording_unavailable_title)
+        recording.status == RecordingStatus.Paused -> stringResource(R.string.recording_paused_title)
+        recording.status == RecordingStatus.Stopped -> stringResource(R.string.recording_start_title)
+        recording.lastPointRecordedAtMillis == null -> stringResource(R.string.recording_waiting_title)
+        isRecordingStale(recording, settings, nowMillis) -> stringResource(R.string.recording_risk_title)
+        else -> stringResource(R.string.recording_active_title)
+    }
+
+@Composable
+private fun recordingSignalNote(
+    recording: RecordingSnapshot,
+    settings: AppSettings,
+    nowMillis: Long,
+): String =
+    when {
+        recording.issue == RecordingIssue.PermissionMissing -> stringResource(R.string.track_unavailable)
+        recording.issue == RecordingIssue.LocationDisabled -> stringResource(R.string.track_unavailable)
+        recording.status == RecordingStatus.Paused -> stringResource(R.string.status_paused)
+        recording.status == RecordingStatus.Stopped -> stringResource(R.string.status_stopped)
+        recording.lastPointRecordedAtMillis == null -> stringResource(R.string.recording_no_points)
+        isRecordingStale(recording, settings, nowMillis) -> stringResource(R.string.track_needs_attention)
+        else -> stringResource(R.string.ready)
+    }
+
+@Composable
+private fun recordingEvidenceTitle(recording: RecordingSnapshot, nowMillis: Long): String =
+    when {
+        recording.issue == RecordingIssue.PermissionMissing -> stringResource(R.string.recording_unavailable_title)
+        recording.issue == RecordingIssue.LocationDisabled -> stringResource(R.string.recording_unavailable_title)
+        recording.status == RecordingStatus.Paused -> stringResource(R.string.recording_no_new_points)
+        recording.lastPointRecordedAtMillis == null -> stringResource(R.string.recording_no_points)
+        else -> stringResource(R.string.recording_evidence_recent, lastPointAgeSeconds(recording, nowMillis) ?: 0L)
+    }
+
+private fun recordingEvidenceIcon(recording: RecordingSnapshot): TrackWriteIcon =
+    when {
+        recording.issue == RecordingIssue.PermissionMissing -> TrackWriteIcon.Lock
+        recording.issue == RecordingIssue.LocationDisabled -> TrackWriteIcon.Warning
+        recording.status == RecordingStatus.Paused -> TrackWriteIcon.Pause
+        recording.status == RecordingStatus.Recording && recording.lastPointRecordedAtMillis == null -> TrackWriteIcon.Satellite
+        recording.lastPointRecordedAtMillis == null -> TrackWriteIcon.Target
+        else -> TrackWriteIcon.Target
+    }
+
+@Composable
+private fun trackUseLabel(recording: RecordingSnapshot, tone: PillTone): String =
+    when {
+        recording.status == RecordingStatus.Paused -> stringResource(R.string.track_paused_label)
+        tone == PillTone.Error -> stringResource(R.string.track_unavailable)
+        tone == PillTone.Warning -> stringResource(R.string.track_needs_attention)
+        tone == PillTone.Success -> stringResource(R.string.track_ready_for_matching)
+        else -> stringResource(R.string.track_pending)
+    }
+
+private fun trackUseTone(recording: RecordingSnapshot, tone: PillTone): PillTone =
+    when {
+        recording.status == RecordingStatus.Paused -> PillTone.Warning
+        else -> tone
+    }
+
+@Composable
 private fun statusLabel(status: RecordingStatus): String =
     when (status) {
         RecordingStatus.Recording -> stringResource(R.string.status_recording)
         RecordingStatus.Paused -> stringResource(R.string.status_paused)
         RecordingStatus.Stopped -> stringResource(R.string.status_stopped)
-    }
-
-private fun statusTone(status: RecordingStatus): PillTone =
-    when (status) {
-        RecordingStatus.Recording -> PillTone.Success
-        RecordingStatus.Paused -> PillTone.Warning
-        RecordingStatus.Stopped -> PillTone.Neutral
     }
 
 private fun recordingConfidenceTone(recording: RecordingSnapshot): PillTone =
@@ -2611,6 +3551,30 @@ private fun recordingConfidenceTone(recording: RecordingSnapshot): PillTone =
         recording.status == RecordingStatus.Recording && recording.issue == RecordingIssue.WaitingForFix -> PillTone.Warning
         recording.status == RecordingStatus.Recording && recording.lastPointRecordedAtMillis != null -> PillTone.Success
         else -> PillTone.Neutral
+    }
+
+private fun recordingProofTone(
+    recording: RecordingSnapshot,
+    settings: AppSettings,
+    nowMillis: Long,
+): PillTone =
+    when {
+        recording.issue == RecordingIssue.PermissionMissing -> PillTone.Error
+        recording.issue == RecordingIssue.LocationDisabled -> PillTone.Error
+        recording.status == RecordingStatus.Paused -> PillTone.Warning
+        recording.status == RecordingStatus.Recording && recording.issue == RecordingIssue.WaitingForFix -> PillTone.Warning
+        recording.status == RecordingStatus.Recording && isRecordingStale(recording, settings, nowMillis) -> PillTone.Warning
+        recording.status == RecordingStatus.Recording && recording.lastPointRecordedAtMillis != null -> PillTone.Success
+        else -> PillTone.Neutral
+    }
+
+@Composable
+private fun toneBorderColor(tone: PillTone): Color =
+    when (tone) {
+        PillTone.Success -> MaterialTheme.colorScheme.primary.copy(alpha = 0.28f)
+        PillTone.Warning -> MaterialTheme.colorScheme.tertiary.copy(alpha = 0.28f)
+        PillTone.Error -> MaterialTheme.colorScheme.error.copy(alpha = 0.28f)
+        PillTone.Neutral -> MaterialTheme.colorScheme.outlineVariant
     }
 
 private fun activeRecordingDuration(state: MainUiState, track: Track?): Duration? {
@@ -2645,6 +3609,21 @@ private fun recordingConfidenceText(recording: RecordingSnapshot, settings: AppS
 
 private fun staleRecordingThresholdSeconds(settings: AppSettings): Long =
     ((settings.recordingFrequency.intervalMs * 3L) / 1000L).coerceAtLeast(10L)
+
+private fun lastPointAgeSeconds(recording: RecordingSnapshot, nowMillis: Long): Long? =
+    recording.lastPointRecordedAtMillis?.let { lastPointMillis ->
+        ((nowMillis - lastPointMillis) / 1000L).coerceAtLeast(0L)
+    }
+
+private fun isRecordingStale(
+    recording: RecordingSnapshot,
+    settings: AppSettings,
+    nowMillis: Long,
+): Boolean {
+    val lastPointMillis = recording.lastPointRecordedAtMillis ?: return false
+    val ageSeconds = ((nowMillis - lastPointMillis) / 1000L).coerceAtLeast(0L)
+    return ageSeconds > staleRecordingThresholdSeconds(settings)
+}
 
 @Composable
 private fun matchDetail(photo: PhotoCandidate, match: PhotoMatch?): String =

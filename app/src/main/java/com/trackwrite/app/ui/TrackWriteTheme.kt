@@ -12,14 +12,17 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import com.trackwrite.app.settings.AppearanceMode
 
-private val LightBackground = Color(0xFFF8FAFC)
-private val LightCard = Color.White
+private val LightBackground = Color(0xFFF9FAFC)
+private val LightCard = Color(0xFFFFFFFF)
+private val LightPanel = Color(0xFFF4F5F7)
+private val LightPrimary = Color(0xFF326AA8)
+private val LightPrimarySoft = Color(0xFFEAF2FB)
 
 private val LightColors = lightColorScheme(
-    primary = Color(0xFF1E293B),
-    onPrimary = Color(0xFFFFFFFF),
-    primaryContainer = Color(0xFFE2E8F0),
-    onPrimaryContainer = Color(0xFF0F172A),
+    primary = LightPrimary,
+    onPrimary = Color(0xFFFAFCFF),
+    primaryContainer = LightPrimarySoft,
+    onPrimaryContainer = Color(0xFF234A73),
     secondary = Color(0xFF475569),
     onSecondary = Color(0xFFFFFFFF),
     secondaryContainer = Color(0xFFF1F5F9),
@@ -36,13 +39,13 @@ private val LightColors = lightColorScheme(
     onBackground = Color(0xFF0F172A),
     surface = LightCard,
     onSurface = Color(0xFF0F172A),
-    surfaceVariant = Color(0xFFF1F5F9),
+    surfaceVariant = LightPanel,
     onSurfaceVariant = Color(0xFF475569),
     outline = Color(0xFFCBD5E1),
     outlineVariant = Color(0xFFE2E8F0),
     surfaceContainerLow = LightCard,
-    surfaceContainer = Color(0xFFEFF2F7),
-    surfaceContainerHigh = Color(0xFFE2E8F0),
+    surfaceContainer = Color(0xFFECEFF3),
+    surfaceContainerHigh = LightPanel,
 )
 
 private val DarkColors = darkColorScheme(
@@ -93,9 +96,25 @@ fun TrackWriteTheme(
                 dynamicDarkColorScheme(context)
             } else {
                 dynamicLightColorScheme(context).copy(
+                    primary = LightPrimary,
+                    onPrimary = Color(0xFFFAFCFF),
+                    primaryContainer = LightPrimarySoft,
+                    onPrimaryContainer = Color(0xFF234A73),
+                    secondary = Color(0xFF475569),
+                    onSecondary = Color(0xFFFFFFFF),
+                    secondaryContainer = Color(0xFFF1F5F9),
+                    onSecondaryContainer = Color(0xFF1E293B),
                     background = LightBackground,
+                    onBackground = Color(0xFF0F172A),
                     surface = LightCard,
+                    onSurface = Color(0xFF0F172A),
+                    surfaceVariant = LightPanel,
+                    onSurfaceVariant = Color(0xFF475569),
+                    outline = Color(0xFFCBD5E1),
+                    outlineVariant = Color(0xFFE2E8F0),
                     surfaceContainerLow = LightCard,
+                    surfaceContainer = Color(0xFFECEFF3),
+                    surfaceContainerHigh = LightPanel,
                 )
             }
         }
