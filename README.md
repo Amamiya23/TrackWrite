@@ -1,7 +1,7 @@
 # TrackWrite
 
 TrackWrite 用于在拍摄时记录 GPS 轨迹，并在拍摄后把照片按时间匹配到轨迹点，写入可靠的地理位置元数据。
-<img src="assets/sc.jpg" alt="截图" width="400">
+<img src="assets/sc.jpg" alt="截图" width="800">
 
 ## 主要功能
 
