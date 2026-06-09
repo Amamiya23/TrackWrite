@@ -284,3 +284,36 @@ Persist and display the default export-copy folder value, refresh active recordi
 ### Next Steps
 
 - None - task complete
+
+
+## Session 9: 重构记录匹配设置页面原生 UI
+
+**Date**: 2026-06-09
+**Task**: 重构记录匹配设置页面原生 UI
+**Branch**: `main`
+
+### Summary
+
+Completed the native Compose redesign for the Record, Match, and Settings pages from the HTML mockups, preserving existing recording, matching, settings, and write flows. Validation results are recorded in the task artifacts.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `7a446ea` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete

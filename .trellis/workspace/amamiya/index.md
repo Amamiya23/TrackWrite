@@ -8,8 +8,8 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 8
-- **Last Active**: 2026-06-08
+- **Total Sessions**: 9
+- **Last Active**: 2026-06-09
 <!-- @@@/auto:current-status -->
 
 ---
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~286 | Active |
+| `journal-1.md` | ~319 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 9 | 2026-06-09 | 重构记录匹配设置页面原生 UI | `7a446ea` | `main` |
 | 8 | 2026-06-08 | Fix settings folder display and recording duration refresh | `4993c00` | `main` |
 | 7 | 2026-06-06 | Fix photo GPS version verification | `4c01f9b` | `main` |
 | 6 | 2026-06-06 | Fix bulk photo GPS EXIF fields | `f9174c3` | `main` |
