@@ -46,9 +46,14 @@ function getImplementContext(ctx, taskDir) {
     parts.push(`=== ${taskDir}/prd.md (Requirements) ===\n${prd}`)
   }
 
-  const info = ctx.readFile(join(taskDirFull, "info.md"))
-  if (info) {
-    parts.push(`=== ${taskDir}/info.md (Technical Design) ===\n${info}`)
+  const design = ctx.readFile(join(taskDirFull, "design.md"))
+  if (design) {
+    parts.push(`=== ${taskDir}/design.md (Technical Design) ===\n${design}`)
+  }
+
+  const implementPlan = ctx.readFile(join(taskDirFull, "implement.md"))
+  if (implementPlan) {
+    parts.push(`=== ${taskDir}/implement.md (Execution Plan) ===\n${implementPlan}`)
   }
 
   return parts.join("\n\n")
@@ -71,6 +76,16 @@ function getCheckContext(ctx, taskDir) {
   const prd = ctx.readFile(join(taskDirFull, "prd.md"))
   if (prd) {
     parts.push(`=== ${taskDir}/prd.md (Requirements) ===\n${prd}`)
+  }
+
+  const design = ctx.readFile(join(taskDirFull, "design.md"))
+  if (design) {
+    parts.push(`=== ${taskDir}/design.md (Technical Design) ===\n${design}`)
+  }
+
+  const implementPlan = ctx.readFile(join(taskDirFull, "implement.md"))
+  if (implementPlan) {
+    parts.push(`=== ${taskDir}/implement.md (Execution Plan) ===\n${implementPlan}`)
   }
 
   return parts.join("\n\n")
@@ -165,8 +180,8 @@ ${originalPrompt}
 ## Workflow
 
 1. **Understand specs** - All dev specs are injected above
-2. **Understand requirements** - Read requirements and technical design
-3. **Implement feature** - Follow specs and design
+2. **Understand task artifacts** - Read requirements, technical design if present, and execution plan if present
+3. **Implement feature** - Follow specs and task artifacts
 4. **Self-check** - Ensure code quality
 
 ## Important Constraints
@@ -195,7 +210,7 @@ ${originalPrompt}
 ## Workflow
 
 1. **Review changes** - Run \`git diff --name-only\` to see all changed files
-2. **Verify requirements** - Check each requirement in prd.md is implemented
+2. **Verify task artifacts** - Check prd.md and, when present, design.md / implement.md
 3. **Spec sync** - Analyze whether changes introduce new patterns, contracts, or conventions
    - If new pattern/convention found: read target spec file → update it → update index.md if needed
    - If infra/cross-layer change: follow the 7-section mandatory template from update-spec.md
@@ -209,7 +224,8 @@ ${originalPrompt}
 - MUST read the target spec file BEFORE editing (avoid duplicating existing content)
 - Do NOT update specs for trivial changes (typos, formatting, obvious fixes)
 - If critical CODE issues found, report them clearly (fix specs, not code)
-- Verify all acceptance criteria in prd.md are met` :
+- Verify all acceptance criteria in prd.md are met
+- Verify design.md and implement.md constraints when those files are present` :
       `<!-- trellis-hook-injected -->
 # Check Agent Task
 

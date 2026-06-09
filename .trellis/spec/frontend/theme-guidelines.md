@@ -2,22 +2,34 @@
 
 ---
 
-## Color Palette: Slate Family
+## Color Palette: Slate With Quiet Blue Accent
 
-This project uses the **Tailwind Slate** color scale as the basis for both light and dark themes. Dark and light modes share the **same hue family** (slate/gray) — only lightness and saturation are adjusted per MD3 dark scheme conventions.
+This project uses a slate/blue-neutral color system derived from the native
+TrackWrite UI and the HTML redesign mockups. Neutrals carry most structure;
+the quiet blue accent is reserved for primary actions, selected navigation, and
+positive/active recording states.
 
-**Do NOT** introduce a different hue family (e.g., teal, green) for dark mode. The two palettes must be visually cohesive so that switching between modes feels like a lighting change, not a brand change.
+**Do NOT** introduce unrelated hue families (for example teal, neon green, or
+purple) for app chrome. Light and dark palettes must stay visually cohesive so
+switching modes feels like a lighting change, not a brand change.
 
-| Token | Light (Slate) | Dark (Slate) |
+| Token | Light | Dark |
 |-------|---------------|---------------|
-| background | `0xFFF8FAFC` (slate-50) | `0xFF0F172A` (slate-900) |
+| background | `0xFFF9FAFC` | `0xFF0F172A` (slate-900) |
 | surface | `0xFFFFFFFF` (white) | `0xFF1E293B` (slate-800) |
 | surfaceContainerLow | `0xFFFFFFFF` (white) | `0xFF1E293B` (slate-800) |
-| surfaceVariant | `0xFFF1F5F9` (slate-100) | `0xFF334155` (slate-700) |
-| primary | `0xFF1E293B` (slate-800) | `0xFF94A3B8` (slate-400) |
+| surfaceVariant | `0xFFF4F5F7` | `0xFF334155` (slate-700) |
+| surfaceContainer | `0xFFECEFF3` | `0xFF273549` |
+| primary | `0xFF326AA8` | `0xFF94A3B8` (slate-400) |
+| primaryContainer | `0xFFEAF2FB` | `0xFF334155` |
 | onSurface | `0xFF0F172A` (slate-900) | `0xFFE2E8F0` (slate-200) |
 
 See `TrackWriteTheme.kt` for the full token mapping.
+
+When using Material You dynamic light color, copy these structural tokens over
+the dynamic scheme. The app must keep the mockup-aligned background, white
+panels, quiet blue primary, and soft selected-state container instead of letting
+device wallpaper colors recolor the core workflow.
 
 ---
 
@@ -46,26 +58,26 @@ val cardColor = MaterialTheme.colorScheme.surfaceContainerLow
 
 ---
 
-## Convention: Navigation Icon for Back Actions
+## Convention: Navigation and Back Actions
 
-When a screen replaces the default navigation (e.g., Settings replacing the main tabs), the back/close action uses the `navigationIcon` slot of `TopAppBar` (left side), not the `actions` slot (right side).
+Record, Match, and Settings are peer destinations in the redesigned app shell.
+They share the custom three-item bottom bar, with the selected item rendered as
+a rounded soft-primary pill. Settings should not show a top-left back arrow in
+this shell; system Back may still close Settings via `BackHandler`.
+
+When a future screen truly replaces the bottom navigation, the back/close action
+uses the navigation area on the left side, not the right-side action area.
 
 **Pattern**:
 ```kotlin
-TopAppBar(
-    navigationIcon = {
-        if (showSubScreen) {
-            IconButton(onClick = onClose) {
-                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
-            }
-        }
-    },
-    actions = {
-        if (!showSubScreen) {
-            IconButton(onClick = onSettings) { ... }
-        }
-    },
+TrackWriteBottomBar(
+    selectedTab = state.selectedTab,
+    settingsSelected = state.showSettings,
+    onRecord = { onTabSelected(MainTab.Record) },
+    onMatch = { onTabSelected(MainTab.Match) },
+    onSettings = onSettings,
 )
 ```
 
-This follows the Material Design convention: navigation/back goes left, secondary actions go right.
+This keeps the app shell aligned with the HTML mockups while preserving native
+Compose navigation behavior.

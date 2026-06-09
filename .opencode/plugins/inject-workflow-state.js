@@ -89,15 +89,12 @@ function getActiveTask(ctx, platformInput = null) {
  *   "Refer to workflow.md for current step." line
  * - no_task pseudo-status (id === null) → header omits task info
  */
-function buildBreadcrumb(id, status, templates, source = null) {
+function buildBreadcrumb(id, status, templates) {
   let body = templates[status]
   if (body === undefined) {
     body = "Refer to workflow.md for current step."
   }
   let header = id === null ? `Status: ${status}` : `Task: ${id} (${status})`
-  if (source) {
-    header = `${header}\nSource: ${source}`
-  }
   return `<workflow-state>\n${header}\n${body}\n</workflow-state>`
 }
 

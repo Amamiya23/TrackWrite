@@ -168,10 +168,15 @@ SettingsGroup {
 }
 ```
 
-### Convention: Inline Expansion for Small Option Sets
-**What**: When a setting has ≤4 options, use inline expansion within the card instead of `ModalBottomSheet`. Toggle `expandedState` on row click, show `SettingChoiceRow` list below.
+### Convention: Lightweight Option Selection
+**What**: When a setting has ≤4 options, prefer inline expansion within the card
+unless the active visual spec calls for a drawer/bottom-sheet interaction. The
+HTML redesign for Settings uses drawer-style selection, so Appearance and
+Recording frequency use native Material bottom sheets with compact option rows.
 
-**Why**: Reduces interaction steps (click→select vs click→sheet opens→select→sheet closes). More efficient for mobile users.
+**Why**: Inline expansion reduces interaction steps for ordinary settings, but
+matching an approved visual and interaction model is more important for a
+page-level redesign. Do not use `AlertDialog` for these small option sets.
 
 ### Convention: Stepper Unit Display
 **What**: Always display the unit next to numeric values in `SettingStepper`. Pass `unit` parameter and render as `"$value $unit"`.
@@ -210,9 +215,9 @@ SettingsGroup {
 ## Code Review Checklist
 
 - Compose UI is under `TrackWriteTheme`.
-- Bottom navigation has exactly the Record and Match destinations. Track history
-  management belongs on Record; matching track source selection belongs on
-  Match.
+- Bottom navigation has exactly the Record, Match, and Settings destinations.
+  Track history management belongs on Record; matching track source selection
+  belongs on Match; Settings remains backed by persisted `AppSettings`.
 - Settings controls are backed by real persisted behavior.
 - User-visible text is in string resources with Chinese equivalents.
 - Recording status must expose field confidence, not just the coarse
