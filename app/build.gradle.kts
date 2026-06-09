@@ -1,4 +1,5 @@
 import java.util.Properties
+import org.gradle.api.GradleException
 
 plugins {
     id("com.android.application")
@@ -15,6 +16,23 @@ fun localProperty(name: String): String? {
     return properties.getProperty(name)
 }
 
+fun gradleProperty(name: String, defaultValue: String): String =
+    providers.gradleProperty(name).orElse(defaultValue).get()
+
+fun gradleOrLocalProperty(name: String): String? =
+    providers.gradleProperty(name).orNull ?: localProperty(name)
+
+val releaseStoreFilePath = gradleOrLocalProperty("TRACKWRITE_RELEASE_STORE_FILE")
+val releaseStorePassword = gradleOrLocalProperty("TRACKWRITE_RELEASE_STORE_PASSWORD")
+val releaseKeyAlias = gradleOrLocalProperty("TRACKWRITE_RELEASE_KEY_ALIAS")
+val releaseKeyPassword = gradleOrLocalProperty("TRACKWRITE_RELEASE_KEY_PASSWORD")
+val hasReleaseSigningConfig = listOf(
+    releaseStoreFilePath,
+    releaseStorePassword,
+    releaseKeyAlias,
+    releaseKeyPassword,
+).all { !it.isNullOrBlank() }
+
 android {
     namespace = "com.trackwrite.app"
     compileSdk = 34
@@ -23,8 +41,8 @@ android {
         applicationId = "com.trackwrite.app"
         minSdk = 31
         targetSdk = 34
-        versionCode = 20
-        versionName = "v2.0"
+        versionCode = gradleProperty("trackwrite.versionCode", "20").toInt()
+        versionName = gradleProperty("trackwrite.versionName", "v2.0")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         manifestPlaceholders["amapApiKey"] = providers
@@ -39,6 +57,29 @@ android {
             .gradleProperty("TRACKWRITE_AMAP_SECURITY_JS_CODE")
             .orElse(localProperty("TRACKWRITE_AMAP_SECURITY_JS_CODE") ?: "")
             .get()
+    }
+
+    signingConfigs {
+        if (hasReleaseSigningConfig) {
+            create("release") {
+                storeFile = rootProject.file(releaseStoreFilePath!!)
+                storePassword = releaseStorePassword
+                keyAlias = releaseKeyAlias
+                keyPassword = releaseKeyPassword
+            }
+        }
+    }
+
+    buildTypes {
+        release {
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"))
+
+            if (hasReleaseSigningConfig) {
+                signingConfig = signingConfigs.getByName("release")
+            }
+        }
     }
 
     testOptions {
@@ -77,4 +118,22 @@ dependencies {
     kapt("androidx.room:room-compiler:2.6.1")
 
     testImplementation("junit:junit:4.13.2")
+}
+
+tasks.matching { it.name == "preReleaseBuild" }.configureEach {
+    doFirst {
+        if (!hasReleaseSigningConfig) {
+            throw GradleException(
+                """
+                Release signing is not configured. Add these values to local.properties
+                or pass them as Gradle properties:
+
+                TRACKWRITE_RELEASE_STORE_FILE=/absolute/path/to/trackwrite-release.jks
+                TRACKWRITE_RELEASE_STORE_PASSWORD=...
+                TRACKWRITE_RELEASE_KEY_ALIAS=...
+                TRACKWRITE_RELEASE_KEY_PASSWORD=...
+                """.trimIndent()
+            )
+        }
+    }
 }
