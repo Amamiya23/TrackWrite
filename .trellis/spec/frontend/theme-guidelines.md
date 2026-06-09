@@ -15,7 +15,7 @@ switching modes feels like a lighting change, not a brand change.
 
 | Token | Light | Dark |
 |-------|---------------|---------------|
-| background | `0xFFF9FAFC` | `0xFF0F172A` (slate-900) |
+| background | `0xFFF7F7F7` | `0xFF0F172A` (slate-900) |
 | surface | `0xFFFFFFFF` (white) | `0xFF1E293B` (slate-800) |
 | surfaceContainerLow | `0xFFFFFFFF` (white) | `0xFF1E293B` (slate-800) |
 | surfaceVariant | `0xFFF4F5F7` | `0xFF334155` (slate-700) |

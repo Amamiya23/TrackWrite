@@ -86,6 +86,12 @@
     <string name="photo_batch_count">%1$d photos selected</string>
     <string name="photo_batch_stats">%1$d matched · %2$d unmatched · %3$d manual</string>
     <string name="photos_need_attention">%1$d need attention</string>
+    <string name="photo_filter_all">All</string>
+    <string name="photo_filter_unmatched">Unmatched</string>
+    <string name="photo_filter_manual">Manual</string>
+    <string name="photo_filter_writeable">Writeable</string>
+    <string name="photo_filter_empty_title">No photos in this filter</string>
+    <string name="photo_filter_empty_body">Choose another filter to review the rest of the batch.</string>
     <string name="matched">Matched</string>
     <string name="unmatched">Unmatched</string>
     <string name="manual">Manual</string>

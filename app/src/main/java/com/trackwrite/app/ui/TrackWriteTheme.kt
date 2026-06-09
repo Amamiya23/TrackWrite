@@ -12,7 +12,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import com.trackwrite.app.settings.AppearanceMode
 
-private val LightBackground = Color(0xFFF9FAFC)
+private val LightBackground = Color(0xFFF7F7F7)
 private val LightCard = Color(0xFFFFFFFF)
 private val LightPanel = Color(0xFFF4F5F7)
 private val LightPrimary = Color(0xFF326AA8)

@@ -86,6 +86,12 @@
     <string name="photo_batch_count">已选择 %1$d 张照片</string>
     <string name="photo_batch_stats">%1$d 已匹配 · %2$d 未匹配 · %3$d 手动</string>
     <string name="photos_need_attention">%1$d 张需要处理</string>
+    <string name="photo_filter_all">全部</string>
+    <string name="photo_filter_unmatched">未匹配</string>
+    <string name="photo_filter_manual">手动</string>
+    <string name="photo_filter_writeable">可写入</string>
+    <string name="photo_filter_empty_title">此筛选下没有照片</string>
+    <string name="photo_filter_empty_body">切换筛选后可继续查看这个批次。</string>
     <string name="matched">已匹配</string>
     <string name="unmatched">未匹配</string>
     <string name="manual">手动</string>

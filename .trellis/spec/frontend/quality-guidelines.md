@@ -41,6 +41,10 @@ safety should be visible and easy to scan.
 - Use Android string resources for default and Simplified Chinese UI copy:
   - default: `app/src/main/res/values/strings.xml`
   - Simplified Chinese: `app/src/main/res/values-zh-rCN/strings.xml`
+- If `MainUiState.logMessage` or equivalent UI event state is updated, the
+  active Compose shell must render and consume it through a visible feedback
+  surface such as a Material3 `SnackbarHost`. Do not leave user-facing success,
+  validation, or error messages as state-only updates.
 - Persist product settings through `AppSettingsStore`, then read that store from
   the behavior layer that needs the value. For example, recording frequency is
   read by `TrackingService`, not only displayed in Settings.
@@ -137,7 +141,7 @@ locationManager.requestLocationUpdates(provider, frequency.intervalMs, frequency
 
 ### Convention: Light Theme Background and Card Surfaces
 **What**: Light and system-light page backgrounds use `MaterialTheme.colorScheme.background`
-pinned to `#F8FAFC` (Slate 50). Light card surfaces should be pure white
+pinned to `#F7F7F7`. Light card surfaces should be pure white
 (`#FFFFFF`), and Settings group cards use `Color.White` in light mode instead
 of `surfaceContainerLow`.
 
@@ -148,7 +152,7 @@ card on Slate 50 background contrast consistent.
 **Example**:
 ```kotlin
 dynamicLightColorScheme(context).copy(
-    background = Color(0xFFF8FAFC),
+    background = Color(0xFFF7F7F7),
     surface = Color.White,
     surfaceContainerLow = Color.White,
 )

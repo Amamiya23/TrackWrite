@@ -58,6 +58,9 @@ import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.SnackbarDuration
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -311,6 +314,7 @@ class MainActivity : ComponentActivity() {
                         pendingExportMode = ExportFolderMode.SaveDefault
                         exportFolderLauncher.launch(null)
                     },
+                    onLogMessageConsumed = { uiState = uiState.copy(logMessage = "") },
                     onDismissDialog = { dismissDialogs() },
                     onDismissWriteResult = { uiState = uiState.copy(writeResult = null) },
                     onConfirmStart = { name ->
@@ -729,6 +733,13 @@ private enum class BulkOperation {
     WritingOriginals,
 }
 
+private enum class PhotoBatchFilter {
+    All,
+    Unmatched,
+    Manual,
+    Writeable,
+}
+
 private fun AppSettings.toMatchOptions(): MatchOptions =
     MatchOptions(
         cameraOffset = cameraOffset,
@@ -768,6 +779,7 @@ private fun TrackWriteApp(
     onWriteDefault: () -> Unit,
     onSettingsChanged: (AppSettings) -> Unit,
     onChooseExportFolder: () -> Unit,
+    onLogMessageConsumed: () -> Unit,
     onDismissDialog: () -> Unit,
     onDismissWriteResult: () -> Unit,
     onConfirmStart: (String) -> Unit,
@@ -775,6 +787,18 @@ private fun TrackWriteApp(
     onConfirmDelete: (Track) -> Unit,
     onConfirmWrite: () -> Unit,
 ) {
+    val snackbarHostState = remember { SnackbarHostState() }
+    LaunchedEffect(state.logMessage) {
+        val message = state.logMessage
+        if (message.isNotBlank()) {
+            snackbarHostState.showSnackbar(
+                message = message,
+                duration = SnackbarDuration.Short,
+            )
+            onLogMessageConsumed()
+        }
+    }
+
     Scaffold(
         topBar = {
             TrackWriteTopBar(
@@ -798,6 +822,7 @@ private fun TrackWriteApp(
                 onSettings = onSettings,
             )
         },
+        snackbarHost = { SnackbarHost(snackbarHostState) },
     ) { padding ->
         if (state.showSettings) {
             BackHandler { onCloseSettings() }
@@ -893,7 +918,7 @@ private fun TrackWriteTopBar(
                 Spacer(Modifier.width(12.dp))
                 Surface(
                     modifier = Modifier
-                        .size(42.dp)
+                        .size(44.dp)
                         .clip(RoundedCornerShape(10.dp))
                         .clickable(onClick = onSettings),
                     shape = RoundedCornerShape(10.dp),
@@ -1288,7 +1313,7 @@ private fun RecordingPanel(
             StatusPill(statusLabel(state.recording.status), tone)
             Text(
                 text = recordingSignalNote(state.recording, state.settings, state.recordingClockMillis),
-                style = MaterialTheme.typography.labelMedium,
+                style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 textAlign = TextAlign.End,
             )
@@ -1296,7 +1321,7 @@ private fun RecordingPanel(
         Spacer(Modifier.height(12.dp))
         Text(
             text = recordingProofTitle(state.recording, state.settings, state.recordingClockMillis),
-            style = MaterialTheme.typography.titleLarge,
+            style = MaterialTheme.typography.titleMedium,
             fontWeight = FontWeight.Bold,
             color = MaterialTheme.colorScheme.onSurface,
         )
@@ -1347,8 +1372,8 @@ private fun RecordingEvidenceRow(
             Column(Modifier.weight(1f)) {
                 Text(
                     text = recordingEvidenceTitle(recording, nowMillis),
-                    style = MaterialTheme.typography.labelLarge,
-                    fontWeight = FontWeight.SemiBold,
+                    style = MaterialTheme.typography.bodyLarge,
+                    fontWeight = FontWeight.Normal,
                     color = MaterialTheme.colorScheme.onSurface,
                 )
                 Spacer(Modifier.height(2.dp))
@@ -1420,8 +1445,8 @@ private fun TrackMetricsPanel(
             Text(
                 text = selectedTrack?.name ?: stringResource(R.string.track_name_default),
                 modifier = Modifier.weight(1f),
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold,
+                style = MaterialTheme.typography.bodyLarge,
+                fontWeight = FontWeight.Normal,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
             )
@@ -1456,7 +1481,7 @@ private fun CompactMetric(
     modifier: Modifier = Modifier,
 ) {
     Surface(
-        modifier = modifier.heightIn(min = 64.dp),
+        modifier = modifier.heightIn(min = 70.dp),
         shape = RoundedCornerShape(10.dp),
         color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f),
     ) {
@@ -1466,16 +1491,16 @@ private fun CompactMetric(
         ) {
             Text(
                 text = value,
-                style = MaterialTheme.typography.titleSmall,
-                fontWeight = FontWeight.Bold,
+                style = MaterialTheme.typography.bodyLarge,
+                fontWeight = FontWeight.Medium,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
             Spacer(Modifier.height(4.dp))
             Text(
                 text = label,
-                style = MaterialTheme.typography.labelSmall,
-                fontWeight = FontWeight.SemiBold,
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.Normal,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
@@ -1489,7 +1514,7 @@ private fun RecordingConfidenceLine(recording: RecordingSnapshot, settings: AppS
     val detail = recordingConfidenceText(recording, settings)
     Text(
         text = detail,
-        style = MaterialTheme.typography.bodySmall,
+        style = MaterialTheme.typography.bodyMedium,
         color = when (recordingProofTone(recording, settings, System.currentTimeMillis())) {
             PillTone.Error -> MaterialTheme.colorScheme.error
             PillTone.Warning -> MaterialTheme.colorScheme.tertiary
@@ -1509,6 +1534,7 @@ private fun TrackHistoryButton(
             .fillMaxWidth()
             .clip(RoundedCornerShape(14.dp))
             .clickable(onClick = onClick),
+        shape = RoundedCornerShape(14.dp),
         color = MaterialTheme.colorScheme.surfaceContainerLow,
         border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
     ) {
@@ -1533,13 +1559,13 @@ private fun TrackHistoryButton(
                 Text(
                     text = stringResource(R.string.track_history_count, trackCount),
                     style = MaterialTheme.typography.bodyLarge,
-                    fontWeight = FontWeight.Medium,
+                    fontWeight = FontWeight.Normal,
                 )
                 if (selectedTrack != null) {
                     Spacer(Modifier.height(4.dp))
                     Text(
                         text = selectedTrack.name,
-                        style = MaterialTheme.typography.bodySmall,
+                        style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
@@ -1571,14 +1597,14 @@ private fun DrawerHeader(
             Text(
                 text = title,
                 style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.ExtraBold,
+                fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.onSurface,
             )
             if (subtitle != null) {
                 Spacer(Modifier.height(3.dp))
                 Text(
                     text = subtitle,
-                    style = MaterialTheme.typography.bodySmall,
+                    style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
@@ -1587,7 +1613,7 @@ private fun DrawerHeader(
         }
         Surface(
             modifier = Modifier
-                .size(36.dp)
+                .size(44.dp)
                 .clip(RoundedCornerShape(10.dp))
                 .clickable(onClick = onDismiss),
             shape = RoundedCornerShape(10.dp),
@@ -1683,15 +1709,15 @@ private fun TrackManagementRow(
                 Column(Modifier.weight(1f)) {
                     Text(
                         text = track.name,
-                        style = MaterialTheme.typography.titleSmall,
-                        fontWeight = FontWeight.Bold,
+                        style = MaterialTheme.typography.bodyLarge,
+                        fontWeight = FontWeight.Normal,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                     )
                     Spacer(Modifier.height(4.dp))
                     Text(
                         text = "${track.points.size} ${stringResource(R.string.points_short)} · ${formatDuration(stats.duration)} · ${formatDistance(stats.distanceMeters)}",
-                        style = MaterialTheme.typography.bodySmall,
+                        style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
@@ -1779,8 +1805,11 @@ private fun MatchScreen(
                 )
             }
         }
-        state.bulkOperation?.let { operation ->
-            item { BulkOperationPanel(operation) }
+        when (val operation = state.bulkOperation) {
+            BulkOperation.LoadingPhotos,
+            BulkOperation.LoadingFolderPhotos,
+            -> item { BulkOperationPanel(operation) }
+            else -> Unit
         }
     }
 
@@ -1815,6 +1844,7 @@ private fun TrackSourceButton(
                 .fillMaxWidth()
                 .clip(RoundedCornerShape(14.dp))
                 .clickable(onClick = onClick),
+            shape = RoundedCornerShape(14.dp),
             color = MaterialTheme.colorScheme.surfaceContainerLow,
             border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
         ) {
@@ -1829,15 +1859,15 @@ private fun TrackSourceButton(
                     modifier = Modifier.size(22.dp),
                 )
                 Text(
-                    text = stringResource(R.string.no_tracks),
-                    style = MaterialTheme.typography.bodyMedium,
-                    fontWeight = FontWeight.ExtraBold,
+                    text = stringResource(R.string.match_choose_track),
+                    style = MaterialTheme.typography.bodyLarge,
+                    fontWeight = FontWeight.Normal,
                     color = MaterialTheme.colorScheme.onSurface,
                     textAlign = TextAlign.Center,
                 )
                 Text(
                     text = stringResource(R.string.no_match_track_help),
-                    style = MaterialTheme.typography.bodySmall,
+                    style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     textAlign = TextAlign.Center,
                 )
@@ -1852,6 +1882,7 @@ private fun TrackSourceButton(
             .fillMaxWidth()
             .clip(RoundedCornerShape(14.dp))
             .clickable(onClick = onClick),
+        shape = RoundedCornerShape(14.dp),
         color = MaterialTheme.colorScheme.surfaceContainerLow,
         border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
     ) {
@@ -1859,8 +1890,8 @@ private fun TrackSourceButton(
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
                     text = stringResource(R.string.match_track_source),
-                    style = MaterialTheme.typography.labelSmall,
-                    fontWeight = FontWeight.Bold,
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.Normal,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.weight(1f),
                 )
@@ -1874,8 +1905,8 @@ private fun TrackSourceButton(
             Spacer(Modifier.height(12.dp))
             Text(
                 text = selectedTrack.name,
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.ExtraBold,
+                style = MaterialTheme.typography.bodyLarge,
+                fontWeight = FontWeight.Normal,
                 color = MaterialTheme.colorScheme.onSurface,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
@@ -1939,6 +1970,7 @@ private fun PhotoInputButton(
             .heightIn(min = 62.dp)
             .clip(RoundedCornerShape(10.dp))
             .clickable(enabled = enabled, onClick = onClick),
+        shape = RoundedCornerShape(10.dp),
         color = MaterialTheme.colorScheme.surfaceContainerLow,
         border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
     ) {
@@ -1954,8 +1986,8 @@ private fun PhotoInputButton(
             )
             Text(
                 text = text,
-                style = MaterialTheme.typography.labelMedium,
-                fontWeight = FontWeight.Bold,
+                style = MaterialTheme.typography.bodyLarge,
+                fontWeight = FontWeight.Normal,
                 color = MaterialTheme.colorScheme.onSurface.copy(alpha = if (enabled) 1f else 0.45f),
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
@@ -2043,15 +2075,15 @@ private fun SelectableTrackRow(
             Column(Modifier.weight(1f)) {
                 Text(
                     text = track.name,
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.Bold,
+                    style = MaterialTheme.typography.bodyLarge,
+                    fontWeight = FontWeight.Normal,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
                 Spacer(Modifier.height(4.dp))
                 Text(
                     text = "${track.points.size} ${stringResource(R.string.points_short)} · ${formatDuration(stats.duration)} · ${formatDistance(stats.distanceMeters)}",
-                    style = MaterialTheme.typography.bodySmall,
+                    style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
@@ -2082,6 +2114,7 @@ private fun PhotoBatchButton(
             .fillMaxWidth()
             .clip(RoundedCornerShape(14.dp))
             .clickable(onClick = onClick),
+        shape = RoundedCornerShape(14.dp),
         color = MaterialTheme.colorScheme.surfaceContainerLow,
         border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
     ) {
@@ -2089,8 +2122,8 @@ private fun PhotoBatchButton(
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
                     text = stringResource(R.string.photo_batch_count, matches.size),
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
+                    style = MaterialTheme.typography.bodyLarge,
+                    fontWeight = FontWeight.Normal,
                     modifier = Modifier.weight(1f),
                 )
                 Icon(
@@ -2125,6 +2158,11 @@ private fun PhotoBatchSheet(
     onDismiss: () -> Unit,
 ) {
     ModalBottomSheet(onDismissRequest = onDismiss) {
+        var selectedFilter by remember(matches) { mutableStateOf(PhotoBatchFilter.All) }
+        val visibleMatches = remember(matches, selectedFilter) {
+            matches.withIndex()
+                .filter { (_, result) -> photoBatchFilterMatches(selectedFilter, result) }
+        }
         Column(
             modifier = Modifier
                 .fillMaxWidth()
@@ -2139,17 +2177,31 @@ private fun PhotoBatchSheet(
                 onDismiss = onDismiss,
             )
             Spacer(Modifier.height(14.dp))
+            if (matches.isNotEmpty()) {
+                PhotoBatchFilterRow(
+                    selectedFilter = selectedFilter,
+                    onFilterSelected = { selectedFilter = it },
+                )
+                Spacer(Modifier.height(12.dp))
+            }
             if (matches.isEmpty()) {
                 EmptyStateBlock(
                     title = stringResource(R.string.no_photos),
                     body = stringResource(R.string.photo_input_help),
+                )
+            } else if (visibleMatches.isEmpty()) {
+                EmptyStateBlock(
+                    title = stringResource(R.string.photo_filter_empty_title),
+                    body = stringResource(R.string.photo_filter_empty_body),
                 )
             } else {
                 LazyColumn(
                     modifier = Modifier.heightIn(max = 470.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
-                    itemsIndexed(matches) { index, result ->
+                    itemsIndexed(visibleMatches) { _, indexedResult ->
+                        val index = indexedResult.index
+                        val result = indexedResult.value
                         PhotoMatchRow(
                             index = index,
                             result = result,
@@ -2161,6 +2213,61 @@ private fun PhotoBatchSheet(
                 }
             }
             Spacer(Modifier.height(18.dp))
+        }
+    }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun PhotoBatchFilterRow(
+    selectedFilter: PhotoBatchFilter,
+    onFilterSelected: (PhotoBatchFilter) -> Unit,
+) {
+    FlowRow(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        PhotoBatchFilter.entries.forEach { filter ->
+            PhotoBatchFilterChip(
+                label = photoBatchFilterLabel(filter),
+                selected = selectedFilter == filter,
+                onClick = { onFilterSelected(filter) },
+            )
+        }
+    }
+}
+
+@Composable
+private fun PhotoBatchFilterChip(
+    label: String,
+    selected: Boolean,
+    onClick: () -> Unit,
+) {
+    Surface(
+        modifier = Modifier
+            .heightIn(min = 44.dp)
+            .clip(RoundedCornerShape(999.dp))
+            .clickable(onClick = onClick),
+        shape = RoundedCornerShape(999.dp),
+        color = if (selected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f),
+        border = androidx.compose.foundation.BorderStroke(
+            1.dp,
+            if (selected) MaterialTheme.colorScheme.primary.copy(alpha = 0.35f) else MaterialTheme.colorScheme.outlineVariant,
+        ),
+    ) {
+        Box(
+            modifier = Modifier.padding(horizontal = 13.dp),
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(
+                text = label,
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.Medium,
+                color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
         }
     }
 }
@@ -2187,8 +2294,8 @@ private fun WriteActionPanel(
             Text(
                 text = stringResource(R.string.write_area_title),
                 modifier = Modifier.weight(1f),
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.ExtraBold,
+                style = MaterialTheme.typography.bodyLarge,
+                fontWeight = FontWeight.Normal,
                 color = MaterialTheme.colorScheme.onSurface,
             )
             StatusPill(modeLabel, modeTone)
@@ -2201,7 +2308,7 @@ private fun WriteActionPanel(
                 stringResource(R.string.write_readiness, readiness.writeable, readiness.skipped)
             },
             modifier = Modifier.fillMaxWidth(),
-            style = MaterialTheme.typography.bodySmall,
+            style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             textAlign = TextAlign.Start,
         )
@@ -2214,7 +2321,7 @@ private fun WriteActionPanel(
                 Text(
                     text = stringResource(R.string.write_originals_default_desc),
                     modifier = Modifier.padding(horizontal = 10.dp, vertical = 9.dp),
-                    style = MaterialTheme.typography.bodySmall,
+                    style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onErrorContainer,
                 )
             }
@@ -2259,8 +2366,8 @@ private fun PhotoMatchRow(
                     Text(
                         text = "${index + 1}. ${photo.displayName}",
                         modifier = Modifier.weight(1f),
-                        style = MaterialTheme.typography.titleSmall,
-                        fontWeight = FontWeight.SemiBold,
+                        style = MaterialTheme.typography.bodyLarge,
+                        fontWeight = FontWeight.Normal,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                     )
@@ -2269,13 +2376,13 @@ private fun PhotoMatchRow(
                 Spacer(Modifier.height(8.dp))
                 Text(
                     text = "${stringResource(R.string.captured)}: ${photo.capturedAt ?: stringResource(R.string.no_exif_time)}",
-                    style = MaterialTheme.typography.bodySmall,
+                    style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 Spacer(Modifier.height(8.dp))
                 Text(
                     text = matchDetail(photo, match),
-                    style = MaterialTheme.typography.bodySmall,
+                    style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurface,
                 )
                 Spacer(Modifier.height(12.dp))
@@ -2283,14 +2390,14 @@ private fun PhotoMatchRow(
                     SoftActionButton(
                         text = stringResource(R.string.set_location),
                         onClick = onSetManualLocation,
-                        minHeight = 36.dp,
+                        minHeight = 44.dp,
                     )
                     if (photo.manualLocation != null) {
                         SoftActionButton(
                             text = stringResource(R.string.clear),
                             onClick = onClearManualLocation,
                             danger = true,
-                            minHeight = 36.dp,
+                            minHeight = 44.dp,
                         )
                     }
                 }
@@ -2379,7 +2486,7 @@ private fun MatchPill(photo: PhotoCandidate, match: PhotoMatch?) {
     when {
         photo.manualLocation != null -> StatusPill(stringResource(R.string.manual), PillTone.Warning)
         match is PhotoMatch.Matched -> StatusPill(stringResource(R.string.matched), PillTone.Success)
-        match is PhotoMatch.Unmatched -> StatusPill(stringResource(R.string.unmatched), PillTone.Neutral)
+        match is PhotoMatch.Unmatched -> StatusPill(stringResource(R.string.unmatched), PillTone.Warning)
         else -> StatusPill(stringResource(R.string.no_track), PillTone.Neutral)
     }
 }
@@ -2495,7 +2602,7 @@ private fun SoftActionButton(
     modifier: Modifier = Modifier,
     danger: Boolean = false,
     icon: TrackWriteIcon? = null,
-    minHeight: Dp = 38.dp,
+    minHeight: Dp = 44.dp,
     enabled: Boolean = true,
 ) {
     val contentColor = if (danger) {
@@ -2693,8 +2800,8 @@ private fun SettingsScreen(
 
     LazyColumn(
         modifier = modifier.background(MaterialTheme.colorScheme.background),
-        contentPadding = PaddingValues(start = 18.dp, top = 4.dp, end = 18.dp, bottom = 24.dp),
-        verticalArrangement = Arrangement.spacedBy(2.dp),
+        contentPadding = PaddingValues(start = 16.dp, top = 6.dp, end = 16.dp, bottom = 28.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
         item {
             Column {
@@ -2812,10 +2919,10 @@ private fun SettingsScreen(
 private fun SettingsSectionHeader(title: String) {
     Text(
         text = title,
-        style = MaterialTheme.typography.labelSmall,
+        style = MaterialTheme.typography.titleMedium,
         fontWeight = FontWeight.Bold,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-        modifier = Modifier.padding(start = 0.dp, top = 18.dp, bottom = 8.dp),
+        color = MaterialTheme.colorScheme.onSurface,
+        modifier = Modifier.padding(start = 2.dp, top = 20.dp, bottom = 10.dp),
     )
 }
 
@@ -2825,6 +2932,7 @@ private fun SettingsGroup(
     content: @Composable ColumnScope.() -> Unit,
 ) {
     Surface(
+        modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(14.dp),
         color = containerColor,
         tonalElevation = 0.dp,
@@ -2854,13 +2962,13 @@ private fun SettingNavigationRow(
             Text(
                 text = title,
                 modifier = Modifier.weight(1f),
-                style = MaterialTheme.typography.bodyMedium,
-                fontWeight = FontWeight.Bold,
+                style = MaterialTheme.typography.bodyLarge,
+                fontWeight = FontWeight.Normal,
                 color = MaterialTheme.colorScheme.onSurface,
             )
             Text(
                 text = value,
-                style = MaterialTheme.typography.bodySmall,
+                style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 textAlign = TextAlign.End,
                 maxLines = 1,
@@ -2877,7 +2985,7 @@ private fun SettingNavigationRow(
             Spacer(Modifier.height(5.dp))
             Text(
                 subtitle,
-                style = MaterialTheme.typography.bodySmall,
+                style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
@@ -2907,14 +3015,23 @@ private fun SettingChoiceRow(
         },
     ) {
         Row(
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 15.dp),
             verticalAlignment = Alignment.Top,
         ) {
             Column(Modifier.weight(1f)) {
-                Text(title, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
+                Text(
+                    title,
+                    style = MaterialTheme.typography.bodyLarge,
+                    fontWeight = FontWeight.Normal,
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
                 if (subtitle != null) {
-                    Spacer(Modifier.height(4.dp))
-                    Text(subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Spacer(Modifier.height(5.dp))
+                    Text(
+                        subtitle,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
                 }
             }
             Spacer(Modifier.width(10.dp))
@@ -2982,8 +3099,8 @@ private fun SettingSwitchRow(
         Text(
             title,
             modifier = Modifier.weight(1f),
-            style = MaterialTheme.typography.bodyMedium,
-            fontWeight = FontWeight.Bold,
+            style = MaterialTheme.typography.bodyLarge,
+            fontWeight = FontWeight.Normal,
             color = MaterialTheme.colorScheme.onSurface,
         )
         MockupSwitch(checked = checked)
@@ -3024,8 +3141,8 @@ private fun ExportModeSelector(
     ) {
         Text(
             text = stringResource(R.string.prefer_export_copies),
-            style = MaterialTheme.typography.bodyMedium,
-            fontWeight = FontWeight.Bold,
+            style = MaterialTheme.typography.bodyLarge,
+            fontWeight = FontWeight.Normal,
             color = MaterialTheme.colorScheme.onSurface,
         )
         Row(
@@ -3043,7 +3160,7 @@ private fun ExportModeSelector(
             Box(
                 modifier = Modifier
                     .width(1.dp)
-                    .height(42.dp)
+                    .height(44.dp)
                     .background(MaterialTheme.colorScheme.outlineVariant)
             )
             SegmentOption(
@@ -3061,7 +3178,7 @@ private fun ExportModeSelector(
                 Text(
                     text = stringResource(R.string.write_originals_default_desc),
                     modifier = Modifier.padding(horizontal = 10.dp, vertical = 9.dp),
-                    style = MaterialTheme.typography.bodySmall,
+                    style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onErrorContainer,
                 )
             }
@@ -3078,7 +3195,7 @@ private fun SegmentOption(
 ) {
     Surface(
         modifier = modifier
-            .height(42.dp)
+            .height(44.dp)
             .clickable(onClick = onClick),
         color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surface,
     ) {
@@ -3086,8 +3203,8 @@ private fun SegmentOption(
             Text(
                 text = text,
                 modifier = Modifier.padding(horizontal = 8.dp),
-                style = MaterialTheme.typography.bodySmall,
-                fontWeight = FontWeight.Bold,
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.Medium,
                 color = if (selected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
@@ -3113,14 +3230,14 @@ private fun ExportFolderRow(
         Column(modifier = Modifier.weight(1f)) {
             Text(
                 text = stringResource(R.string.default_export_folder),
-                style = MaterialTheme.typography.bodyMedium,
-                fontWeight = FontWeight.Bold,
+                style = MaterialTheme.typography.bodyLarge,
+                fontWeight = FontWeight.Normal,
                 color = MaterialTheme.colorScheme.onSurface,
             )
-            Spacer(Modifier.height(4.dp))
+            Spacer(Modifier.height(5.dp))
             Text(
                 text = subtitle,
-                style = MaterialTheme.typography.bodySmall,
+                style = MaterialTheme.typography.bodyMedium,
                 color = if (folderLabel == null) MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.onSurfaceVariant,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
@@ -3156,8 +3273,8 @@ private fun SettingStepper(
         Text(
             title,
             modifier = Modifier.weight(1f),
-            style = MaterialTheme.typography.bodyMedium,
-            fontWeight = FontWeight.Bold,
+            style = MaterialTheme.typography.bodyLarge,
+            fontWeight = FontWeight.Normal,
             color = MaterialTheme.colorScheme.onSurface,
         )
         Surface(
@@ -3175,22 +3292,22 @@ private fun SettingStepper(
                 Box(
                     modifier = Modifier
                         .width(1.dp)
-                        .height(36.dp)
+                        .height(44.dp)
                         .background(MaterialTheme.colorScheme.outlineVariant)
                 )
                 Text(
                     text = "$value $unit",
                     modifier = Modifier
-                        .widthIn(min = 54.dp)
-                        .padding(horizontal = 6.dp),
-                    style = MaterialTheme.typography.bodyMedium,
-                    fontWeight = FontWeight.ExtraBold,
+                        .widthIn(min = 60.dp)
+                        .padding(horizontal = 8.dp),
+                    style = MaterialTheme.typography.bodyLarge,
+                    fontWeight = FontWeight.Medium,
                     textAlign = TextAlign.Center,
                 )
                 Box(
                     modifier = Modifier
                         .width(1.dp)
-                        .height(36.dp)
+                        .height(44.dp)
                         .background(MaterialTheme.colorScheme.outlineVariant)
                 )
                 StepperButton(
@@ -3213,7 +3330,7 @@ private fun StepperButton(
 ) {
     Box(
         modifier = Modifier
-            .size(36.dp)
+            .size(44.dp)
             .clickable(enabled = enabled, onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {
@@ -3638,6 +3755,23 @@ private fun matchDetail(photo: PhotoCandidate, match: PhotoMatch?): String =
             "${stringResource(R.string.reason_prefix)}: ${match.reason}"
         }
         else -> stringResource(R.string.no_selected_track_detail)
+    }
+
+@Composable
+private fun photoBatchFilterLabel(filter: PhotoBatchFilter): String =
+    when (filter) {
+        PhotoBatchFilter.All -> stringResource(R.string.photo_filter_all)
+        PhotoBatchFilter.Unmatched -> stringResource(R.string.photo_filter_unmatched)
+        PhotoBatchFilter.Manual -> stringResource(R.string.photo_filter_manual)
+        PhotoBatchFilter.Writeable -> stringResource(R.string.photo_filter_writeable)
+    }
+
+private fun photoBatchFilterMatches(filter: PhotoBatchFilter, result: PhotoMatchResult): Boolean =
+    when (filter) {
+        PhotoBatchFilter.All -> true
+        PhotoBatchFilter.Unmatched -> result.selectedPosition == null
+        PhotoBatchFilter.Manual -> result.photo.manualLocation != null
+        PhotoBatchFilter.Writeable -> result.selectedPosition != null
     }
 
 @Composable
