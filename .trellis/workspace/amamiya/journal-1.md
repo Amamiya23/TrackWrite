@@ -95,7 +95,9 @@ Fixed 6 UX critique issues on settings page: merged General card, replaced Refre
 
 ### Main Changes
 
-(Add details)
+- Fixed clipped-looking Compose card edges by passing matching `shape` values to clickable `Surface` cards.
+- Aligned Record and Match card typography with the Settings page: primary row text now uses `bodyLarge` with normal weight, supporting text uses `bodyMedium`, and metric blocks use the same restrained hierarchy.
+- Added photo batch filter chips and empty-filter copy, rendered `logMessage` through a Material3 snackbar, and synced the light background token/spec notes.
 
 ### Git Commits
 
@@ -110,7 +112,10 @@ Fixed 6 UX critique issues on settings page: merged General card, replaced Refre
 
 ### Testing
 
-- [OK] (Add test results)
+- [OK] `./gradlew :app:compileDebugKotlin`
+- [OK] `./gradlew testDebugUnitTest`
+- [OK] `./gradlew :app:lintDebug`
+- [OK] `./gradlew installDebug`
 
 ### Status
 
@@ -305,6 +310,39 @@ Completed the native Compose redesign for the Record, Match, and Settings pages 
 | Hash | Message |
 |------|---------|
 | `7a446ea` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
+
+
+## Session 10: Polish Compose UI Cards
+
+**Date**: 2026-06-09
+**Task**: Polish Compose UI Cards
+**Branch**: `main`
+
+### Summary
+
+Fixed Compose card edge rendering, aligned Record and Match typography with Settings, added batch photo filters and visible snackbar feedback, and synced related frontend theme guidelines.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `469309e` | (see git log) |
 
 ### Testing
 
