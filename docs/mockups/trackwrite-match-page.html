@@ -1,0 +1,1533 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>TrackWrite 匹配页</title>
+  <style>
+    :root {
+      --page: #f9fafc;
+      --ink: oklch(18% 0.012 240);
+      --muted: oklch(52% 0.01 240);
+      --subtle: oklch(62% 0.008 240);
+      --line: oklch(90% 0.005 240);
+      --panel: #ffffff;
+      --panel-2: #f4f5f7;
+      --phone: oklch(16% 0.012 240);
+      --screen: #f9fafc;
+      --nav: oklch(93% 0.005 240);
+      --primary: oklch(48% 0.10 240);
+      --primary-soft: oklch(93% 0.025 240);
+      --pending: oklch(50% 0.10 235);
+      --pending-soft: oklch(93% 0.02 235);
+      --warn: oklch(58% 0.10 72);
+      --warn-soft: oklch(93% 0.025 72);
+      --danger: oklch(52% 0.12 24);
+      --danger-soft: oklch(93% 0.02 24);
+      --display: "Google Sans", "Noto Sans SC", "HarmonyOS Sans SC", system-ui, sans-serif;
+      --body: "Noto Sans SC", "MiSans", "Microsoft YaHei UI", system-ui, sans-serif;
+      --radius-l: 14px;
+      --radius-m: 10px;
+      --radius-s: 6px;
+      --shadow: 0 20px 48px oklch(16% 0.012 240 / 0.12);
+      --ease: cubic-bezier(.2, .8, .2, 1);
+    }
+
+    * { box-sizing: border-box; }
+
+    html,
+    body {
+      margin: 0;
+      min-height: 100%;
+      background: var(--page);
+      color: var(--ink);
+      font-family: var(--body);
+      -webkit-font-smoothing: antialiased;
+      text-rendering: geometricPrecision;
+    }
+
+    body { padding: 32px; }
+
+    button { font: inherit; border: 0; }
+
+    .board {
+      max-width: 1320px;
+      margin: 0 auto;
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(318px, 1fr));
+      gap: 22px;
+      align-items: start;
+    }
+
+    .state-card {
+      display: grid;
+      justify-items: center;
+      gap: 12px;
+    }
+
+    .state-label {
+      width: min(100%, 318px);
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      color: var(--muted);
+      font: 760 13px/1.35 var(--display);
+    }
+
+    .state-label b {
+      color: var(--ink);
+      font-weight: 850;
+    }
+
+    .phone {
+      width: 318px;
+      height: 696px;
+      padding: 8px;
+      border-radius: 38px;
+      background: var(--phone);
+      box-shadow: var(--shadow);
+    }
+
+    .screen {
+      position: relative;
+      height: 100%;
+      overflow: hidden;
+      border-radius: 31px;
+      background: var(--screen);
+    }
+
+    .camera {
+      position: absolute;
+      top: 11px;
+      left: 50%;
+      z-index: 10;
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      transform: translateX(-50%);
+      background: oklch(12% 0.01 238);
+      box-shadow: 0 0 0 2px oklch(16% 0.012 240 / 0.25);
+    }
+
+    .statusbar {
+      height: 36px;
+      padding: 11px 19px 0;
+      display: flex;
+      justify-content: space-between;
+      color: var(--ink);
+      font: 780 11px/1 var(--display);
+    }
+
+    .sys-icons {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+    }
+
+    .signal {
+      width: 15px;
+      height: 10px;
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 1px;
+      align-items: end;
+    }
+
+    .signal i {
+      display: block;
+      border-radius: 2px;
+      background: currentColor;
+    }
+
+    .signal i:nth-child(1) { height: 3px; opacity: .45; }
+    .signal i:nth-child(2) { height: 5px; opacity: .62; }
+    .signal i:nth-child(3) { height: 7px; opacity: .82; }
+    .signal i:nth-child(4) { height: 10px; }
+
+    .battery {
+      position: relative;
+      width: 18px;
+      height: 9px;
+      border: 1.5px solid currentColor;
+      border-radius: 3px;
+    }
+
+    .battery::after {
+      content: "";
+      position: absolute;
+      right: -4px;
+      top: 2px;
+      width: 2px;
+      height: 4px;
+      border-radius: 0 2px 2px 0;
+      background: currentColor;
+    }
+
+    .app {
+      height: calc(100% - 36px);
+      display: grid;
+      grid-template-rows: auto 1fr auto;
+      overflow: hidden;
+    }
+
+    .topbar {
+      padding: 3px 18px 10px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .title-group {
+      display: grid;
+      gap: 2px;
+    }
+
+    .title-group span {
+      color: var(--muted);
+      font: 760 11px/1.2 var(--display);
+    }
+
+    .title-group strong {
+      color: var(--ink);
+      font: 880 22px/1.05 var(--display);
+      letter-spacing: 0;
+    }
+
+    .icon-button {
+      width: 42px;
+      height: 42px;
+      border-radius: var(--radius-m);
+      display: grid;
+      place-items: center;
+      color: var(--ink);
+      background: var(--panel);
+      border: 1px solid var(--line);
+    }
+
+    .content {
+      min-height: 0;
+      overflow: hidden;
+      padding: 0 15px 12px;
+      display: grid;
+      align-content: start;
+      gap: 10px;
+    }
+
+    svg {
+      width: 16px;
+      height: 16px;
+      fill: none;
+      stroke: currentColor;
+      stroke-width: 2;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+    }
+
+    .track-source {
+      padding: 14px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius-l);
+      background: var(--panel);
+      display: grid;
+      gap: 10px;
+      cursor: pointer;
+      transition: background .16s var(--ease);
+    }
+
+    .track-source:active { background: var(--panel-2); }
+
+    .track-source-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .track-source-label {
+      color: var(--subtle);
+      font: 700 10px/1 var(--display);
+      letter-spacing: 0.02em;
+    }
+
+    .track-name {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .track-name strong {
+      color: var(--ink);
+      font: 850 14px/1.25 var(--display);
+      overflow-wrap: anywhere;
+    }
+
+    .track-empty {
+      padding: 18px 14px;
+      border: 1px dashed var(--line);
+      border-radius: var(--radius-l);
+      background: var(--panel);
+      display: grid;
+      place-items: center;
+      gap: 8px;
+      text-align: center;
+      cursor: pointer;
+    }
+
+    .track-empty svg {
+      width: 22px;
+      height: 22px;
+      color: var(--subtle);
+    }
+
+    .track-empty strong {
+      display: block;
+      color: var(--ink);
+      font: 800 13px/1.3 var(--display);
+    }
+
+    .track-empty span {
+      display: block;
+      color: var(--muted);
+      font-size: 11px;
+    }
+
+    .metric-row {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 7px;
+    }
+
+    .metric {
+      min-height: 48px;
+      padding: 8px;
+      border-radius: var(--radius-m);
+      display: grid;
+      align-content: center;
+      gap: 3px;
+      background: var(--panel-2);
+    }
+
+    .metric strong {
+      color: var(--ink);
+      font: 850 13px/1.2 var(--display);
+      font-variant-numeric: tabular-nums;
+    }
+
+    .metric .val {
+      display: block;
+      color: var(--ink);
+      font: 850 13px/1.2 var(--display);
+      font-variant-numeric: tabular-nums;
+    }
+
+    .metric .unit {
+      display: block;
+      color: var(--muted);
+      font: 700 10px/1 var(--display);
+    }
+
+    .photo-input {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+    }
+
+    .photo-input-btn {
+      min-height: 52px;
+      padding: 12px 10px;
+      border-radius: var(--radius-m);
+      border: 1px solid var(--line);
+      background: var(--panel);
+      display: grid;
+      place-items: center;
+      gap: 6px;
+      color: var(--ink);
+      font: 760 12px/1 var(--display);
+      cursor: pointer;
+      transition: background .16s var(--ease), transform .16s var(--ease);
+    }
+
+    .photo-input-btn:active { transform: scale(.98); background: var(--panel-2); }
+
+    .photo-input-btn svg {
+      width: 22px;
+      height: 22px;
+      color: var(--ink);
+    }
+
+    .photo-input-btn span {
+      color: var(--muted);
+      font: 600 10px/1 var(--display);
+    }
+
+    .photo-loading {
+      min-height: 44px;
+      padding: 10px 12px;
+      border-radius: var(--radius-m);
+      border: 1px solid var(--line);
+      background: var(--panel);
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .spinner {
+      width: 16px;
+      height: 16px;
+      border: 2px solid var(--line);
+      border-top-color: var(--primary);
+      border-radius: 50%;
+      animation: spin .8s linear infinite;
+    }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .photo-loading span {
+      color: var(--muted);
+      font: 600 12px/1.3 var(--display);
+    }
+
+    .batch-overview {
+      padding: 14px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius-l);
+      background: var(--panel);
+      display: grid;
+      gap: 10px;
+      cursor: pointer;
+      transition: background .16s var(--ease);
+    }
+
+    .batch-overview:active { background: var(--panel-2); }
+
+    .batch-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .batch-title {
+      color: var(--ink);
+      font: 800 14px/1.25 var(--display);
+    }
+
+    .batch-total {
+      color: var(--muted);
+      font: 760 12px/1 var(--display);
+    }
+
+    .batch-stats {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 6px;
+    }
+
+    .batch-stat {
+      min-height: 44px;
+      padding: 6px;
+      border-radius: var(--radius-m);
+      display: grid;
+      place-items: center;
+      gap: 2px;
+      background: var(--panel-2);
+    }
+
+    .batch-stat strong {
+      font: 850 15px/1.2 var(--display);
+      font-variant-numeric: tabular-nums;
+    }
+
+    .batch-stat.warn strong { color: var(--warn); }
+
+    .batch-stat .label {
+      font-size: 9px;
+    }
+
+    .batch-warn {
+      padding: 8px 10px;
+      border-radius: var(--radius-s);
+      background: var(--warn-soft);
+      color: var(--warn);
+      font: 700 11px/1.3 var(--display);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .batch-warn svg {
+      width: 14px;
+      height: 14px;
+      flex-shrink: 0;
+    }
+
+    .write-area {
+      padding: 14px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius-l);
+      background: var(--panel);
+      display: grid;
+      gap: 10px;
+    }
+
+    .write-summary {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .write-count {
+      color: var(--ink);
+      font: 800 14px/1.25 var(--display);
+    }
+
+    .write-skip {
+      color: var(--muted);
+      font: 600 11px/1 var(--display);
+    }
+
+    .write-progress {
+      min-height: 44px;
+      padding: 10px 14px;
+      border-radius: var(--radius-m);
+      background: var(--panel-2);
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .write-progress span {
+      color: var(--muted);
+      font: 600 12px/1.3 var(--display);
+    }
+
+    .write-actions {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 8px;
+    }
+
+    .btn-safe,
+    .btn-danger {
+      min-height: 44px;
+      border-radius: var(--radius-m);
+      font: 780 13px/1 var(--display);
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      cursor: pointer;
+      transition: transform .16s var(--ease), opacity .16s var(--ease);
+    }
+
+    .btn-safe:active,
+    .btn-danger:active { transform: scale(.98); }
+
+    .btn-safe {
+      color: oklch(97% 0.006 174);
+      background: var(--primary);
+    }
+
+    .btn-danger {
+      padding: 0 14px;
+      color: var(--danger);
+      background: var(--danger-soft);
+      border: 1px solid oklch(52% 0.12 24 / 0.20);
+    }
+
+    .btn-safe:disabled,
+    .btn-danger:disabled {
+      opacity: .5;
+      cursor: default;
+    }
+
+    .nav {
+      height: 62px;
+      padding: 7px 24px 10px;
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 8px;
+      background: var(--nav);
+      border-top: 1px solid var(--line);
+    }
+
+    .nav-item {
+      border-radius: var(--radius-l);
+      display: grid;
+      place-items: center;
+      gap: 2px;
+      color: var(--muted);
+      background: transparent;
+      font: 780 10px/1.1 var(--display);
+      transition: transform .16s var(--ease), background .16s var(--ease);
+    }
+
+    .nav-item:active { transform: scale(.95); }
+
+    .nav-item.active {
+      color: var(--primary);
+      background: var(--primary-soft);
+    }
+
+    .nav-item svg {
+      width: 18px;
+      height: 18px;
+    }
+
+    .drawer-scrim {
+      position: absolute;
+      inset: 0;
+      background: oklch(16% 0.012 240 / 0.38);
+      z-index: 20;
+    }
+
+    .drawer {
+      position: absolute;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      max-height: 480px;
+      padding: 10px 16px 16px;
+      border-radius: 20px 20px 0 0;
+      background: var(--panel);
+      border-top: 1px solid var(--line);
+      box-shadow: 0 -14px 36px oklch(16% 0.012 240 / 0.10);
+      z-index: 21;
+      display: grid;
+      grid-template-rows: auto auto 1fr;
+      gap: 12px;
+    }
+
+    .handle {
+      width: 40px;
+      height: 4px;
+      margin: 0 auto;
+      border-radius: 99px;
+      background: oklch(75% 0.008 236);
+    }
+
+    .drawer-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .drawer-head h3 {
+      color: var(--ink);
+      font: 860 16px/1.2 var(--display);
+    }
+
+    .drawer-head span {
+      display: block;
+      margin-top: 2px;
+      color: var(--muted);
+      font-size: 11px;
+    }
+
+    .close {
+      width: 36px;
+      height: 36px;
+      border-radius: var(--radius-m);
+      color: var(--muted);
+      background: var(--panel-2);
+      display: grid;
+      place-items: center;
+      cursor: pointer;
+    }
+
+    .track-list,
+    .photo-list {
+      max-height: 350px;
+      overflow: auto;
+      display: grid;
+      gap: 8px;
+      scrollbar-width: none;
+    }
+
+    .track-item {
+      padding: 12px;
+      border-radius: var(--radius-l);
+      background: var(--panel-2);
+      border: 1px solid transparent;
+      display: grid;
+      gap: 8px;
+      cursor: pointer;
+      transition: border-color .16s var(--ease);
+    }
+
+    .track-item:active { border-color: var(--line); }
+
+    .track-item.selected {
+      border-color: oklch(48% 0.10 174 / 0.30);
+      background: var(--primary-soft);
+    }
+
+    .track-main {
+      display: flex;
+      justify-content: space-between;
+      gap: 10px;
+      align-items: start;
+    }
+
+    .track-main strong {
+      color: var(--ink);
+      font: 850 13px/1.25 var(--display);
+    }
+
+    .track-main span {
+      display: block;
+      margin-top: 3px;
+      color: var(--muted);
+      font-size: 11px;
+      line-height: 1.25;
+    }
+
+    .selected-mark {
+      min-height: 24px;
+      padding: 5px 8px;
+      border-radius: 999px;
+      color: var(--primary);
+      background: var(--primary-soft);
+      font: 850 10px/1 var(--display);
+      white-space: nowrap;
+    }
+
+    .track-item-actions {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 6px;
+    }
+
+    .track-action {
+      min-height: 32px;
+      border-radius: var(--radius-m);
+      color: var(--ink);
+      background: var(--panel);
+      font: 760 10px/1 var(--display);
+      cursor: pointer;
+      transition: background .16s var(--ease);
+    }
+
+    .track-action:active { background: var(--line); }
+
+    .track-action.delete {
+      color: var(--danger);
+      background: var(--danger-soft);
+    }
+
+    .photo-item {
+      padding: 10px;
+      border-radius: var(--radius-l);
+      background: var(--panel-2);
+      border: 1px solid transparent;
+      display: grid;
+      grid-template-columns: 48px 1fr auto;
+      grid-template-rows: auto auto;
+      gap: 2px 10px;
+      align-items: center;
+      cursor: pointer;
+      transition: border-color .16s var(--ease);
+    }
+
+    .photo-item:active { border-color: var(--line); }
+
+    .photo-item.highlighted {
+      border-color: oklch(58% 0.10 72 / 0.40);
+      background: var(--warn-soft);
+    }
+
+    .photo-thumb {
+      width: 48px;
+      height: 48px;
+      border-radius: var(--radius-s);
+      background: var(--line);
+      display: grid;
+      place-items: center;
+      overflow: hidden;
+      grid-row: 1 / 3;
+    }
+
+    .photo-thumb img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+
+    .photo-thumb svg {
+      width: 20px;
+      height: 20px;
+      color: var(--subtle);
+    }
+
+    .photo-info strong {
+      display: block;
+      color: var(--ink);
+      font: 800 12px/1.25 var(--display);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .photo-info span {
+      color: var(--muted);
+      font-size: 10px;
+      line-height: 1.3;
+    }
+
+    .photo-meta {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      grid-column: 2 / -1;
+    }
+
+    .photo-detail {
+      color: var(--subtle);
+      font-size: 10px;
+      line-height: 1.3;
+      flex: 1;
+      min-width: 0;
+    }
+
+    .photo-action-inline {
+      padding: 0 4px;
+      border-radius: var(--radius-s);
+      background: transparent;
+      border: 0;
+      color: var(--primary);
+      font: 700 10px/1 var(--display);
+      white-space: nowrap;
+      cursor: pointer;
+      flex-shrink: 0;
+      transition: background .16s var(--ease);
+    }
+
+    .photo-action-inline:active { background: var(--primary-soft); }
+
+    .photo-action-inline.clear {
+      color: var(--muted);
+      font-weight: 600;
+    }
+
+    .photo-action-inline.clear:active { background: var(--panel); color: var(--ink); }
+
+    .photo-right {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-end;
+      gap: 4px;
+      grid-row: 1 / 3;
+    }
+
+    .status-tag {
+      min-height: 22px;
+      padding: 4px 8px;
+      border-radius: 999px;
+      font: 760 10px/1 var(--display);
+      white-space: nowrap;
+    }
+
+    .status-tag.matched {
+      color: var(--primary);
+      background: var(--primary-soft);
+    }
+
+    .status-tag.unmatched {
+      color: var(--warn);
+      background: var(--warn-soft);
+    }
+
+    .status-tag.manual {
+      color: var(--pending);
+      background: var(--pending-soft);
+    }
+
+    .status-tag.no-exif {
+      color: var(--subtle);
+      background: var(--panel);
+      border: 1px solid var(--line);
+    }
+
+    .import-row {
+      display: flex;
+      gap: 8px;
+    }
+
+    .import-btn {
+      flex: 1;
+      min-height: 40px;
+      border-radius: var(--radius-m);
+      border: 1px solid var(--line);
+      background: var(--panel);
+      color: var(--ink);
+      font: 760 12px/1 var(--display);
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      cursor: pointer;
+      transition: background .16s var(--ease);
+    }
+
+    .import-btn:active { background: var(--panel-2); }
+
+    .import-btn svg {
+      width: 16px;
+      height: 16px;
+      color: var(--muted);
+    }
+
+    .empty-state {
+      min-height: 200px;
+      border-radius: var(--radius-l);
+      display: grid;
+      place-items: center;
+      padding: 22px;
+      text-align: center;
+      background: var(--panel-2);
+    }
+
+    .empty-state svg {
+      width: 28px;
+      height: 28px;
+      margin-bottom: 14px;
+      color: var(--subtle);
+    }
+
+    .empty-state strong {
+      display: block;
+      color: var(--ink);
+      font: 850 14px/1.25 var(--display);
+    }
+
+    .empty-state span {
+      display: block;
+      margin-top: 4px;
+      color: var(--muted);
+      font-size: 11px;
+      line-height: 1.4;
+    }
+
+    .toast {
+      position: absolute;
+      left: 18px;
+      right: 18px;
+      bottom: 76px;
+      z-index: 25;
+      min-height: 42px;
+      padding: 12px 14px;
+      border-radius: var(--radius-l);
+      display: grid;
+      place-items: center;
+      color: oklch(94% 0.006 236);
+      background: oklch(16% 0.012 240 / 0.92);
+      font: 820 12px/1.35 var(--display);
+      text-align: center;
+      opacity: 0;
+      transform: translateY(8px);
+      animation: toast-in .18s var(--ease) forwards;
+    }
+
+    @keyframes toast-in {
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    @media (max-width: 900px) {
+      body { padding: 20px; }
+    }
+
+    @media (max-width: 420px) {
+      body { padding: 16px 10px; }
+      .phone {
+        width: min(318px, calc(100vw - 20px));
+        height: auto;
+        aspect-ratio: 318 / 696;
+      }
+      .state-label { width: min(318px, calc(100vw - 20px)); }
+    }
+  </style>
+</head>
+<body>
+  <main class="board" id="board" aria-label="TrackWrite 匹配页状态方案"></main>
+
+  <script>
+    const icons = {
+      track: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 19c4-8 10 4 14-4"></path><circle cx="5" cy="19" r="2"></circle><circle cx="19" cy="15" r="2"></circle></svg>',
+      photo: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8a2 2 0 0 1 2-2h3l1.5-2h3L15 6h3a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2Z"></path><circle cx="12" cy="13" r="3.2"></circle></svg>',
+      folder: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8a2 2 0 0 1 2-2h3l2 2h7a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2Z"></path></svg>',
+      check: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12l5 5L20 7"></path></svg>',
+      warn: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 9v4"></path><path d="M12 17h.01"></path><path d="M10.3 4.2L2.8 17a2 2 0 0 0 1.7 3h15a2 2 0 0 0 1.7-3L13.7 4.2a2 2 0 0 0-3.4 0Z"></path></svg>',
+      chevron: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6"></path></svg>',
+      close: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"></path></svg>',
+      record: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="7"></circle><circle cx="12" cy="12" r="3"></circle></svg>',
+      settings: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8Z"></path><path d="M4 12h2M18 12h2M12 4v2M12 18v2M6.4 6.4l1.4 1.4M16.2 16.2l1.4 1.4M17.6 6.4l-1.4 1.4M7.8 16.2l-1.4 1.4"></path></svg>',
+      empty: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16"></path><path d="M6 6v12a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V6"></path><path d="M10 11h4"></path></svg>',
+      map: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6l6-3 6 3 6-3v15l-6 3-6-3-6 3Z"></path><path d="M9 3v15"></path><path d="M15 6v15"></path></svg>',
+      gps: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8"></circle><circle cx="12" cy="12" r="2"></circle><path d="M12 2v3M12 19v3M2 12h3M19 12h3"></path></svg>',
+      file: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"></path><path d="M14 2v6h6"></path></svg>',
+      manual: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 22s-8-4.5-8-11.8A8 8 0 0 1 12 2a8 8 0 0 1 8 8.2c0 7.3-8 11.8-8 11.8Z"></path><circle cx="12" cy="10" r="3"></circle></svg>'
+    };
+
+    const tracks = [
+      { name: '天目山晨拍 · 06/08', points: '428', duration: '01:42:18', distance: '3.8 km', selected: true },
+      { name: '西湖蓝调时刻 · 06/02', points: '312', duration: '00:58:40', distance: '1.9 km' },
+      { name: '良渚遗址外拍 · 05/28', points: '537', duration: '02:10:05', distance: '4.6 km' }
+    ];
+
+    const photos = [
+      { name: 'DSC_0842.ARW', time: '06:32:18', status: 'matched', detail: '精确 · GPS #412', thumb: true },
+      { name: 'DSC_0843.ARW', time: '06:33:05', status: 'matched', detail: '插值 · 两点间', thumb: true },
+      { name: 'DSC_0844.ARW', time: '06:35:41', status: 'matched', detail: '精确 · GPS #415', thumb: true },
+      { name: 'IMG_2024_0608_001', time: '--:--:--', status: 'no-exif', detail: '无 EXIF 时间', thumb: false },
+      { name: 'DSC_0850.ARW', time: '06:48:12', status: 'unmatched', detail: '超出轨迹时间范围', thumb: true },
+      { name: 'DSC_0851.ARW', time: '06:49:33', status: 'manual', detail: '手动：天目山主峰', thumb: true, highlighted: true }
+    ];
+
+    const screens = [
+      {
+        label: '无轨迹无照片',
+        note: '初始状态',
+        state: 'empty',
+        trackName: '',
+        trackPoints: '',
+        trackDuration: '',
+        trackDistance: '',
+        hasTrack: false,
+        hasPhotos: false,
+        photoCount: 0,
+        matchedCount: 0,
+        unmatchedCount: 0,
+        manualCount: 0,
+        writeCount: 0,
+        skipCount: 0,
+        writeMode: '',
+        showDrawer: false,
+        drawerType: ''
+      },
+      {
+        label: '已选轨迹无照片',
+        note: '等待选择照片',
+        state: 'track-selected',
+        trackName: '天目山晨拍 · 06/08',
+        trackPoints: '428',
+        trackDuration: '01:42:18',
+        trackDistance: '3.8 km',
+        hasTrack: true,
+        hasPhotos: false,
+        photoCount: 0,
+        matchedCount: 0,
+        unmatchedCount: 0,
+        manualCount: 0,
+        writeCount: 0,
+        skipCount: 0,
+        writeMode: '',
+        showDrawer: false,
+        drawerType: ''
+      },
+      {
+        label: '照片加载中',
+        note: '读取 EXIF',
+        state: 'loading',
+        trackName: '天目山晨拍 · 06/08',
+        trackPoints: '428',
+        trackDuration: '01:42:18',
+        trackDistance: '3.8 km',
+        hasTrack: true,
+        hasPhotos: true,
+        loading: true,
+        photoCount: 0,
+        matchedCount: 0,
+        unmatchedCount: 0,
+        manualCount: 0,
+        writeCount: 0,
+        skipCount: 0,
+        writeMode: '',
+        showDrawer: false,
+        drawerType: ''
+      },
+      {
+        label: '全部匹配完成',
+        note: '可安全写入',
+        state: 'all-matched',
+        trackName: '天目山晨拍 · 06/08',
+        trackPoints: '428',
+        trackDuration: '01:42:18',
+        trackDistance: '3.8 km',
+        hasTrack: true,
+        hasPhotos: true,
+        photoCount: 24,
+        matchedCount: 24,
+        unmatchedCount: 0,
+        manualCount: 0,
+        writeCount: 24,
+        skipCount: 0,
+        writeMode: 'copy',
+        showDrawer: false,
+        drawerType: ''
+      },
+      {
+        label: '有未匹配照片',
+        note: '需要处理',
+        state: 'has-unmatched',
+        trackName: '天目山晨拍 · 06/08',
+        trackPoints: '428',
+        trackDuration: '01:42:18',
+        trackDistance: '3.8 km',
+        hasTrack: true,
+        hasPhotos: true,
+        photoCount: 24,
+        matchedCount: 18,
+        unmatchedCount: 4,
+        manualCount: 2,
+        writeCount: 20,
+        skipCount: 4,
+        writeMode: 'copy',
+        showDrawer: false,
+        drawerType: ''
+      },
+      {
+        label: '写入副本',
+        note: '安全默认',
+        state: 'write-copy',
+        trackName: '天目山晨拍 · 06/08',
+        trackPoints: '428',
+        trackDuration: '01:42:18',
+        trackDistance: '3.8 km',
+        hasTrack: true,
+        hasPhotos: true,
+        photoCount: 24,
+        matchedCount: 22,
+        unmatchedCount: 2,
+        manualCount: 0,
+        writeCount: 22,
+        skipCount: 2,
+        writeMode: 'copy',
+        showDrawer: false,
+        drawerType: ''
+      },
+      {
+        label: '写入原图',
+        note: '需确认风险',
+        state: 'write-original',
+        trackName: '天目山晨拍 · 06/08',
+        trackPoints: '428',
+        trackDuration: '01:42:18',
+        trackDistance: '3.8 km',
+        hasTrack: true,
+        hasPhotos: true,
+        photoCount: 24,
+        matchedCount: 22,
+        unmatchedCount: 2,
+        manualCount: 0,
+        writeCount: 22,
+        skipCount: 2,
+        writeMode: 'original',
+        showDrawer: false,
+        drawerType: ''
+      },
+      {
+        label: '写入进行中',
+        note: '进度反馈',
+        state: 'writing',
+        trackName: '天目山晨拍 · 06/08',
+        trackPoints: '428',
+        trackDuration: '01:42:18',
+        trackDistance: '3.8 km',
+        hasTrack: true,
+        hasPhotos: true,
+        photoCount: 24,
+        matchedCount: 22,
+        unmatchedCount: 2,
+        manualCount: 0,
+        writeCount: 22,
+        skipCount: 2,
+        writeMode: 'copy',
+        writing: true,
+        writeProgress: 15,
+        writeTotal: 22,
+        showDrawer: false,
+        drawerType: ''
+      },
+      {
+        label: '轨迹来源抽屉',
+        note: '选择轨迹',
+        state: 'drawer-track',
+        trackName: '天目山晨拍 · 06/08',
+        trackPoints: '428',
+        trackDuration: '01:42:18',
+        trackDistance: '3.8 km',
+        hasTrack: true,
+        hasPhotos: true,
+        photoCount: 24,
+        matchedCount: 20,
+        unmatchedCount: 2,
+        manualCount: 2,
+        writeCount: 22,
+        skipCount: 2,
+        writeMode: 'copy',
+        showDrawer: true,
+        drawerType: 'track-list'
+      },
+      {
+        label: '轨迹空状态',
+        note: '无可用轨迹',
+        state: 'drawer-track-empty',
+        trackName: '',
+        trackPoints: '',
+        trackDuration: '',
+        trackDistance: '',
+        hasTrack: false,
+        hasPhotos: true,
+        photoCount: 12,
+        matchedCount: 0,
+        unmatchedCount: 12,
+        manualCount: 0,
+        writeCount: 0,
+        skipCount: 12,
+        writeMode: '',
+        showDrawer: true,
+        drawerType: 'track-empty'
+      },
+      {
+        label: '照片批次抽屉',
+        note: '查看匹配详情',
+        state: 'drawer-photos',
+        trackName: '天目山晨拍 · 06/08',
+        trackPoints: '428',
+        trackDuration: '01:42:18',
+        trackDistance: '3.8 km',
+        hasTrack: true,
+        hasPhotos: true,
+        photoCount: 24,
+        matchedCount: 18,
+        unmatchedCount: 4,
+        manualCount: 2,
+        writeCount: 20,
+        skipCount: 4,
+        writeMode: 'copy',
+        showDrawer: true,
+        drawerType: 'photo-list'
+      },
+      {
+        label: '照片空状态',
+        note: '无匹配照片',
+        state: 'drawer-photos-empty',
+        trackName: '天目山晨拍 · 06/08',
+        trackPoints: '428',
+        trackDuration: '01:42:18',
+        trackDistance: '3.8 km',
+        hasTrack: true,
+        hasPhotos: false,
+        photoCount: 0,
+        matchedCount: 0,
+        unmatchedCount: 0,
+        manualCount: 0,
+        writeCount: 0,
+        skipCount: 0,
+        writeMode: '',
+        showDrawer: true,
+        drawerType: 'photo-empty'
+      }
+    ];
+
+    function navItem(iconName, label, active) {
+      return `<button class="nav-item ${active ? 'active' : ''}" type="button">${icons[iconName]}<span>${label}</span></button>`;
+    }
+
+    function renderTrackSource(s) {
+      if (!s.hasTrack) {
+        return `
+          <div class="track-empty" data-action="open-track-drawer">
+            ${icons.track}
+            <strong>选择轨迹</strong>
+            <span>导入 GPX 或选择已有</span>
+          </div>`;
+      }
+      return `
+        <div class="track-source" data-action="open-track-drawer">
+          <div class="track-source-head">
+            <span class="track-source-label">轨迹</span>
+            ${icons.chevron}
+          </div>
+          <div class="track-name">
+            ${icons.track}
+            <strong>${s.trackName}</strong>
+          </div>
+          <div class="metric-row">
+            <div class="metric"><span class="val">${s.trackPoints}</span><span class="unit">点</span></div>
+            <div class="metric"><span class="val">${s.trackDuration}</span><span class="unit">时</span></div>
+            <div class="metric"><span class="val">${s.trackDistance}</span><span class="unit">距</span></div>
+          </div>
+        </div>`;
+    }
+
+    function renderPhotoInput(s) {
+      if (s.loading) {
+        return `
+          <div class="photo-loading">
+            <div class="spinner"></div>
+            <span>读取 EXIF...</span>
+          </div>`;
+      }
+      if (s.hasPhotos) return '';
+      return `
+        <div class="photo-input">
+          <button class="photo-input-btn" type="button" data-action="select-photos">
+            ${icons.photo}
+            <span>选择照片</span>
+          </button>
+          <button class="photo-input-btn" type="button" data-action="select-folder">
+            ${icons.folder}
+            <span>选择文件夹</span>
+          </button>
+        </div>`;
+    }
+
+    function renderBatchOverview(s) {
+      if (!s.hasPhotos || s.loading) return '';
+      const hasWarn = s.unmatchedCount > 0;
+      return `
+        <div class="batch-overview" data-action="open-photo-drawer">
+          <div class="batch-head">
+            <span class="batch-title">照片</span>
+            <span class="batch-total">${s.photoCount}</span>
+          </div>
+          <div class="batch-stats">
+            <div class="batch-stat">
+              <span class="label">匹配</span>
+              <strong>${s.matchedCount}</strong>
+            </div>
+            <div class="batch-stat${hasWarn ? ' warn' : ''}">
+              <span class="label">未匹配</span>
+              <strong>${s.unmatchedCount}</strong>
+            </div>
+            <div class="batch-stat">
+              <span class="label">手动</span>
+              <strong>${s.manualCount}</strong>
+            </div>
+            <div class="batch-stat">
+              <span class="label">跳过</span>
+              <strong>${s.skipCount}</strong>
+            </div>
+          </div>
+            ${hasWarn ? `<div class="batch-warn">${icons.warn}<span>${s.unmatchedCount} 张待处理</span></div>` : ''}
+        </div>`;
+    }
+
+    function renderWriteArea(s) {
+      if (!s.hasPhotos || s.loading) return '';
+      if (s.writeCount === 0 && s.photoCount > 0) {
+        return `
+          <div class="write-area">
+            <div class="write-summary">
+              <span class="write-count">无可写入照片</span>
+            </div>
+          </div>`;
+      }
+      if (s.writeCount === 0) return '';
+
+      const isWriting = s.writing;
+      const isOriginal = s.writeMode === 'original';
+      const btnLabel = isWriting ? '写入中...' : isOriginal ? '写入原图' : '写入副本';
+      const skipLabel = s.skipCount > 0 ? `跳过 ${s.skipCount}` : '';
+
+      return `
+        <div class="write-area">
+          <div class="write-summary">
+            <span class="write-count">${s.writeCount} 张可写入</span>
+            ${skipLabel ? `<span class="write-skip">${skipLabel}</span>` : ''}
+          </div>
+          ${isWriting ? `
+            <div class="write-progress">
+              <div class="spinner"></div>
+              <span>${isOriginal ? '写入原图' : '写入副本'} ${s.writeProgress}/${s.writeTotal}</span>
+            </div>` : ''}
+          <div class="write-actions">
+            <button class="${isOriginal ? 'btn-danger' : 'btn-safe'}" type="button" data-action="${isOriginal ? 'write-original' : 'write'}" ${isWriting ? 'disabled' : ''}>${btnLabel}</button>
+          </div>
+        </div>`;
+    }
+
+    function renderDrawer(s) {
+      if (!s.showDrawer) return '';
+
+      let body = '';
+      if (s.drawerType === 'track-list') {
+        body = `<div class="track-list">${tracks.map(t => `
+          <article class="track-item${t.selected ? ' selected' : ''}">
+            <div class="track-main">
+              <div><strong>${t.name}</strong><span>${t.points} 点 · ${t.duration} · ${t.distance}</span></div>
+              ${t.selected ? '<span class="selected-mark">当前</span>' : ''}
+            </div>
+            <div class="track-item-actions">
+              <button class="track-action" type="button">导出</button>
+              <button class="track-action" type="button">重命名</button>
+              <button class="track-action delete" type="button">删除</button>
+            </div>
+          </article>`).join('')}</div>`;
+      } else if (s.drawerType === 'track-empty') {
+        body = `<div class="empty-state">${icons.empty}<div><strong>还没有轨迹</strong><span>导入 GPX 或先开始记录</span></div></div>`;
+      } else if (s.drawerType === 'photo-list') {
+        body = `<div class="photo-list">${photos.map(p => `
+          <article class="photo-item${p.highlighted ? ' highlighted' : ''}">
+            <div class="photo-thumb">${p.thumb ? icons.photo : icons.file}</div>
+            <div class="photo-info">
+              <strong>${p.name}</strong>
+              <span>${p.time}</span>
+            </div>
+            <div class="photo-status">
+              <span class="status-tag ${p.status}">${
+                p.status === 'matched' ? '已匹配' :
+                p.status === 'unmatched' ? '未匹配' :
+                p.status === 'manual' ? '手动' : '无 EXIF'
+              }</span>
+            </div>
+            <div class="photo-detail">${p.detail}</div>
+            <div class="photo-action-row">
+              <button class="photo-action-inline" type="button" data-action="set-manual">${p.status === 'manual' ? '改位置' : '设位置'}</button>
+              ${p.status === 'manual' ? '<button class="photo-action-inline clear" type="button" data-action="clear-manual">清除</button>' : ''}
+            </div>
+          </article>`).join('')}</div>`;
+      } else if (s.drawerType === 'photo-empty') {
+        body = `<div class="empty-state">${icons.empty}<div><strong>无照片</strong><span>选择照片或文件夹</span></div></div>`;
+      }
+
+      const drawerTitle = s.drawerType.startsWith('track') ? '轨迹' : '照片';
+      const drawerMeta = s.drawerType.startsWith('track')
+        ? (s.drawerType === 'track-empty' ? '0 条' : `${tracks.length} 条`)
+        : (s.drawerType === 'photo-empty' ? '0 张' : `${photos.length} 张`);
+
+      return `
+        <div class="drawer-scrim" aria-hidden="true"></div>
+        <section class="drawer" aria-label="${drawerTitle}底部抽屉">
+          <div class="handle"></div>
+          <div class="drawer-head">
+            <div><h3>${drawerTitle}</h3><span>${drawerMeta}</span></div>
+            <button class="close" type="button" aria-label="关闭">${icons.close}</button>
+          </div>
+          ${s.drawerType.startsWith('track') ? `<div class="import-row"><button class="import-btn" type="button" data-action="import-gpx">${icons.file}<span>导入 GPX</span></button></div>` : ''}
+          ${body}
+        </section>`;
+    }
+
+    function renderPhone(s) {
+      return `
+        <article class="state-card">
+          <div class="state-label"><b>${s.label}</b><span>${s.note}</span></div>
+          <div class="phone">
+            <div class="screen">
+              <div class="camera" aria-hidden="true"></div>
+              <div class="statusbar"><span>14:27</span><span class="sys-icons"><span class="signal"><i></i><i></i><i></i><i></i></span><span>5G</span><span class="battery"></span></span></div>
+              <div class="app">
+                <header class="topbar">
+                  <div class="title-group"><span>TrackWrite</span><strong>匹配</strong></div>
+                  <button class="icon-button" type="button" aria-label="匹配设置">${icons.settings}</button>
+                </header>
+                <section class="content">
+                  ${renderTrackSource(s)}
+                  ${renderPhotoInput(s)}
+                  ${renderBatchOverview(s)}
+                  ${renderWriteArea(s)}
+                </section>
+                <nav class="nav" aria-label="主导航">
+                  ${navItem('record', '记录', false)}
+                  ${navItem('photo', '匹配', true)}
+                  ${navItem('settings', '设置', false)}
+                </nav>
+              </div>
+              ${renderDrawer(s)}
+            </div>
+          </div>
+        </article>`;
+    }
+
+    document.getElementById('board').innerHTML = screens.map(renderPhone).join('');
+
+    function showToast(screen, message) {
+      const old = screen.querySelector('.toast');
+      if (old) old.remove();
+      const toast = document.createElement('div');
+      toast.className = 'toast';
+      toast.textContent = message;
+      screen.appendChild(toast);
+      window.setTimeout(() => toast.remove(), 1800);
+    }
+
+    document.addEventListener('click', event => {
+      const screen = event.target.closest('.screen');
+      if (!screen) return;
+
+      const close = event.target.closest('.close');
+      if (close) {
+        screen.querySelector('.drawer')?.remove();
+        screen.querySelector('.drawer-scrim')?.remove();
+        return;
+      }
+
+      const trackSource = event.target.closest('.track-source, .track-empty');
+      if (trackSource) {
+        showToast(screen, '打开轨迹来源');
+        return;
+      }
+
+      const batchOverview = event.target.closest('.batch-overview');
+      if (batchOverview) {
+        showToast(screen, '打开照片批次');
+        return;
+      }
+
+      const selectPhotos = event.target.closest('[data-action="select-photos"]');
+      if (selectPhotos) {
+        showToast(screen, '选择照片');
+        return;
+      }
+
+      const selectFolder = event.target.closest('[data-action="select-folder"]');
+      if (selectFolder) {
+        showToast(screen, '选择文件夹');
+        return;
+      }
+
+      const setManual = event.target.closest('[data-action="set-manual"]');
+      if (setManual) {
+        showToast(screen, '设位置');
+        return;
+      }
+
+      const clearManual = event.target.closest('[data-action="clear-manual"]');
+      if (clearManual) {
+        showToast(screen, '已清除');
+        return;
+      }
+
+      const importGpx = event.target.closest('[data-action="import-gpx"]');
+      if (importGpx) {
+        showToast(screen, '导入 GPX 文件');
+        return;
+      }
+
+      const writeBtn = event.target.closest('[data-action="write"]');
+      if (writeBtn) {
+        showToast(screen, '开始写入');
+        return;
+      }
+
+      const writeOriginal = event.target.closest('[data-action="write-original"]');
+      if (writeOriginal) {
+        showToast(screen, '写入原图？');
+        return;
+      }
+
+      const trackAction = event.target.closest('.track-action');
+      if (trackAction) {
+        const label = trackAction.textContent.trim();
+        const message = label === '删除' ? '需再次确认' : label === '导出' ? 'GPX 已准备' : '可编辑名称';
+        showToast(screen, message);
+        return;
+      }
+    });
+  </script>
+</body>
+</html>
