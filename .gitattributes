@@ -1,0 +1,7 @@
+# Exclude local AI workflow/runtime files from GitHub language statistics.
+.agent/** linguist-generated=true
+.agents/** linguist-generated=true
+.codex/** linguist-generated=true
+.impeccable/** linguist-generated=true
+.opencode/** linguist-generated=true
+.trellis/** linguist-generated=true

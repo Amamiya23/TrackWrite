@@ -12,3 +12,19 @@ keystore.properties
 .idea/
 
 java_pid760903.hprof
+
+# Local AI/agent tooling and session state.
+.agent/
+.agents/
+.codex/
+.opencode/
+.impeccable/
+.trellis/.agent-log
+.trellis/.backup-*/
+.trellis/.current-task
+.trellis/.developer
+.trellis/.runtime/
+.trellis/.session-id
+.trellis/.template-hashes.json
+.trellis/tasks/
+.trellis/workspace/
