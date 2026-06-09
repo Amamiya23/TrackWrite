@@ -41,8 +41,8 @@ android {
         applicationId = "com.trackwrite.app"
         minSdk = 31
         targetSdk = 34
-        versionCode = gradleProperty("trackwrite.versionCode", "20").toInt()
-        versionName = gradleProperty("trackwrite.versionName", "v2.0")
+        versionCode = gradleProperty("trackwrite.versionCode", "22").toInt()
+        versionName = gradleProperty("trackwrite.versionName", "v2.2")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         manifestPlaceholders["amapApiKey"] = providers
