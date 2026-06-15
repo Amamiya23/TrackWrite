@@ -76,4 +76,7 @@ TRACKWRITE_RELEASE_KEY_PASSWORD=...
 
 # 使用项目脚本构建指定版本
 scripts/build-apk.sh v2.1 --code 21
+
+# 上传已构建 APK 到 GitHub Release，并用版本名创建 release tag
+scripts/release-apk.sh v2.1 --code 21
 ```
