@@ -1,11 +1,9 @@
 package com.trackwrite.app.media
 
 import android.content.ContentResolver
-import android.content.ContentValues
 import android.content.Context
 import android.graphics.BitmapFactory
 import android.net.Uri
-import android.provider.MediaStore.Images.Media
 import android.provider.MediaStore
 import android.provider.OpenableColumns
 import androidx.documentfile.provider.DocumentFile
@@ -39,7 +37,6 @@ private const val GPS_COORDINATE_VERIFY_TOLERANCE = 0.000001
 private const val GPS_ALTITUDE_VERIFY_TOLERANCE = 0.001
 
 private const val GPS_EXIF_VERSION_2_3_0_0 = "2,3,0,0"
-internal const val BACKUP_RELATIVE_PATH = "Pictures/TrackWrite Backups"
 
 private val writableExtensionMimeTypes = mapOf(
     "jpg" to MIME_TYPE_JPEG,
@@ -176,7 +173,7 @@ class PhotoGeotagging(private val context: Context) {
                     )
                 }
                 else -> runCatchingStorage {
-                    writeGpsWithBackup(result.photo, position, writableMimeType)
+                    writeGpsInPlace(result.photo.uri, position, writableMimeType)
                     PhotoWriteOutcome(result.photo.displayName, PhotoWriteOutcome.Status.Written)
                 }.getOrElse { error ->
                     PhotoWriteOutcome(result.photo.displayName, PhotoWriteOutcome.Status.Failed, error.message ?: "write failed")
@@ -215,13 +212,13 @@ class PhotoGeotagging(private val context: Context) {
         }
     }
 
-    private fun writeGpsWithBackup(
-        photo: PhotoCandidate,
+    private fun writeGpsInPlace(
+        uri: Uri,
         position: GeoPoint,
         mimeType: String,
     ) {
         val sourceTemp = runCatchingStorage {
-            copyUriToTemp(photo.uri, mimeType, "trackwrite-original-").also {
+            copyUriToTemp(uri, mimeType, "trackwrite-original-").also {
                 validateImageFile(it, mimeType)
             }
         }.getOrElse { error ->
@@ -241,15 +238,7 @@ class PhotoGeotagging(private val context: Context) {
                 )
             }
             runCatchingStorage {
-                writeDefaultBackupFromFile(sourceTemp, photo.displayName, mimeType)
-            }.getOrElse { error ->
-                throw IllegalStateException(
-                    context.getString(R.string.photo_write_backup_failed, error.message.orEmpty()),
-                    error,
-                )
-            }
-            runCatchingStorage {
-                replaceUriFromFile(photo.uri, editedTemp)
+                replaceUriFromFile(uri, editedTemp)
             }.getOrElse { error ->
                 throw IllegalStateException(
                     context.getString(R.string.photo_write_replace_failed, error.message.orEmpty()),
@@ -257,7 +246,7 @@ class PhotoGeotagging(private val context: Context) {
                 )
             }
             runCatchingStorage {
-                validateImageUri(photo.uri, mimeType, position)
+                validateImageUri(uri, mimeType, position)
             }.getOrElse { error ->
                 throw IllegalStateException(
                     context.getString(R.string.photo_write_postcheck_failed, error.message.orEmpty()),
@@ -299,42 +288,6 @@ class PhotoGeotagging(private val context: Context) {
         } catch (error: Throwable) {
             temp.delete()
             throw error
-        }
-    }
-
-    private fun writeDefaultBackupFromFile(
-        source: File,
-        displayName: String,
-        mimeType: String,
-    ) {
-        val backup = createDefaultBackupUri(displayName, mimeType)
-            ?: error(context.getString(R.string.photo_backup_create_failed))
-        try {
-            writeUriFromFile(backup, source)
-            validateImageUri(backup, mimeType)
-            publishMediaStoreItem(backup)
-        } catch (error: Throwable) {
-            resolver.delete(backup, null, null)
-            throw error
-        }
-    }
-
-    private fun createDefaultBackupUri(displayName: String, mimeType: String): Uri? {
-        val values = ContentValues().apply {
-            put(Media.DISPLAY_NAME, backupDisplayName(displayName))
-            put(Media.MIME_TYPE, mimeType)
-            put(Media.RELATIVE_PATH, BACKUP_RELATIVE_PATH)
-            put(Media.IS_PENDING, 1)
-        }
-        return resolver.insert(Media.EXTERNAL_CONTENT_URI, values)
-    }
-
-    private fun publishMediaStoreItem(uri: Uri) {
-        val values = ContentValues().apply {
-            put(Media.IS_PENDING, 0)
-        }
-        check(resolver.update(uri, values, null, null) > 0) {
-            context.getString(R.string.photo_backup_publish_failed)
         }
     }
 
@@ -489,17 +442,6 @@ internal fun gpsLatitudeRef(latitude: Double): String = if (latitude >= 0) "N" e
 internal fun gpsLongitudeRef(longitude: Double): String = if (longitude >= 0) "E" else "W"
 
 internal fun gpsAltitudeRef(altitude: Double): String = if (altitude < 0) "1" else "0"
-
-internal fun backupDisplayName(displayName: String, now: Instant = Instant.now()): String {
-    val safeName = displayName
-        .replace(Regex("""[\\/:*?"<>|]"""), "_")
-        .ifBlank { "photo" }
-    val timestamp = DateTimeFormatter
-        .ofPattern("yyyyMMdd-HHmmss-SSS", Locale.US)
-        .withZone(ZoneId.systemDefault())
-        .format(now)
-    return "$timestamp-$safeName"
-}
 
 internal fun imageSignatureMatches(mimeType: String, header: ByteArray): Boolean =
     when (mimeType) {

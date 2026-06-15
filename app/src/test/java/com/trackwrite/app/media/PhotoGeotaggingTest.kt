@@ -6,7 +6,6 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
-import java.time.Instant
 
 class PhotoGeotaggingTest {
     @Test
@@ -102,22 +101,4 @@ class PhotoGeotaggingTest {
         assertFalse(imageSignatureMatches("image/heic", byteArrayOf(0x00, 0x00, 0x00, 0x18)))
     }
 
-    @Test
-    fun backupDisplayNamePrefixesTimestampAndSanitizesInvalidCharacters() {
-        val name = backupDisplayName(
-            """trip:day/one\photo?.jpg""",
-            Instant.parse("2026-06-06T08:09:10.123Z"),
-        )
-
-        assertTrue(name.endsWith("-trip_day_one_photo_.jpg"))
-        assertFalse(name.contains(":"))
-        assertFalse(name.contains("/"))
-        assertFalse(name.contains("\\"))
-        assertFalse(name.contains("?"))
-    }
-
-    @Test
-    fun defaultBackupRelativePathUsesAppManagedPicturesFolder() {
-        assertEquals("Pictures/TrackWrite Backups", BACKUP_RELATIVE_PATH)
-    }
 }
