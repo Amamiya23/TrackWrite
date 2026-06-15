@@ -11,7 +11,7 @@ release/tag does not exist, gh creates it and points the tag at the target ref.
 
 Options:
   --apk <path>          APK to upload (default: app/build/outputs/apk/release/app-release.apk)
-  --code <version-code> Accepted for parity with build-apk.sh; ignored when uploading
+  --code <version-code> Required Android versionCode for trackwrite-update.json
   --repo <owner/repo>   GitHub repository for gh, if not the current git remote
   --target <ref>        Branch or full commit SHA for a newly-created tag (default: GitHub default branch)
   --title <title>       Release title (default: <version-name>)
@@ -26,8 +26,8 @@ Options:
 
 Examples:
   scripts/build-apk.sh v2.3 --code 23
-  scripts/release-apk.sh v2.3
-  scripts/release-apk.sh v2.3 --apk app/build/outputs/apk/debug/app-debug.apk --prerelease
+  scripts/release-apk.sh v2.3 --code 23
+  scripts/release-apk.sh v2.3 --code 23 --apk app/build/outputs/apk/debug/app-debug.apk --prerelease
 USAGE
 }
 
@@ -35,7 +35,29 @@ script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 repo_root="$(cd "$script_dir/.." && pwd)"
 cd "$repo_root"
 
+sha256_file() {
+    if command -v sha256sum >/dev/null 2>&1; then
+        sha256sum "$1" | awk '{print $1}'
+    elif command -v shasum >/dev/null 2>&1; then
+        shasum -a 256 "$1" | awk '{print $1}'
+    else
+        echo "Required command not found: sha256sum or shasum" >&2
+        exit 1
+    fi
+}
+
+json_escape() {
+    local value="$1"
+    value="${value//\\/\\\\}"
+    value="${value//\"/\\\"}"
+    value="${value//$'\n'/\\n}"
+    value="${value//$'\r'/\\r}"
+    value="${value//$'\t'/\\t}"
+    printf '%s' "$value"
+}
+
 version_name=""
+version_code=""
 apk_path="app/build/outputs/apk/release/app-release.apk"
 repo=""
 target=""
@@ -72,6 +94,7 @@ while [[ $# -gt 0 ]]; do
                 echo "Version code must be a positive integer" >&2
                 exit 1
             fi
+            version_code="$((10#$2))"
             shift 2
             ;;
         --repo)
@@ -166,6 +189,11 @@ if [[ "$version_name" =~ [[:space:]] ]]; then
     exit 1
 fi
 
+if [[ -z "$version_code" ]]; then
+    echo "Version code is required. Pass it with --code." >&2
+    exit 1
+fi
+
 if [[ ! -f "$apk_path" ]]; then
     echo "APK not found: $apk_path" >&2
     echo "Build it first, for example: scripts/build-apk.sh $version_name" >&2
@@ -248,8 +276,24 @@ if [[ "$clobber" == true ]]; then
     upload_flags+=(--clobber)
 fi
 
+apk_basename="$(basename "$apk_path")"
+apk_sha256="$(sha256_file "$apk_path")"
+metadata_dir="$(mktemp -d "${TMPDIR:-/tmp}/trackwrite-release.XXXXXX")"
+metadata_path="$metadata_dir/trackwrite-update.json"
+trap 'rm -rf "$metadata_dir"' EXIT
+
+{
+    printf '{\n'
+    printf '  "versionName": "%s",\n' "$(json_escape "$version_name")"
+    printf '  "versionCode": %s,\n' "$version_code"
+    printf '  "apkAssetName": "%s",\n' "$(json_escape "$apk_basename")"
+    printf '  "sha256": "%s"\n' "$apk_sha256"
+    printf '}\n'
+} > "$metadata_path"
+
 echo "Preparing GitHub release $version_name"
 echo "APK: $apk_path"
+echo "Update metadata: $metadata_path"
 if [[ -n "$target" ]]; then
     echo "Target for new tag: $target"
 else
@@ -258,8 +302,8 @@ fi
 
 release_view_error=""
 if release_view_error="$(gh release view "$version_name" "${gh_args[@]}" 2>&1 >/dev/null)"; then
-    echo "Release exists. Uploading APK asset..."
-    gh release upload "$version_name" "$apk_path" "${upload_flags[@]}" "${gh_args[@]}"
+    echo "Release exists. Uploading APK and update metadata assets..."
+    gh release upload "$version_name" "$apk_path" "$metadata_path" "${upload_flags[@]}" "${gh_args[@]}"
 else
     release_view_error_lower="$(printf '%s' "$release_view_error" | tr '[:upper:]' '[:lower:]')"
     if [[ "$release_view_error_lower" != *"not found"* && "$release_view_error_lower" != *"no release found"* ]]; then
@@ -269,7 +313,7 @@ else
     fi
 
     echo "Release does not exist. Creating release and tag..."
-    gh release create "$version_name" "$apk_path" "${create_flags[@]}" "${gh_args[@]}"
+    gh release create "$version_name" "$apk_path" "$metadata_path" "${create_flags[@]}" "${gh_args[@]}"
 fi
 
-echo "Published APK to release $version_name"
+echo "Published APK and trackwrite-update.json to release $version_name"

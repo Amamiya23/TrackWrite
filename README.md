@@ -80,3 +80,12 @@ scripts/build-apk.sh v2.1 --code 21
 # 上传已构建 APK 到 GitHub Release，并用版本名创建 release tag
 scripts/release-apk.sh v2.1 --code 21
 ```
+
+`scripts/release-apk.sh` 会同时上传 APK 和 `trackwrite-update.json`。更新元数据包含：
+
+- `versionName`：发布版本名，例如 `v2.1`
+- `versionCode`：Android 版本号，必须通过 `--code` 传入
+- `apkAssetName`：Release 中的 APK 资产文件名
+- `sha256`：APK 文件的 SHA-256 校验和
+
+应用内“关于”页面会使用 GitHub Releases 中最新正式发布的 `trackwrite-update.json` 检查更新，并在用户确认后下载 APK、校验 SHA-256，再交给 Android 系统安装器。

@@ -119,6 +119,18 @@ import com.trackwrite.app.settings.AppSettingsStore
 import com.trackwrite.app.settings.AppearanceMode
 import com.trackwrite.app.settings.RecordingFrequency
 import com.trackwrite.app.ui.TrackWriteTheme
+import com.trackwrite.app.update.ApkInstallerLauncher
+import com.trackwrite.app.update.GitHubReleaseUpdateSource
+import com.trackwrite.app.update.InstalledAppVersion
+import com.trackwrite.app.update.MalformedUpdateReleaseException
+import com.trackwrite.app.update.NoUpdateReleaseException
+import com.trackwrite.app.update.UpdateCandidate
+import com.trackwrite.app.update.UpdateChecksumException
+import com.trackwrite.app.update.UpdateDecision
+import com.trackwrite.app.update.UpdateDownloadException
+import com.trackwrite.app.update.UpdateDownloader
+import com.trackwrite.app.update.UpdateMetadataParser
+import com.trackwrite.app.update.UpdateNetworkException
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.Dispatchers
@@ -140,6 +152,9 @@ class MainActivity : ComponentActivity() {
     private lateinit var geotagging: PhotoGeotagging
     private lateinit var gpx: GpxFileActions
     private lateinit var settingsStore: AppSettingsStore
+    private val updateSource = GitHubReleaseUpdateSource()
+    private lateinit var updateDownloader: UpdateDownloader
+    private lateinit var apkInstallerLauncher: ApkInstallerLauncher
 
     private var recordTrackId: String? = null
     private var matchTrackId: String? = null
@@ -260,6 +275,8 @@ class MainActivity : ComponentActivity() {
         geotagging = PhotoGeotagging(this)
         gpx = GpxFileActions(this)
         settingsStore = AppSettingsStore(this)
+        updateDownloader = UpdateDownloader(cacheDir)
+        apkInstallerLauncher = ApkInstallerLauncher(this)
         refresh()
         setContent {
             TrackWriteTheme(uiState.settings.appearance) {
@@ -314,6 +331,8 @@ class MainActivity : ComponentActivity() {
                         pendingExportMode = ExportFolderMode.SaveDefault
                         exportFolderLauncher.launch(null)
                     },
+                    onCheckForUpdates = { checkForUpdates() },
+                    onInstallUpdate = { candidate -> downloadAndInstallUpdate(candidate) },
                     onLogMessageConsumed = { uiState = uiState.copy(logMessage = "") },
                     onDismissDialog = { dismissDialogs() },
                     onDismissWriteResult = { uiState = uiState.copy(writeResult = null) },
@@ -426,6 +445,79 @@ class MainActivity : ComponentActivity() {
         settingsStore.setDefaultExportFolderUri(settings.defaultExportFolderUri)
         uiState = uiState.copy(settings = settings, logMessage = getString(R.string.settings_saved))
         matchSelectedPhotos()
+    }
+
+    private fun checkForUpdates() {
+        if (uiState.updateState.isBusy) return
+        uiState = uiState.copy(updateState = AppUpdateUiState.Checking)
+        lifecycleScope.launch {
+            try {
+                val candidate = withContext(Dispatchers.IO) {
+                    updateSource.fetchLatestUpdate()
+                }
+                uiState = when (val decision = UpdateMetadataParser.decide(uiState.installedVersion, candidate)) {
+                    is UpdateDecision.Available -> uiState.copy(
+                        updateState = AppUpdateUiState.Available(decision.candidate),
+                    )
+                    is UpdateDecision.UpToDate -> uiState.copy(
+                        updateState = AppUpdateUiState.UpToDate(decision.installedVersion),
+                    )
+                }
+            } catch (error: CancellationException) {
+                throw error
+            } catch (_: NoUpdateReleaseException) {
+                showUpdateError(getString(R.string.update_error_no_release))
+            } catch (_: MalformedUpdateReleaseException) {
+                showUpdateError(getString(R.string.update_error_malformed))
+            } catch (_: UpdateNetworkException) {
+                showUpdateError(getString(R.string.update_error_network))
+            } catch (error: Exception) {
+                showUpdateError(getString(R.string.update_error_generic, error.updateDetail()))
+            }
+        }
+    }
+
+    private fun downloadAndInstallUpdate(candidate: UpdateCandidate) {
+        if (uiState.updateState.isBusy) return
+        if (!apkInstallerLauncher.canRequestPackageInstalls()) {
+            val openedSettings = apkInstallerLauncher.openInstallPermissionSettings()
+            if (openedSettings) {
+                val message = getString(R.string.update_install_permission_required)
+                uiState = uiState.copy(updateState = AppUpdateUiState.InstallPermissionNeeded(candidate))
+                log(message)
+            } else {
+                showUpdateError(getString(R.string.update_error_install_settings))
+            }
+            return
+        }
+
+        uiState = uiState.copy(updateState = AppUpdateUiState.Downloading(candidate))
+        lifecycleScope.launch {
+            try {
+                val apk = withContext(Dispatchers.IO) {
+                    updateDownloader.download(candidate)
+                }
+                if (apkInstallerLauncher.launchInstaller(apk, candidate.apkAsset.downloadUrl)) {
+                    val message = getString(R.string.update_installer_opened, candidate.metadata.versionName)
+                    uiState = uiState.copy(updateState = AppUpdateUiState.InstallerLaunched(candidate.metadata.versionName))
+                    log(message)
+                } else {
+                    showUpdateError(getString(R.string.update_error_installer_unavailable))
+                }
+            } catch (error: CancellationException) {
+                throw error
+            } catch (_: UpdateChecksumException) {
+                showUpdateError(getString(R.string.update_error_sha256))
+            } catch (_: UpdateDownloadException) {
+                showUpdateError(getString(R.string.update_error_download))
+            } catch (error: Exception) {
+                showUpdateError(getString(R.string.update_error_generic, error.updateDetail()))
+            }
+        }
+    }
+
+    private fun showUpdateError(message: String) {
+        uiState = uiState.copy(updateState = AppUpdateUiState.Error(message), logMessage = message)
     }
 
     private fun dismissDialogs() {
@@ -648,6 +740,9 @@ class MainActivity : ComponentActivity() {
     }
 }
 
+private fun Exception.updateDetail(): String =
+    message?.takeIf { it.isNotBlank() } ?: this::class.java.simpleName
+
 private data class MainUiState(
     val selectedTab: MainTab = MainTab.Record,
     val showSettings: Boolean = false,
@@ -658,6 +753,11 @@ private data class MainUiState(
     val photos: List<PhotoCandidate> = emptyList(),
     val matches: List<PhotoMatchResult> = emptyList(),
     val settings: AppSettings = AppSettings(),
+    val installedVersion: InstalledAppVersion = InstalledAppVersion(
+        versionName = BuildConfig.VERSION_NAME,
+        versionCode = BuildConfig.VERSION_CODE,
+    ),
+    val updateState: AppUpdateUiState = AppUpdateUiState.Idle,
     val logMessage: String = "",
     val showTrackHistorySheet: Boolean = false,
     val showTrackSourceSheet: Boolean = false,
@@ -672,6 +772,20 @@ private data class MainUiState(
     val writeProgress: WriteProgressState? = null,
     val recordingClockMillis: Long = System.currentTimeMillis(),
 )
+
+private sealed interface AppUpdateUiState {
+    val isBusy: Boolean
+        get() = this is AppUpdateUiState.Checking || this is AppUpdateUiState.Downloading
+
+    object Idle : AppUpdateUiState
+    object Checking : AppUpdateUiState
+    data class UpToDate(val installedVersion: InstalledAppVersion) : AppUpdateUiState
+    data class Available(val candidate: UpdateCandidate) : AppUpdateUiState
+    data class Downloading(val candidate: UpdateCandidate) : AppUpdateUiState
+    data class InstallPermissionNeeded(val candidate: UpdateCandidate) : AppUpdateUiState
+    data class InstallerLaunched(val versionName: String) : AppUpdateUiState
+    data class Error(val message: String) : AppUpdateUiState
+}
 
 private data class RenameDialogState(
     val trackId: String,
@@ -779,6 +893,8 @@ private fun TrackWriteApp(
     onWriteDefault: () -> Unit,
     onSettingsChanged: (AppSettings) -> Unit,
     onChooseExportFolder: () -> Unit,
+    onCheckForUpdates: () -> Unit,
+    onInstallUpdate: (UpdateCandidate) -> Unit,
     onLogMessageConsumed: () -> Unit,
     onDismissDialog: () -> Unit,
     onDismissWriteResult: () -> Unit,
@@ -835,8 +951,12 @@ private fun TrackWriteApp(
                     .padding(padding)
                     .fillMaxSize(),
                 settings = state.settings,
+                installedVersion = state.installedVersion,
+                updateState = state.updateState,
                 onSettingsChanged = onSettingsChanged,
                 onChooseExportFolder = onChooseExportFolder,
+                onCheckForUpdates = onCheckForUpdates,
+                onInstallUpdate = onInstallUpdate,
             )
         } else {
             when (state.selectedTab) {
@@ -2822,8 +2942,12 @@ private fun StatusPill(label: String, tone: PillTone) {
 private fun SettingsScreen(
     modifier: Modifier,
     settings: AppSettings,
+    installedVersion: InstalledAppVersion,
+    updateState: AppUpdateUiState,
     onSettingsChanged: (AppSettings) -> Unit,
     onChooseExportFolder: () -> Unit,
+    onCheckForUpdates: () -> Unit,
+    onInstallUpdate: (UpdateCandidate) -> Unit,
 ) {
     var showAppearanceSheet by remember { mutableStateOf(false) }
     var showFrequencySheet by remember { mutableStateOf(false) }
@@ -2906,6 +3030,27 @@ private fun SettingsScreen(
                 }
             }
         }
+        item {
+            Column {
+                SettingsSectionHeader(stringResource(R.string.about))
+                SettingsGroup(containerColor = settingsGroupColor) {
+                    SettingInfoRow(
+                        title = stringResource(R.string.installed_version),
+                        value = stringResource(
+                            R.string.version_name,
+                            installedVersion.versionName,
+                            installedVersion.versionCode,
+                        ),
+                    )
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant, modifier = Modifier.padding(horizontal = 16.dp))
+                    UpdateSettingsRow(
+                        updateState = updateState,
+                        onCheckForUpdates = onCheckForUpdates,
+                        onInstallUpdate = onInstallUpdate,
+                    )
+                }
+            }
+        }
     }
 
     if (showAppearanceSheet) {
@@ -2945,6 +3090,118 @@ private fun SettingsScreen(
         }
     }
 }
+
+@Composable
+private fun SettingInfoRow(
+    title: String,
+    value: String,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 16.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        Text(
+            text = title,
+            modifier = Modifier.weight(1f),
+            style = MaterialTheme.typography.bodyLarge,
+            fontWeight = FontWeight.Normal,
+            color = MaterialTheme.colorScheme.onSurface,
+        )
+        Text(
+            text = value,
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign = TextAlign.End,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
+        )
+    }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun UpdateSettingsRow(
+    updateState: AppUpdateUiState,
+    onCheckForUpdates: () -> Unit,
+    onInstallUpdate: (UpdateCandidate) -> Unit,
+) {
+    val installCandidate = when (updateState) {
+        is AppUpdateUiState.Available -> updateState.candidate
+        is AppUpdateUiState.Downloading -> updateState.candidate
+        is AppUpdateUiState.InstallPermissionNeeded -> updateState.candidate
+        else -> null
+    }
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 16.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        Text(
+            text = stringResource(R.string.app_updates),
+            style = MaterialTheme.typography.bodyLarge,
+            fontWeight = FontWeight.Normal,
+            color = MaterialTheme.colorScheme.onSurface,
+        )
+        Text(
+            text = updateStatusText(updateState),
+            style = MaterialTheme.typography.bodyMedium,
+            color = if (updateState is AppUpdateUiState.Error) {
+                MaterialTheme.colorScheme.error
+            } else {
+                MaterialTheme.colorScheme.onSurfaceVariant
+            },
+        )
+        ActionRow {
+            SoftActionButton(
+                text = stringResource(R.string.check_for_updates),
+                onClick = onCheckForUpdates,
+                enabled = !updateState.isBusy,
+            )
+            if (installCandidate != null) {
+                PrimaryActionButton(
+                    text = if (updateState is AppUpdateUiState.InstallPermissionNeeded) {
+                        stringResource(R.string.retry_install_update)
+                    } else {
+                        stringResource(R.string.download_and_install_update)
+                    },
+                    onClick = { onInstallUpdate(installCandidate) },
+                    modifier = Modifier.widthIn(min = 156.dp),
+                    enabled = !updateState.isBusy,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun updateStatusText(updateState: AppUpdateUiState): String =
+    when (updateState) {
+        AppUpdateUiState.Idle -> stringResource(R.string.update_status_idle)
+        AppUpdateUiState.Checking -> stringResource(R.string.update_status_checking)
+        is AppUpdateUiState.UpToDate -> stringResource(
+            R.string.update_status_up_to_date,
+            updateState.installedVersion.versionName,
+        )
+        is AppUpdateUiState.Available -> stringResource(
+            R.string.update_status_available,
+            updateState.candidate.metadata.versionName,
+            updateState.candidate.metadata.versionCode,
+        )
+        is AppUpdateUiState.Downloading -> stringResource(
+            R.string.update_status_downloading,
+            updateState.candidate.metadata.versionName,
+        )
+        is AppUpdateUiState.InstallPermissionNeeded -> stringResource(R.string.update_status_install_permission)
+        is AppUpdateUiState.InstallerLaunched -> stringResource(
+            R.string.update_status_installer_opened,
+            updateState.versionName,
+        )
+        is AppUpdateUiState.Error -> updateState.message
+    }
 
 @Composable
 private fun SettingsSectionHeader(title: String) {
