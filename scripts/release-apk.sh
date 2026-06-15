@@ -13,7 +13,7 @@ Options:
   --apk <path>          APK to upload (default: app/build/outputs/apk/release/app-release.apk)
   --code <version-code> Accepted for parity with build-apk.sh; ignored when uploading
   --repo <owner/repo>   GitHub repository for gh, if not the current git remote
-  --target <ref>        Branch or full commit SHA for a newly-created tag (default: current HEAD)
+  --target <ref>        Branch or full commit SHA for a newly-created tag (default: GitHub default branch)
   --title <title>       Release title (default: <version-name>)
   --notes <text>        Release notes (default: empty notes)
   --notes-file <path>   Read release notes from a file
@@ -184,10 +184,6 @@ if ! git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
     exit 1
 fi
 
-if [[ -z "$target" ]]; then
-    target="$(git rev-parse HEAD)"
-fi
-
 if [[ -z "$title" ]]; then
     title="$version_name"
 fi
@@ -224,7 +220,10 @@ if ! gh auth status >/dev/null; then
     exit 1
 fi
 
-create_flags=(--target "$target" --title "$title")
+create_flags=(--title "$title")
+if [[ -n "$target" ]]; then
+    create_flags+=(--target "$target")
+fi
 if [[ "$generate_notes" == true ]]; then
     create_flags+=(--generate-notes)
     if [[ -n "$notes" ]]; then
@@ -251,7 +250,11 @@ fi
 
 echo "Preparing GitHub release $version_name"
 echo "APK: $apk_path"
-echo "Target for new tag: $target"
+if [[ -n "$target" ]]; then
+    echo "Target for new tag: $target"
+else
+    echo "Target for new tag: GitHub default branch"
+fi
 
 release_view_error=""
 if release_view_error="$(gh release view "$version_name" "${gh_args[@]}" 2>&1 >/dev/null)"; then
