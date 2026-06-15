@@ -8,6 +8,8 @@ Usage:
 
 Uploads a compiled APK to a GitHub Release named by <version-name>. If the
 release/tag does not exist, gh creates it and points the tag at the target ref.
+For an existing release, --title, --notes, --notes-file, --draft,
+--prerelease, and --target update the release before assets are uploaded.
 
 Options:
   --apk <path>          APK to upload (default: app/build/outputs/apk/release/app-release.apk)
@@ -62,8 +64,11 @@ apk_path="app/build/outputs/apk/release/app-release.apk"
 repo=""
 target=""
 title=""
+title_provided=false
 notes=""
+notes_provided=false
 notes_file=""
+notes_file_provided=false
 generate_notes=false
 draft=false
 prerelease=false
@@ -119,6 +124,7 @@ while [[ $# -gt 0 ]]; do
                 exit 1
             fi
             title="$2"
+            title_provided=true
             shift 2
             ;;
         --notes)
@@ -127,6 +133,7 @@ while [[ $# -gt 0 ]]; do
                 exit 1
             fi
             notes="$2"
+            notes_provided=true
             shift 2
             ;;
         --notes-file)
@@ -135,6 +142,7 @@ while [[ $# -gt 0 ]]; do
                 exit 1
             fi
             notes_file="$2"
+            notes_file_provided=true
             shift 2
             ;;
         --generate-notes)
@@ -216,19 +224,19 @@ if [[ -z "$title" ]]; then
     title="$version_name"
 fi
 
-if [[ "$notes_file" == "-" ]]; then
+if [[ "$notes_file_provided" == true && "$notes_file" == "-" ]]; then
     :
-elif [[ -n "$notes_file" && ! -f "$notes_file" ]]; then
+elif [[ "$notes_file_provided" == true && ! -f "$notes_file" ]]; then
     echo "Release notes file not found: $notes_file" >&2
     exit 1
 fi
 
-if [[ -n "$notes" && -n "$notes_file" ]]; then
+if [[ "$notes_provided" == true && "$notes_file_provided" == true ]]; then
     echo "Use either --notes or --notes-file, not both" >&2
     exit 1
 fi
 
-if [[ "$generate_notes" == true && -n "$notes_file" ]]; then
+if [[ "$generate_notes" == true && "$notes_file_provided" == true ]]; then
     echo "Use either --generate-notes or --notes-file, not both" >&2
     exit 1
 fi
@@ -254,13 +262,15 @@ if [[ -n "$target" ]]; then
 fi
 if [[ "$generate_notes" == true ]]; then
     create_flags+=(--generate-notes)
-    if [[ -n "$notes" ]]; then
+    if [[ "$notes_provided" == true ]]; then
         create_flags+=(--notes "$notes")
     fi
-elif [[ -n "$notes_file" ]]; then
+elif [[ "$notes_file_provided" == true ]]; then
     create_flags+=(--notes-file "$notes_file")
-else
+elif [[ "$notes_provided" == true ]]; then
     create_flags+=(--notes "$notes")
+else
+    create_flags+=(--notes "")
 fi
 
 if [[ "$draft" == true ]]; then
@@ -274,6 +284,25 @@ fi
 upload_flags=()
 if [[ "$clobber" == true ]]; then
     upload_flags+=(--clobber)
+fi
+
+edit_flags=()
+if [[ "$title_provided" == true ]]; then
+    edit_flags+=(--title "$title")
+fi
+if [[ -n "$target" ]]; then
+    edit_flags+=(--target "$target")
+fi
+if [[ "$notes_file_provided" == true ]]; then
+    edit_flags+=(--notes-file "$notes_file")
+elif [[ "$notes_provided" == true ]]; then
+    edit_flags+=(--notes "$notes")
+fi
+if [[ "$draft" == true ]]; then
+    edit_flags+=(--draft)
+fi
+if [[ "$prerelease" == true ]]; then
+    edit_flags+=(--prerelease)
 fi
 
 apk_basename="$(basename "$apk_path")"
@@ -302,6 +331,13 @@ fi
 
 release_view_error=""
 if release_view_error="$(gh release view "$version_name" "${gh_args[@]}" 2>&1 >/dev/null)"; then
+    if [[ "$generate_notes" == true ]]; then
+        echo "Release exists. --generate-notes only applies when creating a release; applying explicit edit flags only." >&2
+    fi
+    if [[ ${#edit_flags[@]} -gt 0 ]]; then
+        echo "Release exists. Updating release details..."
+        gh release edit "$version_name" "${edit_flags[@]}" "${gh_args[@]}"
+    fi
     echo "Release exists. Uploading APK and update metadata assets..."
     gh release upload "$version_name" "$apk_path" "$metadata_path" "${upload_flags[@]}" "${gh_args[@]}"
 else
