@@ -339,7 +339,15 @@ if release_view_error="$(gh release view "$version_name" "${gh_args[@]}" 2>&1 >/
         gh release edit "$version_name" "${edit_flags[@]}" "${gh_args[@]}"
     fi
     echo "Release exists. Uploading APK and update metadata assets..."
-    gh release upload "$version_name" "$apk_path" "$metadata_path" "${upload_flags[@]}" "${gh_args[@]}"
+    upload_error=""
+    if ! upload_error="$(gh release upload "$version_name" "$apk_path" "$metadata_path" "${upload_flags[@]}" "${gh_args[@]}" 2>&1)"; then
+        echo "$upload_error" >&2
+        upload_error_lower="$(printf '%s' "$upload_error" | tr '[:upper:]' '[:lower:]')"
+        if [[ "$upload_error_lower" == *"same name"* || "$upload_error_lower" == *"already exists"* ]]; then
+            echo "Release assets with these names already exist. Re-run with --clobber to replace them." >&2
+        fi
+        exit 1
+    fi
 else
     release_view_error_lower="$(printf '%s' "$release_view_error" | tr '[:upper:]' '[:lower:]')"
     if [[ "$release_view_error_lower" != *"not found"* && "$release_view_error_lower" != *"no release found"* ]]; then
