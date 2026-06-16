@@ -47,10 +47,3 @@ class NoUpdateReleaseException : UpdateException("No published GitHub release wa
 class MalformedUpdateReleaseException(message: String, cause: Throwable? = null) : UpdateException(message, cause)
 
 class UpdateNetworkException(message: String, cause: Throwable? = null) : UpdateException(message, cause)
-
-class UpdateDownloadException(message: String, cause: Throwable? = null) : UpdateException(message, cause)
-
-class UpdateChecksumException(
-    val expected: String,
-    val actual: String,
-) : UpdateException("Downloaded APK SHA-256 mismatch.")

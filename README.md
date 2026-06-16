@@ -88,4 +88,4 @@ scripts/release-apk.sh v2.1 --code 21
 - `apkAssetName`：Release 中的 APK 资产文件名
 - `sha256`：APK 文件的 SHA-256 校验和
 
-应用内“关于”页面会使用 GitHub Releases 中最新正式发布的 `trackwrite-update.json` 检查更新，并在用户确认后下载 APK、校验 SHA-256，再交给 Android 系统安装器。
+应用内“关于”页面会使用 GitHub Releases 中最新正式发布的 `trackwrite-update.json` 检查更新；检测到新版本后会打开对应 Release 页面，由用户在浏览器中自行下载并安装 APK。

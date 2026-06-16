@@ -2,6 +2,7 @@ package com.trackwrite.app
 
 import android.Manifest
 import android.app.Activity
+import android.content.ActivityNotFoundException
 import android.content.ContentResolver
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -119,16 +120,12 @@ import com.trackwrite.app.settings.AppSettingsStore
 import com.trackwrite.app.settings.AppearanceMode
 import com.trackwrite.app.settings.RecordingFrequency
 import com.trackwrite.app.ui.TrackWriteTheme
-import com.trackwrite.app.update.ApkInstallerLauncher
 import com.trackwrite.app.update.GitHubReleaseUpdateSource
 import com.trackwrite.app.update.InstalledAppVersion
 import com.trackwrite.app.update.MalformedUpdateReleaseException
 import com.trackwrite.app.update.NoUpdateReleaseException
 import com.trackwrite.app.update.UpdateCandidate
-import com.trackwrite.app.update.UpdateChecksumException
 import com.trackwrite.app.update.UpdateDecision
-import com.trackwrite.app.update.UpdateDownloadException
-import com.trackwrite.app.update.UpdateDownloader
 import com.trackwrite.app.update.UpdateMetadataParser
 import com.trackwrite.app.update.UpdateNetworkException
 import kotlinx.coroutines.CancellationException
@@ -153,8 +150,6 @@ class MainActivity : ComponentActivity() {
     private lateinit var gpx: GpxFileActions
     private lateinit var settingsStore: AppSettingsStore
     private val updateSource = GitHubReleaseUpdateSource()
-    private lateinit var updateDownloader: UpdateDownloader
-    private lateinit var apkInstallerLauncher: ApkInstallerLauncher
 
     private var recordTrackId: String? = null
     private var matchTrackId: String? = null
@@ -275,8 +270,6 @@ class MainActivity : ComponentActivity() {
         geotagging = PhotoGeotagging(this)
         gpx = GpxFileActions(this)
         settingsStore = AppSettingsStore(this)
-        updateDownloader = UpdateDownloader(cacheDir)
-        apkInstallerLauncher = ApkInstallerLauncher(this)
         refresh()
         setContent {
             TrackWriteTheme(uiState.settings.appearance) {
@@ -332,7 +325,7 @@ class MainActivity : ComponentActivity() {
                         exportFolderLauncher.launch(null)
                     },
                     onCheckForUpdates = { checkForUpdates() },
-                    onInstallUpdate = { candidate -> downloadAndInstallUpdate(candidate) },
+                    onOpenReleasePage = ::openReleasePage,
                     onLogMessageConsumed = { uiState = uiState.copy(logMessage = "") },
                     onDismissDialog = { dismissDialogs() },
                     onDismissWriteResult = { uiState = uiState.copy(writeResult = null) },
@@ -477,47 +470,20 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    private fun downloadAndInstallUpdate(candidate: UpdateCandidate) {
-        if (uiState.updateState.isBusy) return
-        if (!apkInstallerLauncher.canRequestPackageInstalls()) {
-            val openedSettings = apkInstallerLauncher.openInstallPermissionSettings()
-            if (openedSettings) {
-                val message = getString(R.string.update_install_permission_required)
-                uiState = uiState.copy(updateState = AppUpdateUiState.InstallPermissionNeeded(candidate))
-                log(message)
-            } else {
-                showUpdateError(getString(R.string.update_error_install_settings))
-            }
-            return
-        }
-
-        uiState = uiState.copy(updateState = AppUpdateUiState.Downloading(candidate))
-        lifecycleScope.launch {
-            try {
-                val apk = withContext(Dispatchers.IO) {
-                    updateDownloader.download(candidate)
-                }
-                if (apkInstallerLauncher.launchInstaller(apk, candidate.apkAsset.downloadUrl)) {
-                    val message = getString(R.string.update_installer_opened, candidate.metadata.versionName)
-                    uiState = uiState.copy(updateState = AppUpdateUiState.InstallerLaunched(candidate.metadata.versionName))
-                    log(message)
-                } else {
-                    showUpdateError(getString(R.string.update_error_installer_unavailable))
-                }
-            } catch (error: CancellationException) {
-                throw error
-            } catch (_: UpdateChecksumException) {
-                showUpdateError(getString(R.string.update_error_sha256))
-            } catch (_: UpdateDownloadException) {
-                showUpdateError(getString(R.string.update_error_download))
-            } catch (error: Exception) {
-                showUpdateError(getString(R.string.update_error_generic, error.updateDetail()))
-            }
-        }
-    }
-
     private fun showUpdateError(message: String) {
         uiState = uiState.copy(updateState = AppUpdateUiState.Error(message), logMessage = message)
+    }
+
+    private fun openReleasePage(url: String) {
+        val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
+            .addCategory(Intent.CATEGORY_BROWSABLE)
+        try {
+            startActivity(intent)
+        } catch (_: ActivityNotFoundException) {
+            showUpdateError(getString(R.string.update_error_browser_unavailable))
+        } catch (_: SecurityException) {
+            showUpdateError(getString(R.string.update_error_browser_unavailable))
+        }
     }
 
     private fun dismissDialogs() {
@@ -775,15 +741,12 @@ private data class MainUiState(
 
 private sealed interface AppUpdateUiState {
     val isBusy: Boolean
-        get() = this is AppUpdateUiState.Checking || this is AppUpdateUiState.Downloading
+        get() = this is AppUpdateUiState.Checking
 
     object Idle : AppUpdateUiState
     object Checking : AppUpdateUiState
     data class UpToDate(val installedVersion: InstalledAppVersion) : AppUpdateUiState
     data class Available(val candidate: UpdateCandidate) : AppUpdateUiState
-    data class Downloading(val candidate: UpdateCandidate) : AppUpdateUiState
-    data class InstallPermissionNeeded(val candidate: UpdateCandidate) : AppUpdateUiState
-    data class InstallerLaunched(val versionName: String) : AppUpdateUiState
     data class Error(val message: String) : AppUpdateUiState
 }
 
@@ -894,7 +857,7 @@ private fun TrackWriteApp(
     onSettingsChanged: (AppSettings) -> Unit,
     onChooseExportFolder: () -> Unit,
     onCheckForUpdates: () -> Unit,
-    onInstallUpdate: (UpdateCandidate) -> Unit,
+    onOpenReleasePage: (String) -> Unit,
     onLogMessageConsumed: () -> Unit,
     onDismissDialog: () -> Unit,
     onDismissWriteResult: () -> Unit,
@@ -956,7 +919,7 @@ private fun TrackWriteApp(
                 onSettingsChanged = onSettingsChanged,
                 onChooseExportFolder = onChooseExportFolder,
                 onCheckForUpdates = onCheckForUpdates,
-                onInstallUpdate = onInstallUpdate,
+                onOpenReleasePage = onOpenReleasePage,
             )
         } else {
             when (state.selectedTab) {
@@ -2947,7 +2910,7 @@ private fun SettingsScreen(
     onSettingsChanged: (AppSettings) -> Unit,
     onChooseExportFolder: () -> Unit,
     onCheckForUpdates: () -> Unit,
-    onInstallUpdate: (UpdateCandidate) -> Unit,
+    onOpenReleasePage: (String) -> Unit,
 ) {
     var showAppearanceSheet by remember { mutableStateOf(false) }
     var showFrequencySheet by remember { mutableStateOf(false) }
@@ -3046,7 +3009,7 @@ private fun SettingsScreen(
                     UpdateSettingsRow(
                         updateState = updateState,
                         onCheckForUpdates = onCheckForUpdates,
-                        onInstallUpdate = onInstallUpdate,
+                        onOpenReleasePage = onOpenReleasePage,
                     )
                 }
             }
@@ -3125,14 +3088,9 @@ private fun SettingInfoRow(
 private fun UpdateSettingsRow(
     updateState: AppUpdateUiState,
     onCheckForUpdates: () -> Unit,
-    onInstallUpdate: (UpdateCandidate) -> Unit,
+    onOpenReleasePage: (String) -> Unit,
 ) {
-    val installCandidate = when (updateState) {
-        is AppUpdateUiState.Available -> updateState.candidate
-        is AppUpdateUiState.Downloading -> updateState.candidate
-        is AppUpdateUiState.InstallPermissionNeeded -> updateState.candidate
-        else -> null
-    }
+    val releasePageUrl = (updateState as? AppUpdateUiState.Available)?.candidate?.releasePageUrl
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -3161,14 +3119,10 @@ private fun UpdateSettingsRow(
                 onClick = onCheckForUpdates,
                 enabled = !updateState.isBusy,
             )
-            if (installCandidate != null) {
+            if (releasePageUrl != null) {
                 PrimaryActionButton(
-                    text = if (updateState is AppUpdateUiState.InstallPermissionNeeded) {
-                        stringResource(R.string.retry_install_update)
-                    } else {
-                        stringResource(R.string.download_and_install_update)
-                    },
-                    onClick = { onInstallUpdate(installCandidate) },
+                    text = stringResource(R.string.open_release_page),
+                    onClick = { onOpenReleasePage(releasePageUrl) },
                     modifier = Modifier.widthIn(min = 156.dp),
                     enabled = !updateState.isBusy,
                 )
@@ -3190,15 +3144,6 @@ private fun updateStatusText(updateState: AppUpdateUiState): String =
             R.string.update_status_available,
             updateState.candidate.metadata.versionName,
             updateState.candidate.metadata.versionCode,
-        )
-        is AppUpdateUiState.Downloading -> stringResource(
-            R.string.update_status_downloading,
-            updateState.candidate.metadata.versionName,
-        )
-        is AppUpdateUiState.InstallPermissionNeeded -> stringResource(R.string.update_status_install_permission)
-        is AppUpdateUiState.InstallerLaunched -> stringResource(
-            R.string.update_status_installer_opened,
-            updateState.versionName,
         )
         is AppUpdateUiState.Error -> updateState.message
     }

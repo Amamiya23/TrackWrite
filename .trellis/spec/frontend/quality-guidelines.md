@@ -137,6 +137,73 @@ locationManager.requestLocationUpdates(provider, frequency.intervalMs, frequency
 
 ---
 
+## Scenario: Browser-Based App Updates
+
+### 1. Scope / Trigger
+- Trigger: Settings > About exposes app update checks and crosses GitHub release
+  metadata, Activity intent launching, Compose state, and localized UI copy.
+
+### 2. Signatures
+- UI callback: `onOpenReleasePage: (String) -> Unit` receives the GitHub Release
+  `html_url` from `UpdateCandidate.releasePageUrl`.
+- Activity entry: `openReleasePage(url: String)` launches
+  `Intent(Intent.ACTION_VIEW, Uri.parse(url)).addCategory(Intent.CATEGORY_BROWSABLE)`.
+- Update state: `AppUpdateUiState` supports `Idle`, `Checking`, `UpToDate`,
+  `Available`, and `Error` only.
+
+### 3. Contracts
+- Version detection still fetches GitHub Releases metadata and compares
+  `UpdateMetadata.versionCode` with `InstalledAppVersion.versionCode`.
+- Available updates open the release page in a browser; the app must not download
+  APK bytes, verify APK checksums, request install permissions, or launch the
+  Android package installer.
+- Keep `FileProvider` manifest wiring if another feature still uses it, such as
+  GPX sharing; do not remove shared provider wiring only because update install
+  support was removed.
+
+### 4. Validation & Error Matrix
+- `releasePageUrl == null` -> hide the browser action button and keep the
+  available-update status visible.
+- No browser or blocked browser intent -> set `AppUpdateUiState.Error` with
+  `update_error_browser_unavailable` so the SnackbarHost surfaces it.
+- Network, missing release, or malformed metadata -> keep using existing update
+  error states; do not introduce download/install errors.
+
+### 5. Good/Base/Bad Cases
+- Good: A newer release is detected, the About card shows "Go to download", and
+  tapping it opens the GitHub Release page.
+- Base: The latest release is not newer, so Settings shows the up-to-date state
+  and no release-page action.
+- Bad: The app requests `REQUEST_INSTALL_PACKAGES`, downloads an APK into cache,
+  or launches `Intent.ACTION_INSTALL_PACKAGE`.
+
+### 6. Tests Required
+- Run `./gradlew :app:compileDebugKotlin` for Compose and state exhaustiveness.
+- Run `./gradlew testDebugUnitTest` so removed download classes do not leave
+  stale unit tests or unresolved references.
+- Run `./gradlew :app:lintDebug` for manifest, resource, and intent checks.
+- Search app sources for old installer strings/classes before reporting done.
+
+### 7. Wrong vs Correct
+
+#### Wrong
+```kotlin
+uiState = uiState.copy(updateState = AppUpdateUiState.Downloading(candidate))
+updateDownloader.download(candidate)
+apkInstallerLauncher.launchInstaller(apk, candidate.apkAsset.downloadUrl)
+```
+
+#### Correct
+```kotlin
+val releasePageUrl = (updateState as? AppUpdateUiState.Available)?.candidate?.releasePageUrl
+PrimaryActionButton(
+    text = stringResource(R.string.open_release_page),
+    onClick = { onOpenReleasePage(releasePageUrl) },
+)
+```
+
+---
+
 ## Settings UI Patterns
 
 ### Convention: Light Theme Background and Card Surfaces
