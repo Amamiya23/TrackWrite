@@ -3101,19 +3101,18 @@ private fun SettingInfoRow(
             .fillMaxWidth()
             .padding(horizontal = 16.dp, vertical = 16.dp),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(10.dp),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         Text(
             text = title,
             modifier = Modifier.weight(1f),
-            style = MaterialTheme.typography.bodyLarge,
-            fontWeight = FontWeight.Normal,
-            color = MaterialTheme.colorScheme.onSurface,
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         Text(
             text = value,
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            style = MaterialTheme.typography.bodyLarge,
+            color = MaterialTheme.colorScheme.onSurface,
             textAlign = TextAlign.End,
             maxLines = 2,
             overflow = TextOverflow.Ellipsis,
@@ -3137,8 +3136,7 @@ private fun UpdateSettingsRow(
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 16.dp),
-        verticalArrangement = Arrangement.spacedBy(10.dp),
+            .padding(horizontal = 16.dp, vertical = 18.dp),
     ) {
         Text(
             text = stringResource(R.string.app_updates),
@@ -3146,6 +3144,7 @@ private fun UpdateSettingsRow(
             fontWeight = FontWeight.Normal,
             color = MaterialTheme.colorScheme.onSurface,
         )
+        Spacer(Modifier.height(6.dp))
         Text(
             text = updateStatusText(updateState),
             style = MaterialTheme.typography.bodyMedium,
@@ -3155,6 +3154,7 @@ private fun UpdateSettingsRow(
                 MaterialTheme.colorScheme.onSurfaceVariant
             },
         )
+        Spacer(Modifier.height(16.dp))
         ActionRow {
             SoftActionButton(
                 text = stringResource(R.string.check_for_updates),
