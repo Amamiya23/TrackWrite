@@ -326,6 +326,7 @@ class MainActivity : ComponentActivity() {
                     },
                     onCheckForUpdates = { checkForUpdates() },
                     onOpenReleasePage = ::openReleasePage,
+                    onDismissUpdateDialog = { uiState = uiState.copy(updateDialogCandidate = null) },
                     onLogMessageConsumed = { uiState = uiState.copy(logMessage = "") },
                     onDismissDialog = { dismissDialogs() },
                     onDismissWriteResult = { uiState = uiState.copy(writeResult = null) },
@@ -442,7 +443,10 @@ class MainActivity : ComponentActivity() {
 
     private fun checkForUpdates() {
         if (uiState.updateState.isBusy) return
-        uiState = uiState.copy(updateState = AppUpdateUiState.Checking)
+        uiState = uiState.copy(
+            updateState = AppUpdateUiState.Checking,
+            updateDialogCandidate = null,
+        )
         lifecycleScope.launch {
             try {
                 val candidate = withContext(Dispatchers.IO) {
@@ -451,9 +455,11 @@ class MainActivity : ComponentActivity() {
                 uiState = when (val decision = UpdateMetadataParser.decide(uiState.installedVersion, candidate)) {
                     is UpdateDecision.Available -> uiState.copy(
                         updateState = AppUpdateUiState.Available(decision.candidate),
+                        updateDialogCandidate = decision.candidate,
                     )
                     is UpdateDecision.UpToDate -> uiState.copy(
                         updateState = AppUpdateUiState.UpToDate(decision.installedVersion),
+                        updateDialogCandidate = null,
                     )
                 }
             } catch (error: CancellationException) {
@@ -471,7 +477,11 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun showUpdateError(message: String) {
-        uiState = uiState.copy(updateState = AppUpdateUiState.Error(message), logMessage = message)
+        uiState = uiState.copy(
+            updateState = AppUpdateUiState.Error(message),
+            updateDialogCandidate = null,
+            logMessage = message,
+        )
     }
 
     private fun openReleasePage(url: String) {
@@ -492,6 +502,7 @@ class MainActivity : ComponentActivity() {
             renameDialog = null,
             deleteDialog = null,
             showWriteDialog = false,
+            updateDialogCandidate = null,
         )
     }
 
@@ -724,6 +735,7 @@ private data class MainUiState(
         versionCode = BuildConfig.VERSION_CODE,
     ),
     val updateState: AppUpdateUiState = AppUpdateUiState.Idle,
+    val updateDialogCandidate: UpdateCandidate? = null,
     val logMessage: String = "",
     val showTrackHistorySheet: Boolean = false,
     val showTrackSourceSheet: Boolean = false,
@@ -858,6 +870,7 @@ private fun TrackWriteApp(
     onChooseExportFolder: () -> Unit,
     onCheckForUpdates: () -> Unit,
     onOpenReleasePage: (String) -> Unit,
+    onDismissUpdateDialog: () -> Unit,
     onLogMessageConsumed: () -> Unit,
     onDismissDialog: () -> Unit,
     onDismissWriteResult: () -> Unit,
@@ -916,10 +929,12 @@ private fun TrackWriteApp(
                 settings = state.settings,
                 installedVersion = state.installedVersion,
                 updateState = state.updateState,
+                updateDialogCandidate = state.updateDialogCandidate,
                 onSettingsChanged = onSettingsChanged,
                 onChooseExportFolder = onChooseExportFolder,
                 onCheckForUpdates = onCheckForUpdates,
                 onOpenReleasePage = onOpenReleasePage,
+                onDismissUpdateDialog = onDismissUpdateDialog,
             )
         } else {
             when (state.selectedTab) {
@@ -2907,10 +2922,12 @@ private fun SettingsScreen(
     settings: AppSettings,
     installedVersion: InstalledAppVersion,
     updateState: AppUpdateUiState,
+    updateDialogCandidate: UpdateCandidate?,
     onSettingsChanged: (AppSettings) -> Unit,
     onChooseExportFolder: () -> Unit,
     onCheckForUpdates: () -> Unit,
     onOpenReleasePage: (String) -> Unit,
+    onDismissUpdateDialog: () -> Unit,
 ) {
     var showAppearanceSheet by remember { mutableStateOf(false) }
     var showFrequencySheet by remember { mutableStateOf(false) }
@@ -2997,19 +3014,10 @@ private fun SettingsScreen(
             Column {
                 SettingsSectionHeader(stringResource(R.string.about))
                 SettingsGroup(containerColor = settingsGroupColor) {
-                    SettingInfoRow(
-                        title = stringResource(R.string.installed_version),
-                        value = stringResource(
-                            R.string.version_name,
-                            installedVersion.versionName,
-                            installedVersion.versionCode,
-                        ),
-                    )
-                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant, modifier = Modifier.padding(horizontal = 16.dp))
                     UpdateSettingsRow(
+                        installedVersion = installedVersion,
                         updateState = updateState,
                         onCheckForUpdates = onCheckForUpdates,
-                        onOpenReleasePage = onOpenReleasePage,
                     )
                 }
             }
@@ -3052,89 +3060,99 @@ private fun SettingsScreen(
             }
         }
     }
+
+    updateDialogCandidate?.let { candidate ->
+        AlertDialog(
+            onDismissRequest = onDismissUpdateDialog,
+            title = { Text(stringResource(R.string.update_available_dialog_title)) },
+            text = {
+                Text(
+                    text = stringResource(
+                        R.string.update_available_dialog_body,
+                        installedVersion.versionName,
+                        installedVersion.versionCode,
+                        candidate.metadata.versionName,
+                        candidate.metadata.versionCode,
+                    ),
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    enabled = candidate.releasePageUrl != null,
+                    onClick = {
+                        val releasePageUrl = candidate.releasePageUrl ?: return@TextButton
+                        onDismissUpdateDialog()
+                        onOpenReleasePage(releasePageUrl)
+                    },
+                ) {
+                    Text(stringResource(R.string.open_release_page))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = onDismissUpdateDialog) {
+                    Text(stringResource(R.string.update_later))
+                }
+            },
+        )
+    }
 }
 
 @Composable
-private fun SettingInfoRow(
-    title: String,
-    value: String,
+private fun UpdateSettingsRow(
+    installedVersion: InstalledAppVersion,
+    updateState: AppUpdateUiState,
+    onCheckForUpdates: () -> Unit,
 ) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
+            .clickable(enabled = !updateState.isBusy, onClick = onCheckForUpdates)
             .padding(horizontal = 16.dp, vertical = 16.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        Text(
-            text = title,
-            modifier = Modifier.weight(1f),
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-        Text(
-            text = value,
-            style = MaterialTheme.typography.bodyLarge,
-            color = MaterialTheme.colorScheme.onSurface,
-            textAlign = TextAlign.End,
-            maxLines = 2,
-            overflow = TextOverflow.Ellipsis,
-        )
-    }
-}
-
-@OptIn(ExperimentalLayoutApi::class)
-@Composable
-private fun UpdateSettingsRow(
-    updateState: AppUpdateUiState,
-    onCheckForUpdates: () -> Unit,
-    onOpenReleasePage: (String) -> Unit,
-) {
-    val releasePageUrl = (updateState as? AppUpdateUiState.Available)?.candidate?.releasePageUrl
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 18.dp),
-    ) {
-        Text(
-            text = stringResource(R.string.app_updates),
-            style = MaterialTheme.typography.bodyLarge,
-            fontWeight = FontWeight.Normal,
-            color = MaterialTheme.colorScheme.onSurface,
-        )
-        Spacer(Modifier.height(6.dp))
-        Text(
-            text = updateStatusText(updateState),
-            style = MaterialTheme.typography.bodyMedium,
-            color = if (updateState is AppUpdateUiState.Error) {
-                MaterialTheme.colorScheme.error
-            } else {
-                MaterialTheme.colorScheme.onSurfaceVariant
-            },
-        )
-        Spacer(Modifier.height(16.dp))
-        ActionRow {
-            SoftActionButton(
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
                 text = stringResource(R.string.check_for_updates),
-                onClick = onCheckForUpdates,
-                enabled = !updateState.isBusy,
+                style = MaterialTheme.typography.bodyLarge,
+                fontWeight = FontWeight.Normal,
+                color = MaterialTheme.colorScheme.onSurface,
             )
-            if (releasePageUrl != null) {
-                PrimaryActionButton(
-                    text = stringResource(R.string.open_release_page),
-                    onClick = { onOpenReleasePage(releasePageUrl) },
-                    modifier = Modifier.widthIn(min = 156.dp),
-                    enabled = !updateState.isBusy,
-                )
-            }
+            Spacer(Modifier.height(5.dp))
+            Text(
+                text = updateStatusText(updateState, installedVersion),
+                style = MaterialTheme.typography.bodyMedium,
+                color = if (updateState is AppUpdateUiState.Error) {
+                    MaterialTheme.colorScheme.error
+                } else {
+                    MaterialTheme.colorScheme.onSurfaceVariant
+                },
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+            )
         }
+        Text(
+            text = updateActionText(updateState),
+            style = MaterialTheme.typography.labelLarge,
+            fontWeight = FontWeight.SemiBold,
+            color = when (updateState) {
+                AppUpdateUiState.Checking,
+                is AppUpdateUiState.UpToDate -> MaterialTheme.colorScheme.onSurfaceVariant
+                else -> MaterialTheme.colorScheme.primary
+            }
+        )
     }
 }
 
 @Composable
-private fun updateStatusText(updateState: AppUpdateUiState): String =
+private fun updateStatusText(updateState: AppUpdateUiState, installedVersion: InstalledAppVersion): String =
     when (updateState) {
-        AppUpdateUiState.Idle -> stringResource(R.string.update_status_idle)
+        AppUpdateUiState.Idle -> stringResource(
+            R.string.update_status_idle,
+            installedVersion.versionName,
+            installedVersion.versionCode,
+        )
         AppUpdateUiState.Checking -> stringResource(R.string.update_status_checking)
         is AppUpdateUiState.UpToDate -> stringResource(
             R.string.update_status_up_to_date,
@@ -3146,6 +3164,16 @@ private fun updateStatusText(updateState: AppUpdateUiState): String =
             updateState.candidate.metadata.versionCode,
         )
         is AppUpdateUiState.Error -> updateState.message
+    }
+
+@Composable
+private fun updateActionText(updateState: AppUpdateUiState): String =
+    when (updateState) {
+        AppUpdateUiState.Idle -> stringResource(R.string.update_action_check)
+        AppUpdateUiState.Checking -> stringResource(R.string.update_action_checking)
+        is AppUpdateUiState.UpToDate -> stringResource(R.string.update_action_up_to_date)
+        is AppUpdateUiState.Available -> stringResource(R.string.update_action_available)
+        is AppUpdateUiState.Error -> stringResource(R.string.update_action_retry)
     }
 
 @Composable
