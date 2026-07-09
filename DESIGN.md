@@ -28,24 +28,23 @@ The palette is highly restrained, leaning on tinted neutral grays/slates to buil
 **The Restrained Rule.** Tinted neutrals handle the structure. A single, purposeful accent color carries ≤10% of any given surface. 
 
 ### Primary
-- **[To be resolved during implementation]**: Used exclusively for active recording states, primary actions, and selected map markers.
+- **Quiet Blue**: `#326AA8` (light) / `#8AB4F0` (dark). Used exclusively for active recording states, primary actions, and selected map markers. Light and dark share the same blue hue; only lightness shifts so switching modes feels like a lighting change, not a brand change.
 
 ### Neutral
-- **[To be resolved during implementation]**: Backgrounds, surfaces, text, and subtle borders. 
+- **Cold-tinted Slate**: Light `#F7F7F7` background, `#FFFFFF` surfaces, `#F4F5F7` panels; Dark `#0F172A` background, `#1E293B` surfaces, `#334155` panels. Tinted toward blue to stay cohesive with the primary accent. Backgrounds, surfaces, text, and subtle borders.
 
 ## 3. Typography
 
-**Display Font:** [font pairing to be chosen at implementation]
-**Body Font:** [font pairing to be chosen at implementation]
+**Display Font:** System Roboto (no custom font family)
+**Body Font:** System Roboto (no custom font family)
 
 **Character:** A single, highly legible sans-serif family. It should feel technical enough to handle dense lists of coordinates and timestamps, but warm enough to feel like a modern Android app rather than a terminal.
 
 ### Hierarchy
-- **Display** ([weight], [size/clamp], [line-height]): [To be resolved during implementation]
-- **Headline** ([weight], [size], [line-height]): [To be resolved during implementation]
-- **Title** ([weight], [size], [line-height]): [To be resolved during implementation]
-- **Body** ([weight], [size], [line-height]): [To be resolved during implementation]
-- **Label** ([weight], [size], [letter-spacing], [case if uppercase]): [To be resolved during implementation]
+- **Headline** (SemiBold 600, 28sp/24sp, 36sp/32sp line-height): `headlineMedium` / `headlineSmall`
+- **Title** (Medium 500, 22sp/16sp/14sp, 28sp/24sp/20sp line-height): `titleLarge` / `titleMedium` / `titleSmall`
+- **Body** (Normal 400, 16sp/14sp/12sp, 24sp/20sp/16sp line-height): `bodyLarge` / `bodyMedium` / `bodySmall`
+- **Label** (Medium 500, 14sp/12sp/11sp, 20sp/16sp/16sp line-height, 0.1-0.5sp letter-spacing): `labelLarge` / `labelMedium` / `labelSmall`
 
 ## 4. Elevation
 

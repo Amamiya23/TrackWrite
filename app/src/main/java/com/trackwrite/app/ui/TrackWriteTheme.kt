@@ -1,16 +1,55 @@
 package com.trackwrite.app.ui
 
 import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Typography
 import androidx.compose.material3.darkColorScheme
-import androidx.compose.material3.dynamicDarkColorScheme
-import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.trackwrite.app.settings.AppearanceMode
+
+object TrackShape {
+    val pill = RoundedCornerShape(50)
+    val control = RoundedCornerShape(12.dp)
+    val card = RoundedCornerShape(16.dp)
+}
+
+object TrackSpacing {
+    val x1 = 4.dp
+    val x2 = 8.dp
+    val x3 = 12.dp
+    val x4 = 16.dp
+    val x5 = 20.dp
+    val x6 = 24.dp
+    val x7 = 28.dp
+}
+
+object TrackAlpha {
+    const val disabled = 0.38f
+    const val faint = 0.60f
+    const val subtle = 0.80f
+}
+
+private val AppTypography = Typography(
+    headlineMedium = TextStyle(fontSize = 28.sp, fontWeight = FontWeight.SemiBold, lineHeight = 36.sp, letterSpacing = 0.sp),
+    headlineSmall = TextStyle(fontSize = 24.sp, fontWeight = FontWeight.SemiBold, lineHeight = 32.sp, letterSpacing = 0.sp),
+    titleLarge = TextStyle(fontSize = 22.sp, fontWeight = FontWeight.Medium, lineHeight = 28.sp, letterSpacing = 0.sp),
+    titleMedium = TextStyle(fontSize = 16.sp, fontWeight = FontWeight.Medium, lineHeight = 24.sp, letterSpacing = 0.15.sp),
+    titleSmall = TextStyle(fontSize = 14.sp, fontWeight = FontWeight.Medium, lineHeight = 20.sp, letterSpacing = 0.1.sp),
+    bodyLarge = TextStyle(fontSize = 16.sp, fontWeight = FontWeight.Normal, lineHeight = 24.sp, letterSpacing = 0.5.sp),
+    bodyMedium = TextStyle(fontSize = 14.sp, fontWeight = FontWeight.Normal, lineHeight = 20.sp, letterSpacing = 0.25.sp),
+    bodySmall = TextStyle(fontSize = 12.sp, fontWeight = FontWeight.Normal, lineHeight = 16.sp, letterSpacing = 0.4.sp),
+    labelLarge = TextStyle(fontSize = 14.sp, fontWeight = FontWeight.Medium, lineHeight = 20.sp, letterSpacing = 0.1.sp),
+    labelMedium = TextStyle(fontSize = 12.sp, fontWeight = FontWeight.Medium, lineHeight = 16.sp, letterSpacing = 0.5.sp),
+    labelSmall = TextStyle(fontSize = 11.sp, fontWeight = FontWeight.Medium, lineHeight = 16.sp, letterSpacing = 0.5.sp),
+)
 
 private val LightBackground = Color(0xFFF7F7F7)
 private val LightCard = Color(0xFFFFFFFF)
@@ -49,10 +88,10 @@ private val LightColors = lightColorScheme(
 )
 
 private val DarkColors = darkColorScheme(
-    primary = Color(0xFF94A3B8),
-    onPrimary = Color(0xFF1E293B),
-    primaryContainer = Color(0xFF334155),
-    onPrimaryContainer = Color(0xFFCBD5E1),
+    primary = Color(0xFF8AB4F0),
+    onPrimary = Color(0xFF0F2748),
+    primaryContainer = Color(0xFF1B3A5F),
+    onPrimaryContainer = Color(0xFFD6E4F7),
     secondary = Color(0xFF64748B),
     onSecondary = Color(0xFF1E293B),
     secondaryContainer = Color(0xFF334155),
@@ -90,41 +129,14 @@ fun TrackWriteTheme(
     }
 
     val colorScheme = when (appearance) {
-        AppearanceMode.System -> {
-            val context = LocalContext.current
-            if (darkTheme) {
-                dynamicDarkColorScheme(context)
-            } else {
-                dynamicLightColorScheme(context).copy(
-                    primary = LightPrimary,
-                    onPrimary = Color(0xFFFAFCFF),
-                    primaryContainer = LightPrimarySoft,
-                    onPrimaryContainer = Color(0xFF234A73),
-                    secondary = Color(0xFF475569),
-                    onSecondary = Color(0xFFFFFFFF),
-                    secondaryContainer = Color(0xFFF1F5F9),
-                    onSecondaryContainer = Color(0xFF1E293B),
-                    background = LightBackground,
-                    onBackground = Color(0xFF0F172A),
-                    surface = LightCard,
-                    onSurface = Color(0xFF0F172A),
-                    surfaceVariant = LightPanel,
-                    onSurfaceVariant = Color(0xFF475569),
-                    outline = Color(0xFFCBD5E1),
-                    outlineVariant = Color(0xFFE2E8F0),
-                    surfaceContainerLow = LightCard,
-                    surfaceContainer = Color(0xFFECEFF3),
-                    surfaceContainerHigh = LightPanel,
-                )
-            }
-        }
+        AppearanceMode.System -> if (darkTheme) DarkColors else LightColors
         AppearanceMode.Light -> LightColors
         AppearanceMode.Dark -> DarkColors
     }
 
     MaterialTheme(
         colorScheme = colorScheme,
-        typography = MaterialTheme.typography,
+        typography = AppTypography,
         content = content,
     )
 }

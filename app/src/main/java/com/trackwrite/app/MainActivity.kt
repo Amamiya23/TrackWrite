@@ -16,7 +16,6 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.documentfile.provider.DocumentFile
-import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -45,10 +44,11 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.Remove
-import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
+import androidx.compose.material.icons.rounded.Add
+import androidx.compose.material.icons.rounded.Check
+import androidx.compose.material.icons.rounded.Remove
+import androidx.compose.material.icons.rounded.*
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -75,15 +75,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.geometry.CornerRadius
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.Path
-import androidx.compose.ui.graphics.StrokeCap
-import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.asImageBitmap
-import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
@@ -119,6 +112,9 @@ import com.trackwrite.app.settings.AppSettings
 import com.trackwrite.app.settings.AppSettingsStore
 import com.trackwrite.app.settings.AppearanceMode
 import com.trackwrite.app.settings.RecordingFrequency
+import com.trackwrite.app.ui.TrackAlpha
+import com.trackwrite.app.ui.TrackShape
+import com.trackwrite.app.ui.TrackSpacing
 import com.trackwrite.app.ui.TrackWriteTheme
 import com.trackwrite.app.update.GitHubReleaseUpdateSource
 import com.trackwrite.app.update.InstalledAppVersion
@@ -1003,7 +999,7 @@ private fun TrackWriteTopBar(
                 Text(
                     text = title,
                     style = MaterialTheme.typography.headlineSmall,
-                    fontWeight = FontWeight.ExtraBold,
+                    fontWeight = FontWeight.SemiBold,
                     color = MaterialTheme.colorScheme.onSurface,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
@@ -1014,9 +1010,9 @@ private fun TrackWriteTopBar(
                 Surface(
                     modifier = Modifier
                         .size(44.dp)
-                        .clip(RoundedCornerShape(10.dp))
+                        .clip(TrackShape.control)
                         .clickable(onClick = onSettings),
-                    shape = RoundedCornerShape(10.dp),
+                    shape = TrackShape.control,
                     color = MaterialTheme.colorScheme.surface,
                     border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
                 ) {
@@ -1101,9 +1097,9 @@ private fun BottomNavItem(
     Surface(
         modifier = modifier
             .height(45.dp)
-            .clip(RoundedCornerShape(14.dp))
+            .clip(TrackShape.card)
             .clickable(onClick = onClick),
-        shape = RoundedCornerShape(14.dp),
+        shape = TrackShape.card,
         color = if (selected) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.82f) else Color.Transparent,
     ) {
         Column(
@@ -1129,21 +1125,21 @@ private fun BottomNavItem(
     }
 }
 
-private enum class TrackWriteIcon {
-    Target,
-    Satellite,
-    Pause,
-    Warning,
-    Lock,
-    History,
-    Route,
-    Record,
-    Photo,
-    Folder,
-    Settings,
-    File,
-    Empty,
-    Close,
+private enum class TrackWriteIcon(val imageVector: ImageVector) {
+    Target(Icons.Rounded.MyLocation),
+    Satellite(Icons.Rounded.SatelliteAlt),
+    Pause(Icons.Rounded.Pause),
+    Warning(Icons.Rounded.Warning),
+    Lock(Icons.Rounded.Lock),
+    History(Icons.Rounded.History),
+    Route(Icons.Rounded.Route),
+    Record(Icons.Rounded.RadioButtonUnchecked),
+    Photo(Icons.Rounded.PhotoCamera),
+    Folder(Icons.Rounded.FolderOpen),
+    Settings(Icons.Rounded.Settings),
+    File(Icons.Rounded.Description),
+    Empty(Icons.Rounded.DeleteOutline),
+    Close(Icons.Rounded.Close),
 }
 
 @Composable
@@ -1152,183 +1148,12 @@ private fun TrackWriteLineIcon(
     tint: Color,
     modifier: Modifier = Modifier,
 ) {
-    Canvas(modifier = modifier) {
-        val unit = min(size.width, size.height) / 24f
-        val left = (size.width - unit * 24f) / 2f
-        val top = (size.height - unit * 24f) / 2f
-        val strokeWidth = 2f * unit
-        val stroke = Stroke(width = strokeWidth, cap = StrokeCap.Round, join = StrokeJoin.Round)
-        fun p(x: Float, y: Float) = Offset(left + x * unit, top + y * unit)
-        fun line(x1: Float, y1: Float, x2: Float, y2: Float) {
-            drawLine(tint, p(x1, y1), p(x2, y2), strokeWidth = strokeWidth, cap = StrokeCap.Round)
-        }
-        fun Path.m(x: Float, y: Float) = moveTo(p(x, y).x, p(x, y).y)
-        fun Path.l(x: Float, y: Float) = lineTo(p(x, y).x, p(x, y).y)
-        fun Path.c(x1: Float, y1: Float, x2: Float, y2: Float, x3: Float, y3: Float) =
-            cubicTo(p(x1, y1).x, p(x1, y1).y, p(x2, y2).x, p(x2, y2).y, p(x3, y3).x, p(x3, y3).y)
-        fun Path.q(x1: Float, y1: Float, x2: Float, y2: Float) =
-            quadraticTo(p(x1, y1).x, p(x1, y1).y, p(x2, y2).x, p(x2, y2).y)
-        fun rectTopLeft(x: Float, y: Float) = p(x, y)
-        fun rectSize(width: Float, height: Float) = Size(width * unit, height * unit)
-        fun corner(radius: Float) = CornerRadius(radius * unit, radius * unit)
-
-        when (icon) {
-            TrackWriteIcon.Target -> {
-                drawCircle(tint, radius = 8f * unit, center = p(12f, 12f), style = stroke)
-                drawCircle(tint, radius = 2f * unit, center = p(12f, 12f), style = stroke)
-                line(12f, 2f, 12f, 5f)
-                line(12f, 19f, 12f, 22f)
-                line(2f, 12f, 5f, 12f)
-                line(19f, 12f, 22f, 12f)
-            }
-            TrackWriteIcon.Satellite -> {
-                line(7f, 7f, 17f, 17f)
-                line(9f, 5f, 19f, 15f)
-                line(5f, 9f, 15f, 19f)
-                line(14f, 4f, 20f, 10f)
-                line(4f, 14f, 10f, 20f)
-            }
-            TrackWriteIcon.Pause -> {
-                line(9f, 5f, 9f, 19f)
-                line(15f, 5f, 15f, 19f)
-            }
-            TrackWriteIcon.Warning -> {
-                val path = Path().apply {
-                    m(12f, 3.2f)
-                    l(21.2f, 20f)
-                    l(2.8f, 20f)
-                    close()
-                }
-                drawPath(path, tint, style = stroke)
-                line(12f, 9f, 12f, 13f)
-                drawCircle(tint, radius = 0.45f * unit, center = p(12f, 17f))
-            }
-            TrackWriteIcon.Lock -> {
-                drawRoundRect(
-                    color = tint,
-                    topLeft = rectTopLeft(5f, 11f),
-                    size = rectSize(14f, 9f),
-                    cornerRadius = corner(2f),
-                    style = stroke,
-                )
-                val shackle = Path().apply {
-                    m(8f, 11f)
-                    l(8f, 8f)
-                    c(8f, 5.8f, 9.8f, 4f, 12f, 4f)
-                    c(14.2f, 4f, 16f, 5.8f, 16f, 8f)
-                    l(16f, 11f)
-                }
-                drawPath(shackle, tint, style = stroke)
-            }
-            TrackWriteIcon.History -> {
-                drawArc(
-                    color = tint,
-                    startAngle = 210f,
-                    sweepAngle = 305f,
-                    useCenter = false,
-                    topLeft = rectTopLeft(3f, 3f),
-                    size = rectSize(18f, 18f),
-                    style = stroke,
-                )
-                line(3f, 4f, 3f, 9f)
-                line(3f, 9f, 8f, 9f)
-                line(12f, 7f, 12f, 12f)
-                line(12f, 12f, 15f, 14f)
-            }
-            TrackWriteIcon.Route -> {
-                val path = Path().apply {
-                    m(5f, 19f)
-                    c(9f, 11f, 15f, 23f, 19f, 15f)
-                }
-                drawPath(path, tint, style = stroke)
-                drawCircle(tint, radius = 2f * unit, center = p(5f, 19f), style = stroke)
-                drawCircle(tint, radius = 2f * unit, center = p(19f, 15f), style = stroke)
-            }
-            TrackWriteIcon.Record -> {
-                drawCircle(tint, radius = 7f * unit, center = p(12f, 12f), style = stroke)
-                drawCircle(tint, radius = 3f * unit, center = p(12f, 12f), style = stroke)
-            }
-            TrackWriteIcon.Photo -> {
-                val body = Path().apply {
-                    m(4f, 8f)
-                    q(4f, 6f, 6f, 6f)
-                    l(9f, 6f)
-                    l(10.5f, 4f)
-                    l(13.5f, 4f)
-                    l(15f, 6f)
-                    l(18f, 6f)
-                    q(20f, 6f, 20f, 8f)
-                    l(20f, 18f)
-                    q(20f, 20f, 18f, 20f)
-                    l(6f, 20f)
-                    q(4f, 20f, 4f, 18f)
-                    close()
-                }
-                drawPath(body, tint, style = stroke)
-                drawCircle(tint, radius = 3.2f * unit, center = p(12f, 13f), style = stroke)
-            }
-            TrackWriteIcon.Folder -> {
-                val folder = Path().apply {
-                    m(4f, 8f)
-                    q(4f, 6f, 6f, 6f)
-                    l(9f, 6f)
-                    l(11f, 8f)
-                    l(18f, 8f)
-                    q(20f, 8f, 20f, 10f)
-                    l(20f, 18f)
-                    q(20f, 20f, 18f, 20f)
-                    l(6f, 20f)
-                    q(4f, 20f, 4f, 18f)
-                    close()
-                }
-                drawPath(folder, tint, style = stroke)
-            }
-            TrackWriteIcon.Settings -> {
-                drawCircle(tint, radius = 4f * unit, center = p(12f, 12f), style = stroke)
-                line(4f, 12f, 6f, 12f)
-                line(18f, 12f, 20f, 12f)
-                line(12f, 4f, 12f, 6f)
-                line(12f, 18f, 12f, 20f)
-                line(6.4f, 6.4f, 7.8f, 7.8f)
-                line(16.2f, 16.2f, 17.6f, 17.6f)
-                line(17.6f, 6.4f, 16.2f, 7.8f)
-                line(7.8f, 16.2f, 6.4f, 17.6f)
-            }
-            TrackWriteIcon.File -> {
-                val file = Path().apply {
-                    m(14f, 2f)
-                    l(6f, 2f)
-                    q(4f, 2f, 4f, 4f)
-                    l(4f, 20f)
-                    q(4f, 22f, 6f, 22f)
-                    l(18f, 22f)
-                    q(20f, 22f, 20f, 20f)
-                    l(20f, 8f)
-                    close()
-                }
-                drawPath(file, tint, style = stroke)
-                line(14f, 2f, 14f, 8f)
-                line(14f, 8f, 20f, 8f)
-            }
-            TrackWriteIcon.Empty -> {
-                line(4f, 6f, 20f, 6f)
-                val bin = Path().apply {
-                    m(6f, 6f)
-                    l(6f, 18f)
-                    q(6f, 20f, 8f, 20f)
-                    l(16f, 20f)
-                    q(18f, 20f, 18f, 18f)
-                    l(18f, 6f)
-                }
-                drawPath(bin, tint, style = stroke)
-                line(10f, 11f, 14f, 11f)
-            }
-            TrackWriteIcon.Close -> {
-                line(6f, 6f, 18f, 18f)
-                line(18f, 6f, 6f, 18f)
-            }
-        }
-    }
+    Icon(
+        imageVector = icon.imageVector,
+        contentDescription = null,
+        tint = tint,
+        modifier = modifier,
+    )
 }
 
 @Composable
@@ -1398,9 +1223,10 @@ private fun RecordingPanel(
     onStop: () -> Unit,
 ) {
     val tone = recordingProofTone(state.recording, state.settings, state.recordingClockMillis)
+    val isActive = tone == PillTone.Success
     SurfaceCard(
-        containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
-        borderColor = toneBorderColor(tone),
+        containerColor = if (isActive) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface,
+        borderColor = if (isActive) MaterialTheme.colorScheme.primary.copy(alpha = 0.4f) else toneBorderColor(tone),
     ) {
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -1446,7 +1272,7 @@ private fun RecordingEvidenceRow(
 ) {
     Surface(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(10.dp),
+        shape = TrackShape.control,
         color = MaterialTheme.colorScheme.surfaceContainerLow,
         border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
     ) {
@@ -1580,7 +1406,7 @@ private fun CompactMetric(
 ) {
     Surface(
         modifier = modifier.heightIn(min = 70.dp),
-        shape = RoundedCornerShape(10.dp),
+        shape = TrackShape.control,
         color = MaterialTheme.colorScheme.surfaceContainerLow,
         border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
     ) {
@@ -1631,9 +1457,9 @@ private fun TrackHistoryButton(
     Surface(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(14.dp))
+            .clip(TrackShape.card)
             .clickable(onClick = onClick),
-        shape = RoundedCornerShape(14.dp),
+        shape = TrackShape.card,
         color = MaterialTheme.colorScheme.surfaceContainerLow,
         border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
     ) {
@@ -1643,7 +1469,7 @@ private fun TrackHistoryButton(
             horizontalArrangement = Arrangement.spacedBy(14.dp),
         ) {
             Surface(
-                shape = RoundedCornerShape(10.dp),
+                shape = TrackShape.control,
                 color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f),
             ) {
                 TrackWriteLineIcon(
@@ -1672,9 +1498,9 @@ private fun TrackHistoryButton(
                 }
             }
             Icon(
-                Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                Icons.AutoMirrored.Rounded.KeyboardArrowRight,
                 contentDescription = null,
-                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.65f),
+                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = TrackAlpha.faint),
                 modifier = Modifier.size(20.dp),
             )
         }
@@ -1713,9 +1539,9 @@ private fun DrawerHeader(
         Surface(
             modifier = Modifier
                 .size(44.dp)
-                .clip(RoundedCornerShape(10.dp))
+                .clip(TrackShape.control)
                 .clickable(onClick = onDismiss),
-            shape = RoundedCornerShape(10.dp),
+            shape = TrackShape.control,
             color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f),
         ) {
             Box(contentAlignment = Alignment.Center) {
@@ -1793,9 +1619,9 @@ private fun TrackManagementRow(
     Surface(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(14.dp))
+            .clip(TrackShape.card)
             .clickable(onClick = onSelect),
-        shape = RoundedCornerShape(14.dp),
+        shape = TrackShape.card,
         color = if (selected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainerLow,
         border = if (selected) {
             androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.35f))
@@ -1941,9 +1767,9 @@ private fun TrackSourceButton(
         Surface(
             modifier = Modifier
                 .fillMaxWidth()
-                .clip(RoundedCornerShape(14.dp))
+                .clip(TrackShape.card)
                 .clickable(onClick = onClick),
-            shape = RoundedCornerShape(14.dp),
+            shape = TrackShape.card,
             color = MaterialTheme.colorScheme.surfaceContainerLow,
             border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
         ) {
@@ -1979,9 +1805,9 @@ private fun TrackSourceButton(
     Surface(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(14.dp))
+            .clip(TrackShape.card)
             .clickable(onClick = onClick),
-        shape = RoundedCornerShape(14.dp),
+        shape = TrackShape.card,
         color = MaterialTheme.colorScheme.surfaceContainerLow,
         border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
     ) {
@@ -1995,9 +1821,9 @@ private fun TrackSourceButton(
                     modifier = Modifier.weight(1f),
                 )
                 Icon(
-                    Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                    Icons.AutoMirrored.Rounded.KeyboardArrowRight,
                     contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.65f),
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = TrackAlpha.faint),
                     modifier = Modifier.size(18.dp),
                 )
             }
@@ -2067,9 +1893,9 @@ private fun PhotoInputButton(
     Surface(
         modifier = modifier
             .heightIn(min = 62.dp)
-            .clip(RoundedCornerShape(10.dp))
+            .clip(TrackShape.control)
             .clickable(enabled = enabled, onClick = onClick),
-        shape = RoundedCornerShape(10.dp),
+        shape = TrackShape.control,
         color = MaterialTheme.colorScheme.surfaceContainerLow,
         border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
     ) {
@@ -2080,14 +1906,14 @@ private fun PhotoInputButton(
         ) {
             TrackWriteLineIcon(
                 icon = icon,
-                tint = MaterialTheme.colorScheme.onSurface.copy(alpha = if (enabled) 1f else 0.45f),
+                tint = MaterialTheme.colorScheme.onSurface.copy(alpha = if (enabled) 1f else TrackAlpha.disabled),
                 modifier = Modifier.size(22.dp),
             )
             Text(
                 text = text,
                 style = MaterialTheme.typography.bodyLarge,
                 fontWeight = FontWeight.Normal,
-                color = MaterialTheme.colorScheme.onSurface.copy(alpha = if (enabled) 1f else 0.45f),
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = if (enabled) 1f else TrackAlpha.disabled),
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
@@ -2157,9 +1983,9 @@ private fun SelectableTrackRow(
     Surface(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(14.dp))
+            .clip(TrackShape.card)
             .clickable(onClick = onClick),
-        shape = RoundedCornerShape(14.dp),
+        shape = TrackShape.card,
         color = if (selected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainerLow,
         border = if (selected) {
             androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.35f))
@@ -2189,7 +2015,7 @@ private fun SelectableTrackRow(
             if (selected) {
                 Spacer(Modifier.width(10.dp))
                 Icon(
-                    Icons.Default.Check,
+                    Icons.Rounded.Check,
                     contentDescription = stringResource(R.string.selected),
                     tint = MaterialTheme.colorScheme.primary,
                     modifier = Modifier.size(20.dp),
@@ -2211,9 +2037,9 @@ private fun PhotoBatchButton(
     Surface(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(14.dp))
+            .clip(TrackShape.card)
             .clickable(onClick = onClick),
-        shape = RoundedCornerShape(14.dp),
+        shape = TrackShape.card,
         color = MaterialTheme.colorScheme.surfaceContainerLow,
         border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
     ) {
@@ -2226,9 +2052,9 @@ private fun PhotoBatchButton(
                     modifier = Modifier.weight(1f),
                 )
                 Icon(
-                    Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                    Icons.AutoMirrored.Rounded.KeyboardArrowRight,
                     contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.65f),
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = TrackAlpha.faint),
                     modifier = Modifier.size(20.dp),
                 )
             }
@@ -2346,9 +2172,9 @@ private fun PhotoBatchFilterChip(
     Surface(
         modifier = Modifier
             .heightIn(min = 44.dp)
-            .clip(RoundedCornerShape(999.dp))
+            .clip(TrackShape.pill)
             .clickable(onClick = onClick),
-        shape = RoundedCornerShape(999.dp),
+        shape = TrackShape.pill,
         color = if (selected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainerLow,
         border = androidx.compose.foundation.BorderStroke(
             1.dp,
@@ -2636,10 +2462,10 @@ private fun PrimaryActionButton(
     Surface(
         modifier = modifier
             .heightIn(min = 44.dp)
-            .clip(RoundedCornerShape(10.dp))
+            .clip(TrackShape.control)
             .clickable(enabled = enabled, onClick = onClick),
-        shape = RoundedCornerShape(10.dp),
-        color = MaterialTheme.colorScheme.primary.copy(alpha = if (enabled) 1f else 0.45f),
+        shape = TrackShape.control,
+        color = MaterialTheme.colorScheme.primary.copy(alpha = if (enabled) 1f else TrackAlpha.disabled),
     ) {
         Box(
             modifier = Modifier
@@ -2670,10 +2496,10 @@ private fun DangerActionButton(
         modifier = modifier
             .widthIn(min = 72.dp)
             .heightIn(min = 44.dp)
-            .clip(RoundedCornerShape(10.dp))
+            .clip(TrackShape.control)
             .clickable(enabled = enabled, onClick = onClick),
-        shape = RoundedCornerShape(10.dp),
-        color = MaterialTheme.colorScheme.errorContainer.copy(alpha = if (enabled) 1f else 0.45f),
+        shape = TrackShape.control,
+        color = MaterialTheme.colorScheme.errorContainer.copy(alpha = if (enabled) 1f else TrackAlpha.disabled),
         border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.error.copy(alpha = 0.22f)),
     ) {
         Box(
@@ -2686,7 +2512,7 @@ private fun DangerActionButton(
                 text = text,
                 style = MaterialTheme.typography.labelLarge,
                 fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onErrorContainer.copy(alpha = if (enabled) 1f else 0.55f),
+                color = MaterialTheme.colorScheme.onErrorContainer.copy(alpha = if (enabled) 1f else TrackAlpha.disabled),
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
@@ -2712,15 +2538,21 @@ private fun SoftActionButton(
     val containerColor = if (danger) {
         MaterialTheme.colorScheme.errorContainer
     } else {
-        MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f)
+        MaterialTheme.colorScheme.surfaceContainerHigh
+    }
+    val borderColor = if (danger) {
+        MaterialTheme.colorScheme.error.copy(alpha = TrackAlpha.subtle)
+    } else {
+        MaterialTheme.colorScheme.outline
     }
     Surface(
         modifier = modifier
             .height(minHeight)
-            .clip(RoundedCornerShape(10.dp))
+            .clip(TrackShape.control)
             .clickable(enabled = enabled, onClick = onClick),
-        shape = RoundedCornerShape(10.dp),
-        color = containerColor.copy(alpha = if (enabled) 1f else 0.45f),
+        shape = TrackShape.control,
+        color = containerColor.copy(alpha = if (enabled) 1f else TrackAlpha.disabled),
+        border = androidx.compose.foundation.BorderStroke(1.dp, borderColor.copy(alpha = if (enabled) 1f else TrackAlpha.disabled)),
     ) {
         Row(
             modifier = Modifier
@@ -2740,8 +2572,8 @@ private fun SoftActionButton(
             Text(
                 text = text,
                 style = MaterialTheme.typography.labelSmall,
-                fontWeight = FontWeight.ExtraBold,
-                color = contentColor.copy(alpha = if (enabled) 1f else 0.55f),
+                fontWeight = FontWeight.SemiBold,
+                color = contentColor.copy(alpha = if (enabled) 1f else TrackAlpha.disabled),
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
                 textAlign = TextAlign.Center,
@@ -2785,13 +2617,13 @@ private fun SurfaceCard(
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(14.dp),
+        shape = TrackShape.card,
         colors = CardDefaults.cardColors(containerColor = containerColor),
         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
-        border = androidx.compose.foundation.BorderStroke(1.dp, borderColor),
+        border = androidx.compose.foundation.BorderStroke(1.dp, borderColor.copy(alpha = TrackAlpha.faint)),
     ) {
         Column(
-            modifier = Modifier.padding(18.dp),
+            modifier = Modifier.padding(TrackSpacing.x5),
             content = content,
         )
     }
@@ -2805,7 +2637,7 @@ private fun EmptyStateBlock(
 ) {
     Surface(
         modifier = modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(14.dp),
+        shape = TrackShape.card,
         color = MaterialTheme.colorScheme.surfaceContainerLow,
         border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
     ) {
@@ -2902,7 +2734,7 @@ private fun StatusPill(label: String, tone: PillTone) {
             Box(
                 modifier = Modifier
                     .size(6.dp)
-                    .clip(RoundedCornerShape(999.dp))
+                    .clip(TrackShape.pill)
                     .background(colors.second),
             )
             Text(
@@ -3194,7 +3026,7 @@ private fun SettingsGroup(
 ) {
     Surface(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(14.dp),
+        shape = TrackShape.card,
         color = containerColor,
         tonalElevation = 0.dp,
         border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
@@ -3236,9 +3068,9 @@ private fun SettingNavigationRow(
                 overflow = TextOverflow.Ellipsis,
             )
             Icon(
-                Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                Icons.AutoMirrored.Rounded.KeyboardArrowRight,
                 contentDescription = null,
-                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.62f),
+                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = TrackAlpha.faint),
                 modifier = Modifier.size(18.dp),
             )
         }
@@ -3265,9 +3097,9 @@ private fun SettingChoiceRow(
     Surface(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(14.dp))
+            .clip(TrackShape.card)
             .clickable(onClick = onClick),
-        shape = RoundedCornerShape(14.dp),
+        shape = TrackShape.card,
         color = if (selected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainerLow,
         border = if (selected) {
             androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.35f))
@@ -3298,7 +3130,7 @@ private fun SettingChoiceRow(
             Spacer(Modifier.width(10.dp))
             Surface(
                 modifier = Modifier.size(20.dp),
-                shape = RoundedCornerShape(10.dp),
+                shape = TrackShape.control,
                 color = if (selected) MaterialTheme.colorScheme.primary else Color.Transparent,
                 border = androidx.compose.foundation.BorderStroke(
                     2.dp,
@@ -3308,7 +3140,7 @@ private fun SettingChoiceRow(
                 if (selected) {
                     Box(contentAlignment = Alignment.Center) {
                         Icon(
-                            Icons.Default.Check,
+                            Icons.Rounded.Check,
                             contentDescription = stringResource(R.string.selected),
                             tint = MaterialTheme.colorScheme.onPrimary,
                             modifier = Modifier.size(12.dp),
@@ -3374,7 +3206,7 @@ private fun MockupSwitch(checked: Boolean) {
         modifier = Modifier
             .width(44.dp)
             .height(24.dp)
-            .clip(RoundedCornerShape(12.dp))
+            .clip(TrackShape.control)
             .background(if (checked) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant)
             .padding(2.dp),
     ) {
@@ -3382,7 +3214,7 @@ private fun MockupSwitch(checked: Boolean) {
             modifier = Modifier
                 .size(20.dp)
                 .align(if (checked) Alignment.CenterEnd else Alignment.CenterStart),
-            shape = RoundedCornerShape(10.dp),
+            shape = TrackShape.control,
             color = MaterialTheme.colorScheme.surface,
         ) {}
     }
@@ -3409,8 +3241,8 @@ private fun ExportModeSelector(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(10.dp))
-                .clip(RoundedCornerShape(10.dp)),
+                .border(1.dp, MaterialTheme.colorScheme.outlineVariant, TrackShape.control)
+                .clip(TrackShape.control),
         ) {
             SegmentOption(
                 text = stringResource(R.string.write_copies),
@@ -3506,9 +3338,9 @@ private fun ExportFolderRow(
         }
         Spacer(Modifier.width(10.dp))
         Icon(
-            Icons.AutoMirrored.Filled.KeyboardArrowRight,
+            Icons.AutoMirrored.Rounded.KeyboardArrowRight,
             contentDescription = stringResource(R.string.choose_folder),
-            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = TrackAlpha.faint),
             modifier = Modifier
                 .padding(top = 2.dp)
                 .size(20.dp),
@@ -3539,13 +3371,13 @@ private fun SettingStepper(
             color = MaterialTheme.colorScheme.onSurface,
         )
         Surface(
-            shape = RoundedCornerShape(10.dp),
+            shape = TrackShape.control,
             color = MaterialTheme.colorScheme.surface,
             border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 StepperButton(
-                    icon = Icons.Default.Remove,
+                    icon = Icons.Rounded.Remove,
                     contentDescription = stringResource(R.string.decrease_setting, title),
                     enabled = value > range.first,
                     onClick = { onValueChange((value - 1).coerceIn(range.first, range.last)) },
@@ -3572,7 +3404,7 @@ private fun SettingStepper(
                         .background(MaterialTheme.colorScheme.outlineVariant)
                 )
                 StepperButton(
-                    icon = Icons.Default.Add,
+                    icon = Icons.Rounded.Add,
                     contentDescription = stringResource(R.string.increase_setting, title),
                     enabled = value < range.last,
                     onClick = { onValueChange((value + 1).coerceIn(range.first, range.last)) },
@@ -3598,7 +3430,7 @@ private fun StepperButton(
         Icon(
             icon,
             contentDescription = contentDescription,
-            tint = MaterialTheme.colorScheme.onSurface.copy(alpha = if (enabled) 1f else 0.35f),
+            tint = MaterialTheme.colorScheme.onSurface.copy(alpha = if (enabled) 1f else TrackAlpha.disabled),
             modifier = Modifier.size(16.dp),
         )
     }
@@ -3949,9 +3781,9 @@ private fun recordingProofTone(
 @Composable
 private fun toneBorderColor(tone: PillTone): Color =
     when (tone) {
-        PillTone.Success -> MaterialTheme.colorScheme.primary.copy(alpha = 0.28f)
-        PillTone.Warning -> MaterialTheme.colorScheme.tertiary.copy(alpha = 0.28f)
-        PillTone.Error -> MaterialTheme.colorScheme.error.copy(alpha = 0.28f)
+        PillTone.Success -> MaterialTheme.colorScheme.primary.copy(alpha = 0.4f)
+        PillTone.Warning -> MaterialTheme.colorScheme.tertiary.copy(alpha = TrackAlpha.subtle)
+        PillTone.Error -> MaterialTheme.colorScheme.error.copy(alpha = TrackAlpha.subtle)
         PillTone.Neutral -> MaterialTheme.colorScheme.outlineVariant
     }
 

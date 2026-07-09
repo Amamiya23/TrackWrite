@@ -206,23 +206,26 @@ PrimaryActionButton(
 
 ## Settings UI Patterns
 
-### Convention: Light Theme Background and Card Surfaces
-**What**: Light and system-light page backgrounds use `MaterialTheme.colorScheme.background`
-pinned to `#F7F7F7`. Light card surfaces should be pure white
-(`#FFFFFF`), and Settings group cards use `Color.White` in light mode instead
-of `surfaceContainerLow`.
+### Convention: Symmetric Manual ColorScheme
+**What**: All three `AppearanceMode` values (System / Light / Dark) resolve to
+the manual `LightColors` / `DarkColors` defined in `TrackWriteTheme.kt`. Dynamic
+color is intentionally not used; brand consistency wins over device-wallpaper
+personalization.
 
-**Why**: Material You dynamic light colors can tint `background`, `surface`, and
-`surfaceContainerLow` per device. Pinning these values keeps the app's white
-card on Slate 50 background contrast consistent.
+**Why**: The prior asymmetric approach (light mode pinned structural tokens over
+`dynamicLightColorScheme`, dark mode fell through to raw `dynamicDarkColorScheme`)
+caused the dark `primary` to lose the brand blue and become a neutral slate.
+Removing dynamic color entirely makes System mode symmetric and fixes the brand
+break, while the manual scheme already encodes the `#F7F7F7` background /
+white-card structure the old override protected.
 
 **Example**:
 ```kotlin
-dynamicLightColorScheme(context).copy(
-    background = Color(0xFFF7F7F7),
-    surface = Color.White,
-    surfaceContainerLow = Color.White,
-)
+val colorScheme = when (appearance) {
+    AppearanceMode.System -> if (darkTheme) DarkColors else LightColors
+    AppearanceMode.Light -> LightColors
+    AppearanceMode.Dark -> DarkColors
+}
 ```
 
 ### Convention: Settings Group Structure

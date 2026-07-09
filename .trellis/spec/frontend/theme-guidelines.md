@@ -20,16 +20,63 @@ switching modes feels like a lighting change, not a brand change.
 | surfaceContainerLow | `0xFFFFFFFF` (white) | `0xFF1E293B` (slate-800) |
 | surfaceVariant | `0xFFF4F5F7` | `0xFF334155` (slate-700) |
 | surfaceContainer | `0xFFECEFF3` | `0xFF273549` |
-| primary | `0xFF326AA8` | `0xFF94A3B8` (slate-400) |
-| primaryContainer | `0xFFEAF2FB` | `0xFF334155` |
+| primary | `0xFF326AA8` | `0xFF8AB4F0` (brand blue, lightened) |
+| primaryContainer | `0xFFEAF2FB` | `0xFF1B3A5F` |
 | onSurface | `0xFF0F172A` (slate-900) | `0xFFE2E8F0` (slate-200) |
 
 See `TrackWriteTheme.kt` for the full token mapping.
 
-When using Material You dynamic light color, copy these structural tokens over
-the dynamic scheme. The app must keep the mockup-aligned background, white
-panels, quiet blue primary, and soft selected-state container instead of letting
-device wallpaper colors recolor the core workflow.
+Light and dark share the same brand blue hue; only lightness shifts so switching
+modes feels like a lighting change, not a brand change. Dark `primary` is
+`#8AB4F0` (brand blue lightened to AA), **not** the old neutral `#94A3B8` —
+the prior neutral-slate dark primary broke brand cohesion.
+
+### System Mode: Symmetric Manual Scheme
+
+All three `AppearanceMode` values (System / Light / Dark) resolve to the manual
+`LightColors` / `DarkColors` defined in `TrackWriteTheme.kt`. Dynamic color
+(`dynamicLightColorScheme` / `dynamicDarkColorScheme`) is intentionally **not**
+used. Brand consistency wins over device-wallpaper personalization; the
+restraint is backed by DESIGN.md's "single purposeful accent" rule.
+
+## Token System
+
+Design scales live in `TrackWriteTheme.kt` as three top-level objects. Prefer
+these over raw `dp` / `alpha` / `RoundedCornerShape` literals:
+
+```kotlin
+TrackShape.pill    // 50% — chips, status pills
+TrackShape.control // 12dp — buttons, inputs, small controls
+TrackShape.card    // 16dp — SurfaceCard, panels, sheet-internal cards
+
+TrackSpacing.x1..x7  // 4 / 8 / 12 / 16 / 20 / 24 / 28 dp (multiples of 4)
+
+TrackAlpha.disabled // 0.38 — unavailable controls / icons
+TrackAlpha.faint    // 0.60 — muted icons, dividers, borders
+TrackAlpha.subtle   // 0.80 — container overlays
+```
+
+Forbidden: scattering `RoundedCornerShape(6/8/10/12/14/16.dp)` or
+`.copy(alpha = 0.28/0.45/0.55/0.65f)` literals across composables. Use a token;
+if a value is genuinely new and contextual, name it in `TrackAlpha` rather than
+inlining.
+
+## Typography
+
+A custom `Typography` (`AppTypography` in `TrackWriteTheme.kt`) overrides the
+Material 3 default. No custom font family is introduced — system Roboto stays.
+Weights are restricted to four tiers: Normal 400, Medium 500, SemiBold 600, Bold
+700. **`FontWeight.ExtraBold` / `Black` are forbidden** in composables; they
+break "The Quiet Instrument" restraint. Titles default to SemiBold, body to
+Normal, labels to Medium.
+
+## Icon System
+
+All icons resolve through `Icons.Rounded.*` (Material Symbols Rounded). The
+`TrackWriteIcon` enum in `MainActivity.kt` maps each name to an `ImageVector`
+and `TrackWriteLineIcon` delegates to the standard Material `Icon()`. Do not
+introduce filled (`Icons.Default` / `Icons.Filled`) icons — they clash visually
+with the rounded line set. Do not re-add hand-drawn Canvas icon drawing.
 
 ---
 

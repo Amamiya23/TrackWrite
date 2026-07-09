@@ -27,12 +27,11 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.rounded.Check
+import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -54,6 +53,7 @@ import androidx.compose.ui.unit.dp
 import androidx.core.view.doOnLayout
 import com.trackwrite.app.R
 import com.trackwrite.app.settings.AppSettingsStore
+import com.trackwrite.app.ui.TrackShape
 import com.trackwrite.app.ui.TrackWriteTheme
 import org.json.JSONObject
 
@@ -339,8 +339,8 @@ private fun ManualLocationSearchPanel(
             .padding(12.dp),
         color = MaterialTheme.colorScheme.surface,
         tonalElevation = 3.dp,
-        shadowElevation = 6.dp,
-        shape = RoundedCornerShape(16.dp),
+        shadowElevation = 3.dp,
+        shape = TrackShape.card,
     ) {
         if (state.hasAmapKey) {
             Row(
@@ -359,8 +359,8 @@ private fun ManualLocationSearchPanel(
                     keyboardActions = KeyboardActions(onSearch = { onSearch() }),
                     modifier = Modifier.weight(1f),
                 )
-                Button(onClick = onSearch, shape = RoundedCornerShape(8.dp)) {
-                    Icon(Icons.Default.Search, contentDescription = null, modifier = Modifier.size(18.dp))
+                Button(onClick = onSearch, shape = TrackShape.control) {
+                    Icon(Icons.Rounded.Search, contentDescription = null, modifier = Modifier.size(18.dp))
                     Spacer(Modifier.width(8.dp))
                     Text(stringResource(R.string.search_amap))
                 }
@@ -389,8 +389,8 @@ private fun ManualLocationSelectionPanel(
             .padding(12.dp),
         color = MaterialTheme.colorScheme.surface,
         tonalElevation = 3.dp,
-        shadowElevation = 6.dp,
-        shape = RoundedCornerShape(16.dp),
+        shadowElevation = 3.dp,
+        shape = TrackShape.card,
     ) {
         Column(
             modifier = Modifier
@@ -404,7 +404,7 @@ private fun ManualLocationSelectionPanel(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 Icon(
-                    Icons.Default.Check,
+                    Icons.Rounded.Check,
                     contentDescription = null,
                     modifier = Modifier.size(18.dp),
                     tint = MaterialTheme.colorScheme.primary,
@@ -428,7 +428,7 @@ private fun ManualLocationSelectionPanel(
                 Button(
                     onClick = onConfirm,
                     enabled = state.hasSelection,
-                    shape = RoundedCornerShape(8.dp),
+                    shape = TrackShape.control,
                 ) {
                     Text(stringResource(R.string.confirm_selection))
                 }
