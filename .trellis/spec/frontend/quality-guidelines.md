@@ -135,6 +135,55 @@ locationManager.requestLocationUpdates(provider, frequency.intervalMs, frequency
 ./gradlew :app:lintDebug
 ```
 
+## Record Screen Context Boundaries
+
+### Convention: Separate Active Recording, Latest History, and Management Selection
+
+**What**: Treat the record screen's three track contexts as separate values:
+
+- `recording.trackId` identifies the active or paused recording and is the only
+  source for live point, duration, and distance metrics.
+- `tracks.firstOrNull()` is the latest saved track and may be summarized in the
+  history entry when recording is stopped.
+- `recordTrackId` is a transient management target for export, rename, and
+  delete actions. It must not drive the live recording panel.
+
+**Why**: Reusing the management selection for live metrics produces
+contradictory UI, such as a stopped recording saying there are no current
+points while an old selected track shows a non-zero point count directly below.
+
+**Required behavior**:
+
+- Stopped state does not render live track metrics.
+- Recording and paused states render metrics only for `recording.trackId`.
+- History summaries use the repository's newest track, independent of the
+  management target.
+- File-picker callbacks freeze the target track ID before launch; do not read a
+  mutable global selection when the picker returns.
+
+```kotlin
+// Correct: each context has one purpose.
+val activeTrack = state.recording.trackId?.let { id -> state.tracks.firstOrNull { it.id == id } }
+val latestTrack = state.tracks.firstOrNull()
+
+if (state.recording.status != RecordingStatus.Stopped && activeTrack != null) {
+    TrackMetricsPanel(state, activeTrack)
+}
+TrackHistoryButton(latestTrack = latestTrack)
+```
+
+```kotlin
+// Wrong: a historical management selection leaks into current recording truth.
+val displayTrack = activeTrack ?: state.tracks.firstOrNull { it.id == state.recordTrackId }
+TrackMetricsPanel(state, displayTrack)
+```
+
+**Tests and checks**:
+
+- Verify stopped, recording, and paused states bind the intended track.
+- Verify changing a history management target does not change current metrics.
+- Verify asynchronous export writes the track selected when the picker opened.
+
 ---
 
 ## Scenario: Browser-Based App Updates
