@@ -157,14 +157,25 @@ class MainActivity : ComponentActivity() {
     private var matchResults: List<PhotoMatchResult> = emptyList()
     private var pendingManualPhotoIndex: Int? = null
     private var pendingExportMode: ExportFolderMode? = null
+    private var pendingGpxExportTrackId: String? = null
     private var pendingMediaLocationAction: (() -> Unit)? = null
+    private var pendingRecordingPermissionAction: (() -> Unit)? = null
     private var uiState by mutableStateOf(MainUiState())
     private val isBulkOperationRunning: Boolean
         get() = uiState.bulkOperation != null
 
     private val permissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions(),
-    ) { refresh() }
+    ) {
+        val action = pendingRecordingPermissionAction
+        pendingRecordingPermissionAction = null
+        if (hasRecordingLocationPermission()) {
+            action?.invoke()
+        } else {
+            log(getString(R.string.recording_location_permission_required))
+        }
+        refresh()
+    }
 
     private val mediaLocationPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission(),
@@ -187,7 +198,9 @@ class MainActivity : ComponentActivity() {
     private val gpxExportLauncher = registerForActivityResult(
         ActivityResultContracts.CreateDocument("application/gpx+xml"),
     ) { uri ->
-        if (uri != null) exportSelectedTrack(uri)
+        val trackId = pendingGpxExportTrackId
+        pendingGpxExportTrackId = null
+        if (uri != null && trackId != null) exportTrack(trackId, uri)
     }
 
     private val photoPickerLauncher = registerForActivityResult(
@@ -281,7 +294,7 @@ class MainActivity : ComponentActivity() {
                     onStartRecording = { uiState = uiState.copy(startDialogName = defaultTrackName()) },
                     onPause = { command(TrackingService.ACTION_PAUSE) },
                     onResume = { requestRecordingPermissionsThen { command(TrackingService.ACTION_RESUME) } },
-                    onStop = { command(TrackingService.ACTION_STOP) },
+                    onStop = { uiState = uiState.copy(showStopRecordingDialog = true) },
                     onRefreshRecording = { refresh() },
                     onImportGpx = { gpxImportLauncher.launch(arrayOf("application/gpx+xml", "text/xml", "*/*")) },
                     onExportGpx = { promptExport() },
@@ -359,6 +372,10 @@ class MainActivity : ComponentActivity() {
                         requestMediaLocationPermissionThen {
                             writeOriginals()
                         }
+                    },
+                    onConfirmStop = {
+                        uiState = uiState.copy(showStopRecordingDialog = false)
+                        command(TrackingService.ACTION_STOP)
                     },
                 )
             }
@@ -501,6 +518,7 @@ class MainActivity : ComponentActivity() {
             startDialogName = null,
             renameDialog = null,
             deleteDialog = null,
+            showStopRecordingDialog = false,
             showWriteDialog = false,
             updateDialogCandidate = null,
         )
@@ -562,11 +580,12 @@ class MainActivity : ComponentActivity() {
 
     private fun promptExport() {
         val track = recordTrack() ?: return log(getString(R.string.select_track_first))
+        pendingGpxExportTrackId = track.id
         gpxExportLauncher.launch("${track.name}.gpx")
     }
 
-    private fun exportSelectedTrack(uri: Uri) {
-        val track = recordTrack() ?: return
+    private fun exportTrack(trackId: String, uri: Uri) {
+        val track = repository.getTrack(trackId) ?: return
         contentResolver.openOutputStream(uri, "w").use { output ->
             requireNotNull(output).write(gpx.encode(track).toByteArray())
         }
@@ -685,9 +704,14 @@ class MainActivity : ComponentActivity() {
         if (permissions.isEmpty()) {
             block()
         } else {
+            pendingRecordingPermissionAction = block
             permissionLauncher.launch(permissions.toTypedArray())
         }
     }
+
+    private fun hasRecordingLocationPermission(): Boolean =
+        ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED ||
+            ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
 
     private fun requestMediaLocationPermissionThen(block: () -> Unit) {
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_MEDIA_LOCATION) == PackageManager.PERMISSION_GRANTED) {
@@ -744,6 +768,7 @@ private data class MainUiState(
     val startDialogName: String? = null,
     val renameDialog: RenameDialogState? = null,
     val deleteDialog: Track? = null,
+    val showStopRecordingDialog: Boolean = false,
     val showWriteDialog: Boolean = false,
     val bulkOperation: BulkOperation? = null,
     val writeProgress: WriteProgressState? = null,
@@ -877,6 +902,7 @@ private fun TrackWriteApp(
     onConfirmRename: (String, String) -> Unit,
     onConfirmDelete: (Track) -> Unit,
     onConfirmWrite: () -> Unit,
+    onConfirmStop: () -> Unit,
 ) {
     val snackbarHostState = remember { SnackbarHostState() }
     LaunchedEffect(state.logMessage) {
@@ -975,6 +1001,7 @@ private fun TrackWriteApp(
     StartRecordingDialog(state.startDialogName, onDismissDialog, onConfirmStart)
     RenameTrackDialog(state.renameDialog, onDismissDialog, onConfirmRename)
     DeleteTrackDialog(state.deleteDialog, onDismissDialog, onConfirmDelete)
+    StopRecordingDialog(state.showStopRecordingDialog, onDismissDialog, onConfirmStop)
     WriteOriginalsDialog(state.showWriteDialog, onDismissDialog, onConfirmWrite)
     WriteProgressDialog(state.bulkOperation, state.writeProgress)
     WriteResultSheet(state.writeResult, onDismissWriteResult)
@@ -1023,6 +1050,7 @@ private fun TrackWriteTopBar(
                         TrackWriteLineIcon(
                             icon = TrackWriteIcon.Settings,
                             tint = MaterialTheme.colorScheme.onSurface,
+                            contentDescription = stringResource(R.string.settings),
                             modifier = Modifier.size(19.dp),
                         )
                     }
@@ -1143,17 +1171,19 @@ private enum class TrackWriteIcon(val imageVector: ImageVector) {
     File(Icons.Rounded.Description),
     Empty(Icons.Rounded.DeleteOutline),
     Close(Icons.Rounded.Close),
+    More(Icons.Rounded.MoreVert),
 }
 
 @Composable
 private fun TrackWriteLineIcon(
     icon: TrackWriteIcon,
     tint: Color,
+    contentDescription: String? = null,
     modifier: Modifier = Modifier,
 ) {
     Icon(
         imageVector = icon.imageVector,
-        contentDescription = null,
+        contentDescription = contentDescription,
         tint = tint,
         modifier = modifier,
     )
@@ -1182,8 +1212,7 @@ private fun RecordScreen(
         }
     }
     val activeTrack = state.recording.trackId?.let { id -> state.tracks.firstOrNull { it.id == id } }
-    val selectedTrack = state.tracks.firstOrNull { it.id == state.recordTrackId }
-    val displayTrack = activeTrack ?: selectedTrack
+    val latestTrack = state.tracks.firstOrNull()
     LazyColumn(
         modifier = modifier
             .fillMaxSize()
@@ -1192,12 +1221,12 @@ private fun RecordScreen(
         verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
         item {
-            RecordingPanel(state, displayTrack, onStartRecording, onPause, onResume, onStop)
+            RecordingPanel(state, activeTrack, onStartRecording, onPause, onResume, onStop)
         }
         item {
             TrackHistoryButton(
                 trackCount = state.tracks.size,
-                selectedTrack = selectedTrack,
+                latestTrack = latestTrack,
                 onClick = onShowTrackHistory,
             )
         }
@@ -1206,7 +1235,7 @@ private fun RecordScreen(
     if (state.showTrackHistorySheet) {
         TrackHistorySheet(
             tracks = state.tracks,
-            selectedTrackId = state.recordTrackId,
+            activeTrackId = state.recording.trackId.takeIf { state.recording.status != RecordingStatus.Stopped },
             onTrackSelected = onRecordTrackSelected,
             onExportGpx = onExportGpx,
             onRenameTrack = onRenameTrack,
@@ -1219,7 +1248,7 @@ private fun RecordScreen(
 @Composable
 private fun RecordingPanel(
     state: MainUiState,
-    selectedTrack: Track?,
+    activeTrack: Track?,
     onStartRecording: () -> Unit,
     onPause: () -> Unit,
     onResume: () -> Unit,
@@ -1231,19 +1260,7 @@ private fun RecordingPanel(
         containerColor = if (isActive) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface,
         borderColor = if (isActive) MaterialTheme.colorScheme.primary.copy(alpha = 0.4f) else toneBorderColor(tone),
     ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            StatusPill(statusLabel(state.recording.status), tone)
-            Text(
-                text = recordingSignalNote(state.recording, state.settings, state.recordingClockMillis),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                textAlign = TextAlign.End,
-            )
-        }
+        StatusPill(statusLabel(state.recording.status), tone)
         Spacer(Modifier.height(12.dp))
         Text(
             text = recordingProofTitle(state.recording, state.settings, state.recordingClockMillis),
@@ -1251,8 +1268,10 @@ private fun RecordingPanel(
             fontWeight = FontWeight.Bold,
             color = MaterialTheme.colorScheme.onSurface,
         )
-        Spacer(Modifier.height(12.dp))
-        RecordingEvidenceRow(state.recording, state.settings, state.recordingClockMillis)
+        if (state.recording.status != RecordingStatus.Stopped || state.recording.issue != RecordingIssue.None) {
+            Spacer(Modifier.height(12.dp))
+            RecordingEvidenceRow(state.recording, state.settings, state.recordingClockMillis)
+        }
         Spacer(Modifier.height(14.dp))
         RecordingActionRow(
             status = state.recording.status,
@@ -1263,8 +1282,10 @@ private fun RecordingPanel(
         )
     }
 
-    Spacer(Modifier.height(12.dp))
-    TrackMetricsPanel(state, selectedTrack, tone)
+    if (state.recording.status != RecordingStatus.Stopped && activeTrack != null) {
+        Spacer(Modifier.height(12.dp))
+        TrackMetricsPanel(state, activeTrack)
+    }
 }
 
 @Composable
@@ -1273,39 +1294,25 @@ private fun RecordingEvidenceRow(
     settings: AppSettings,
     nowMillis: Long,
 ) {
-    Surface(
+    Row(
         modifier = Modifier.fillMaxWidth(),
-        shape = TrackShape.control,
-        color = MaterialTheme.colorScheme.surfaceContainerLow,
-        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
     ) {
-        Row(
-            modifier = Modifier.padding(12.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
-        ) {
-            Surface(
-                shape = RoundedCornerShape(8.dp),
-                color = MaterialTheme.colorScheme.surface,
-            ) {
-                TrackWriteLineIcon(
-                    icon = recordingEvidenceIcon(recording),
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier
-                        .padding(7.dp)
-                        .size(18.dp),
-                )
-            }
-            Column(Modifier.weight(1f)) {
-                Text(
-                    text = recordingEvidenceTitle(recording, nowMillis),
-                    style = MaterialTheme.typography.bodyLarge,
-                    fontWeight = FontWeight.Normal,
-                    color = MaterialTheme.colorScheme.onSurface,
-                )
-                Spacer(Modifier.height(2.dp))
-                RecordingConfidenceLine(recording, settings)
-            }
+        TrackWriteLineIcon(
+            icon = recordingEvidenceIcon(recording),
+            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.size(20.dp),
+        )
+        Column(Modifier.weight(1f)) {
+            Text(
+                text = recordingEvidenceTitle(recording, nowMillis),
+                style = MaterialTheme.typography.bodyLarge,
+                fontWeight = FontWeight.Normal,
+                color = MaterialTheme.colorScheme.onSurface,
+            )
+            Spacer(Modifier.height(2.dp))
+            RecordingConfidenceLine(recording, settings)
         }
     }
 }
@@ -1358,43 +1365,35 @@ private fun RecordingActionRow(
 @Composable
 private fun TrackMetricsPanel(
     state: MainUiState,
-    selectedTrack: Track?,
-    tone: PillTone,
+    activeTrack: Track,
 ) {
     SurfaceCard(containerColor = MaterialTheme.colorScheme.surfaceContainerLow) {
-        val stats = selectedTrack?.stats()
-        val duration = activeRecordingDuration(state, selectedTrack) ?: stats?.duration ?: Duration.ZERO
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.Top,
-        ) {
-            Text(
-                text = selectedTrack?.name ?: stringResource(R.string.track_name_default),
-                modifier = Modifier.weight(1f),
-                style = MaterialTheme.typography.bodyLarge,
-                fontWeight = FontWeight.Normal,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
-            )
-            Spacer(Modifier.width(10.dp))
-            StatusPill(trackUseLabel(state.recording, tone), trackUseTone(state.recording, tone))
-        }
-        Spacer(Modifier.height(12.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+        val stats = activeTrack.stats()
+        val duration = activeRecordingDuration(state, activeTrack) ?: stats.duration
+        Text(
+            text = activeTrack.name,
+            style = MaterialTheme.typography.bodyLarge,
+            fontWeight = FontWeight.Medium,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+        Spacer(Modifier.height(TrackSpacing.x3))
+        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             CompactMetric(
                 label = stringResource(R.string.points_captured),
-                value = (selectedTrack?.points?.size ?: 0).toString(),
+                value = activeTrack.points.size.toString(),
                 modifier = Modifier.weight(1f),
             )
+            MetricDivider()
             CompactMetric(
                 label = stringResource(R.string.duration),
-                value = formatDuration(duration),
+                value = formatCompactDuration(duration),
                 modifier = Modifier.weight(1f),
             )
+            MetricDivider()
             CompactMetric(
                 label = stringResource(R.string.distance),
-                value = formatDistance(stats?.distanceMeters ?: 0.0),
+                value = formatDistance(stats.distanceMeters),
                 modifier = Modifier.weight(1f),
             )
         }
@@ -1407,34 +1406,36 @@ private fun CompactMetric(
     value: String,
     modifier: Modifier = Modifier,
 ) {
-    Surface(
-        modifier = modifier.heightIn(min = 70.dp),
-        shape = TrackShape.control,
-        color = MaterialTheme.colorScheme.surfaceContainerLow,
-        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+    Column(
+        modifier = modifier.padding(horizontal = TrackSpacing.x2),
+        verticalArrangement = Arrangement.Center,
+        horizontalAlignment = Alignment.Start,
     ) {
-        Column(
-            modifier = Modifier.padding(10.dp),
-            verticalArrangement = Arrangement.Center,
-        ) {
-            Text(
-                text = value,
-                style = MaterialTheme.typography.bodyLarge,
-                fontWeight = FontWeight.Medium,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-            Spacer(Modifier.height(4.dp))
-            Text(
-                text = label,
-                style = MaterialTheme.typography.bodyMedium,
-                fontWeight = FontWeight.Normal,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-        }
+        Text(
+            text = value,
+            style = MaterialTheme.typography.bodyLarge,
+            fontWeight = FontWeight.Medium,
+            maxLines = 1,
+        )
+        Spacer(Modifier.height(4.dp))
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelMedium,
+            fontWeight = FontWeight.Normal,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            maxLines = 2,
+        )
     }
+}
+
+@Composable
+private fun MetricDivider() {
+    Box(
+        modifier = Modifier
+            .width(1.dp)
+            .height(44.dp)
+            .background(MaterialTheme.colorScheme.outlineVariant),
+    )
 }
 
 @Composable
@@ -1454,9 +1455,10 @@ private fun RecordingConfidenceLine(recording: RecordingSnapshot, settings: AppS
 @Composable
 private fun TrackHistoryButton(
     trackCount: Int,
-    selectedTrack: Track?,
+    latestTrack: Track?,
     onClick: () -> Unit,
 ) {
+    val latestLabel = latestTrack?.let { formatTrackHistoryLabel(it.name, it.startTime) }
     Surface(
         modifier = Modifier
             .fillMaxWidth()
@@ -1489,14 +1491,22 @@ private fun TrackHistoryButton(
                     style = MaterialTheme.typography.bodyLarge,
                     fontWeight = FontWeight.Normal,
                 )
-                if (selectedTrack != null) {
+                if (latestTrack != null && latestLabel != null) {
                     Spacer(Modifier.height(4.dp))
                     Text(
-                        text = selectedTrack.name,
+                        text = latestLabel.title,
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
+                    )
+                    val stats = latestTrack.stats()
+                    Spacer(Modifier.height(2.dp))
+                    Text(
+                        text = "${latestTrack.points.size} ${stringResource(R.string.points_short)} · ${formatCompactDuration(stats.duration)} · ${formatDistance(stats.distanceMeters)}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 2,
                     )
                 }
             }
@@ -1551,6 +1561,7 @@ private fun DrawerHeader(
                 TrackWriteLineIcon(
                     icon = TrackWriteIcon.Close,
                     tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    contentDescription = stringResource(R.string.close),
                     modifier = Modifier.size(16.dp),
                 )
             }
@@ -1562,23 +1573,25 @@ private fun DrawerHeader(
 @Composable
 private fun TrackHistorySheet(
     tracks: List<Track>,
-    selectedTrackId: String?,
+    activeTrackId: String?,
     onTrackSelected: (String) -> Unit,
     onExportGpx: () -> Unit,
     onRenameTrack: () -> Unit,
     onDeleteTrack: () -> Unit,
     onDismiss: () -> Unit,
 ) {
+    var expandedTrackId by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(tracks) {
+        if (tracks.none { it.id == expandedTrackId }) expandedTrackId = null
+    }
     ModalBottomSheet(onDismissRequest = onDismiss) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 18.dp, vertical = 10.dp),
         ) {
-            val selectedTrack = tracks.firstOrNull { it.id == selectedTrackId }
             DrawerHeader(
                 title = stringResource(R.string.track_history_count, tracks.size),
-                subtitle = selectedTrack?.let { stringResource(R.string.track_current_label, it.name) },
                 onDismiss = onDismiss,
             )
             Spacer(Modifier.height(14.dp))
@@ -1595,8 +1608,11 @@ private fun TrackHistorySheet(
                     itemsIndexed(tracks) { _, track ->
                         TrackManagementRow(
                             track = track,
-                            selected = track.id == selectedTrackId,
-                            onSelect = { onTrackSelected(track.id) },
+                            expanded = track.id == expandedTrackId,
+                            deleteEnabled = track.id != activeTrackId,
+                            onToggleActions = {
+                                expandedTrackId = track.id.takeUnless { expandedTrackId == track.id }
+                            },
                             onExportGpx = { onTrackSelected(track.id); onExportGpx() },
                             onRenameTrack = { onTrackSelected(track.id); onRenameTrack() },
                             onDeleteTrack = { onTrackSelected(track.id); onDeleteTrack() },
@@ -1612,66 +1628,88 @@ private fun TrackHistorySheet(
 @Composable
 private fun TrackManagementRow(
     track: Track,
-    selected: Boolean,
-    onSelect: () -> Unit,
+    expanded: Boolean,
+    deleteEnabled: Boolean,
+    onToggleActions: () -> Unit,
     onExportGpx: () -> Unit,
     onRenameTrack: () -> Unit,
     onDeleteTrack: () -> Unit,
 ) {
     val stats = track.stats()
+    val historyLabel = formatTrackHistoryLabel(track.name, track.startTime)
     Surface(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(TrackShape.card)
-            .clickable(onClick = onSelect),
+        modifier = Modifier.fillMaxWidth(),
         shape = TrackShape.card,
-        color = if (selected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainerLow,
-        border = if (selected) {
-            androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.35f))
-        } else {
-            androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
-        },
+        color = MaterialTheme.colorScheme.surfaceContainerLow,
+        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
     ) {
         Column(Modifier.padding(horizontal = 14.dp, vertical = 15.dp)) {
             Row(verticalAlignment = Alignment.Top) {
                 Column(Modifier.weight(1f)) {
                     Text(
-                        text = track.name,
+                        text = historyLabel.title,
                         style = MaterialTheme.typography.bodyLarge,
-                        fontWeight = FontWeight.Normal,
+                        fontWeight = FontWeight.Medium,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                     )
+                    historyLabel.subtitle?.let { subtitle ->
+                        Spacer(Modifier.height(2.dp))
+                        Text(
+                            text = subtitle,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                        )
+                    }
                     Spacer(Modifier.height(4.dp))
                     Text(
-                        text = "${track.points.size} ${stringResource(R.string.points_short)} · ${formatDuration(stats.duration)} · ${formatDistance(stats.distanceMeters)}",
+                        text = "${track.points.size} ${stringResource(R.string.points_short)} · ${formatCompactDuration(stats.duration)} · ${formatDistance(stats.distanceMeters)}",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 2,
                     )
                 }
-                if (selected) {
-                    Spacer(Modifier.width(8.dp))
-                    StatusPill(stringResource(R.string.selected), PillTone.Success)
+                Spacer(Modifier.width(8.dp))
+                Surface(
+                    modifier = Modifier
+                        .size(44.dp)
+                        .clip(TrackShape.control)
+                        .clickable(onClick = onToggleActions),
+                    shape = TrackShape.control,
+                    color = if (expanded) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant,
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        TrackWriteLineIcon(
+                            icon = TrackWriteIcon.More,
+                            tint = if (expanded) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                            contentDescription = stringResource(R.string.track_actions, historyLabel.title),
+                            modifier = Modifier.size(20.dp),
+                        )
+                    }
                 }
             }
-            Spacer(Modifier.height(12.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-                SoftActionButton(
-                    text = stringResource(R.string.export_gpx),
-                    onClick = onExportGpx,
-                    modifier = Modifier.weight(1f),
-                )
-                SoftActionButton(
-                    text = stringResource(R.string.rename),
-                    onClick = onRenameTrack,
-                    modifier = Modifier.weight(1f),
-                )
-                SoftActionButton(
-                    text = stringResource(R.string.delete),
-                    onClick = onDeleteTrack,
-                    modifier = Modifier.weight(1f),
-                    danger = true,
-                )
+            if (expanded) {
+                Spacer(Modifier.height(12.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                    SoftActionButton(
+                        text = stringResource(R.string.export_gpx),
+                        onClick = onExportGpx,
+                        modifier = Modifier.weight(1f),
+                    )
+                    SoftActionButton(
+                        text = stringResource(R.string.rename),
+                        onClick = onRenameTrack,
+                        modifier = Modifier.weight(1f),
+                    )
+                    SoftActionButton(
+                        text = stringResource(R.string.delete),
+                        onClick = onDeleteTrack,
+                        modifier = Modifier.weight(1f),
+                        danger = true,
+                        enabled = deleteEnabled,
+                    )
+                }
             }
         }
     }
@@ -3540,6 +3578,30 @@ private fun DeleteTrackDialog(
 }
 
 @Composable
+private fun StopRecordingDialog(
+    visible: Boolean,
+    onDismiss: () -> Unit,
+    onConfirm: () -> Unit,
+) {
+    if (!visible) return
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.stop_recording_title)) },
+        text = { Text(stringResource(R.string.stop_recording_message)) },
+        confirmButton = {
+            TextButton(onClick = onConfirm) {
+                Text(stringResource(R.string.stop_recording), color = MaterialTheme.colorScheme.error)
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text(stringResource(R.string.cancel))
+            }
+        },
+    )
+}
+
+@Composable
 private fun WriteOriginalsDialog(
     visible: Boolean,
     onDismiss: () -> Unit,
@@ -3709,22 +3771,6 @@ private fun recordingProofTitle(
     }
 
 @Composable
-private fun recordingSignalNote(
-    recording: RecordingSnapshot,
-    settings: AppSettings,
-    nowMillis: Long,
-): String =
-    when {
-        recording.issue == RecordingIssue.PermissionMissing -> stringResource(R.string.track_unavailable)
-        recording.issue == RecordingIssue.LocationDisabled -> stringResource(R.string.track_unavailable)
-        recording.status == RecordingStatus.Paused -> stringResource(R.string.status_paused)
-        recording.status == RecordingStatus.Stopped -> stringResource(R.string.status_stopped)
-        recording.lastPointRecordedAtMillis == null -> stringResource(R.string.recording_no_points)
-        isRecordingStale(recording, settings, nowMillis) -> stringResource(R.string.track_needs_attention)
-        else -> stringResource(R.string.ready)
-    }
-
-@Composable
 private fun recordingEvidenceTitle(recording: RecordingSnapshot, nowMillis: Long): String =
     when {
         recording.issue == RecordingIssue.PermissionMissing -> stringResource(R.string.recording_unavailable_title)
@@ -3742,22 +3788,6 @@ private fun recordingEvidenceIcon(recording: RecordingSnapshot): TrackWriteIcon 
         recording.status == RecordingStatus.Recording && recording.lastPointRecordedAtMillis == null -> TrackWriteIcon.Satellite
         recording.lastPointRecordedAtMillis == null -> TrackWriteIcon.Target
         else -> TrackWriteIcon.Target
-    }
-
-@Composable
-private fun trackUseLabel(recording: RecordingSnapshot, tone: PillTone): String =
-    when {
-        recording.status == RecordingStatus.Paused -> stringResource(R.string.track_paused_label)
-        tone == PillTone.Error -> stringResource(R.string.track_unavailable)
-        tone == PillTone.Warning -> stringResource(R.string.track_needs_attention)
-        tone == PillTone.Success -> stringResource(R.string.track_ready_for_matching)
-        else -> stringResource(R.string.track_pending)
-    }
-
-private fun trackUseTone(recording: RecordingSnapshot, tone: PillTone): PillTone =
-    when {
-        recording.status == RecordingStatus.Paused -> PillTone.Warning
-        else -> tone
     }
 
 @Composable

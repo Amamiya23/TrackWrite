@@ -39,6 +39,10 @@
     <string name="pause">Pause</string>
     <string name="resume">Resume</string>
     <string name="stop">Stop</string>
+    <string name="stop_recording">Stop recording</string>
+    <string name="stop_recording_title">Stop this recording?</string>
+    <string name="stop_recording_message">This track will be finished and cannot be resumed.</string>
+    <string name="recording_location_permission_required">Location permission is required to record a track.</string>
     <string name="track_name">Track name</string>
     <string name="track_name_default">Recording</string>
     <string name="cancel">Cancel</string>
@@ -48,6 +52,7 @@
     <string name="track_history_count">Track history (%1$d)</string>
     <string name="track_history_empty_help">Start a recording and saved tracks will appear here.</string>
     <string name="track_current_label">Current: %1$s</string>
+    <string name="track_actions">Actions for %1$s</string>
     <string name="track_ready_for_matching">Ready for matching</string>
     <string name="track_pending">Pending</string>
     <string name="track_needs_attention">Check first</string>

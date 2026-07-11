@@ -39,6 +39,10 @@
     <string name="pause">暂停</string>
     <string name="resume">继续</string>
     <string name="stop">停止</string>
+    <string name="stop_recording">停止记录</string>
+    <string name="stop_recording_title">停止本次记录？</string>
+    <string name="stop_recording_message">停止后，本次轨迹将结束且无法继续。</string>
+    <string name="recording_location_permission_required">需要定位权限才能记录轨迹。</string>
     <string name="track_name">轨迹名称</string>
     <string name="track_name_default">记录</string>
     <string name="cancel">取消</string>
@@ -48,6 +52,7 @@
     <string name="track_history_count">轨迹历史（%1$d）</string>
     <string name="track_history_empty_help">开始一次记录后，保存的轨迹会出现在这里。</string>
     <string name="track_current_label">当前：%1$s</string>
+    <string name="track_actions">%1$s 的操作</string>
     <string name="track_ready_for_matching">可用于匹配</string>
     <string name="track_pending">待开始</string>
     <string name="track_needs_attention">需确认</string>
