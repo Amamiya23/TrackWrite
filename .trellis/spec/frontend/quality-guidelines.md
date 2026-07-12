@@ -271,6 +271,55 @@ ModalBottomSheet(
 
 ---
 
+## Match Screen Photo Batch State
+
+### Convention: Reset Photo Batch Sources Together
+
+**What**: The Activity that owns a selected photo batch must clear the source
+photos and every derived UI representation in one operation. A batch-level
+clear action resets `selectedPhotos`, `matchResults`, pending/highlighted photo
+indices, `MainUiState.photos`, and `MainUiState.matches`, then closes the photo
+sheet. It preserves the selected match track and never deletes or modifies the
+source photo files.
+
+**Why**: Match screen counts, filters, manual corrections, and write readiness
+are derived from both the source photo list and its match results. Clearing only
+the visible `MainUiState` or only `selectedPhotos` leaves stale rows or write
+counts that reappear on the next refresh.
+
+Filtered photo rows must retain their original batch indices when invoking
+manual-location callbacks. User-visible match failures must use exhaustive
+localized mappings rather than rendering domain enum names.
+
+```kotlin
+// Correct: reset the owner state and all derived UI state together.
+private fun clearPhotoBatch() {
+    if (isBulkOperationRunning) return
+    selectedPhotos = emptyList()
+    matchResults = emptyList()
+    pendingManualPhotoIndex = null
+    uiState = uiState.copy(
+        photos = emptyList(),
+        matches = emptyList(),
+        showPhotoBatchSheet = false,
+        highlightedPhotoIndex = null,
+    )
+}
+
+// Wrong: this hides the current rows but leaves the source batch alive.
+uiState = uiState.copy(matches = emptyList())
+```
+
+**Required checks**:
+
+- Clearing one photo, a folder batch, or a batch with manual locations returns
+  Match to the photo-input state and leaves the selected track unchanged.
+- Dismissing the sheet does not clear the batch.
+- Filtered manual-location actions still target the original photo index.
+- Default and Simplified Chinese resources cover every `UnmatchedReason`.
+
+---
+
 ## Scenario: Browser-Based App Updates
 
 ### 1. Scope / Trigger
