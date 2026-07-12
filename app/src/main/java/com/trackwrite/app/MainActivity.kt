@@ -2910,24 +2910,37 @@ private fun PhotoMatchRow(
     Surface(
         modifier = Modifier.fillMaxWidth(),
         shape = TrackShape.card,
-        color = MaterialTheme.colorScheme.surfaceContainerLow,
-        border = androidx.compose.foundation.BorderStroke(
-            1.dp,
-            if (highlighted) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant,
-        ),
+        color = MaterialTheme.colorScheme.surfaceContainer,
+        border = if (highlighted) {
+            androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.primary)
+        } else {
+            null
+        },
     ) {
         Column(Modifier.padding(TrackSpacing.x4)) {
             Row(
                 horizontalArrangement = Arrangement.spacedBy(TrackSpacing.x3),
                 verticalAlignment = Alignment.Top,
             ) {
-                PhotoThumbnail(photo.uri)
+                PhotoThumbnail(
+                    uri = photo.uri,
+                    index = index,
+                )
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        text = "${index + 1}. ${photo.displayName}",
+                        text = photo.displayName,
                         style = MaterialTheme.typography.bodyLarge,
                         fontWeight = FontWeight.Medium,
                         color = MaterialTheme.colorScheme.onSurface,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    Spacer(Modifier.height(TrackSpacing.x1))
+                    Text(
+                        text = photo.capturedAt?.let(::formatPhotoCapturedAt)
+                            ?: stringResource(R.string.no_exif_time),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                         maxLines = 2,
                         overflow = TextOverflow.Ellipsis,
                     )
@@ -2938,26 +2951,12 @@ private fun PhotoMatchRow(
             Spacer(Modifier.height(TrackSpacing.x3))
             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
             Spacer(Modifier.height(TrackSpacing.x3))
-            PhotoMetadataLine(
-                label = stringResource(R.string.captured),
-                value = photo.capturedAt?.let(::formatPhotoCapturedAt)
-                    ?: stringResource(R.string.no_exif_time),
-            )
-            Spacer(Modifier.height(TrackSpacing.x2))
-            PhotoMetadataLine(
-                label = if (photo.manualLocation != null || match is PhotoMatch.Matched) {
-                    stringResource(R.string.location_prefix)
-                } else {
-                    stringResource(R.string.reason_prefix)
-                },
-                value = matchDetail(photo, match),
+            PhotoMatchDetail(
+                photo = photo,
+                match = match,
             )
             Spacer(Modifier.height(TrackSpacing.x3))
-            ActionRow {
-                PhotoRowActionButton(
-                    text = stringResource(R.string.set_location),
-                    onClick = onSetManualLocation,
-                )
+            PhotoActionRow {
                 if (photo.manualLocation != null) {
                     PhotoRowActionButton(
                         text = stringResource(R.string.clear_manual_location),
@@ -2965,26 +2964,73 @@ private fun PhotoMatchRow(
                         danger = true,
                     )
                 }
+                PhotoRowActionButton(
+                    text = stringResource(R.string.set_location),
+                    onClick = onSetManualLocation,
+                )
             }
         }
     }
 }
 
 @Composable
-private fun PhotoMetadataLine(label: String, value: String) {
-    Column(modifier = Modifier.fillMaxWidth()) {
+private fun PhotoMatchDetail(
+    photo: PhotoCandidate,
+    match: PhotoMatch?,
+) {
+    val hasPosition = photo.manualLocation != null || match is PhotoMatch.Matched
+    val isWarning = !hasPosition && (photo.capturedAt == null || match is PhotoMatch.Unmatched)
+    val icon = when {
+        hasPosition -> TrackWriteIcon.Target
+        isWarning -> TrackWriteIcon.Warning
+        else -> TrackWriteIcon.Route
+    }
+    val containerColor = when {
+        hasPosition -> MaterialTheme.colorScheme.primaryContainer
+        isWarning -> MaterialTheme.colorScheme.tertiaryContainer
+        else -> MaterialTheme.colorScheme.surfaceVariant
+    }
+    val contentColor = when {
+        hasPosition -> MaterialTheme.colorScheme.onPrimaryContainer
+        isWarning -> MaterialTheme.colorScheme.onTertiaryContainer
+        else -> MaterialTheme.colorScheme.onSurfaceVariant
+    }
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(TrackSpacing.x3),
+        verticalAlignment = Alignment.Top,
+    ) {
+        Surface(
+            modifier = Modifier.size(36.dp),
+            shape = TrackShape.control,
+            color = containerColor,
+        ) {
+            Box(contentAlignment = Alignment.Center) {
+                TrackWriteLineIcon(
+                    icon = icon,
+                    tint = contentColor,
+                    modifier = Modifier.size(18.dp),
+                )
+            }
+        }
         Text(
-            text = label,
-            style = MaterialTheme.typography.labelMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-        Spacer(Modifier.height(TrackSpacing.x1))
-        Text(
-            text = value,
+            text = matchDetail(photo, match),
+            modifier = Modifier.weight(1f),
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurface,
         )
     }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun PhotoActionRow(content: @Composable FlowRowScope.() -> Unit) {
+    FlowRow(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(TrackSpacing.x2, Alignment.End),
+        verticalArrangement = Arrangement.spacedBy(TrackSpacing.x2),
+        content = content,
+    )
 }
 
 @Composable
@@ -2994,29 +3040,28 @@ private fun PhotoRowActionButton(
     danger: Boolean = false,
 ) {
     val containerColor = if (danger) {
-        MaterialTheme.colorScheme.errorContainer
+        MaterialTheme.colorScheme.surfaceContainerLow
     } else {
-        MaterialTheme.colorScheme.surfaceContainerHigh
+        MaterialTheme.colorScheme.primary
     }
     val contentColor = if (danger) {
-        MaterialTheme.colorScheme.onErrorContainer
-    } else {
-        MaterialTheme.colorScheme.onSurface
-    }
-    val borderColor = if (danger) {
         MaterialTheme.colorScheme.error
     } else {
-        MaterialTheme.colorScheme.outline
+        MaterialTheme.colorScheme.onPrimary
     }
     Surface(
         modifier = Modifier
-            .widthIn(min = 120.dp)
+            .widthIn(min = 112.dp)
             .heightIn(min = 44.dp)
             .clip(TrackShape.control)
             .clickable(onClick = onClick),
         shape = TrackShape.control,
         color = containerColor,
-        border = androidx.compose.foundation.BorderStroke(1.dp, borderColor),
+        border = if (danger) {
+            androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.error)
+        } else {
+            null
+        },
     ) {
         Box(
             modifier = Modifier.padding(horizontal = TrackSpacing.x3, vertical = TrackSpacing.x2),
@@ -3036,9 +3081,12 @@ private fun PhotoRowActionButton(
 }
 
 @Composable
-private fun PhotoThumbnail(uri: Uri) {
+private fun PhotoThumbnail(
+    uri: Uri,
+    index: Int,
+) {
     val context = LocalContext.current
-    val targetSizePx = with(LocalDensity.current) { 70.dp.roundToPx() }
+    val targetSizePx = with(LocalDensity.current) { 88.dp.roundToPx() }
     var bitmap by remember(uri) { mutableStateOf<androidx.compose.ui.graphics.ImageBitmap?>(null) }
     LaunchedEffect(uri) {
         bitmap = withContext(Dispatchers.IO) {
@@ -3053,8 +3101,8 @@ private fun PhotoThumbnail(uri: Uri) {
     }
     Box(
         modifier = Modifier
-            .size(70.dp)
-            .clip(RoundedCornerShape(8.dp))
+            .size(88.dp)
+            .clip(TrackShape.control)
             .background(MaterialTheme.colorScheme.surfaceVariant),
         contentAlignment = Alignment.Center,
     ) {
@@ -3072,6 +3120,29 @@ private fun PhotoThumbnail(uri: Uri) {
                 tint = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.size(22.dp),
             )
+        }
+        Surface(
+            modifier = Modifier
+                .align(Alignment.TopStart)
+                .padding(TrackSpacing.x1)
+                .heightIn(min = 24.dp)
+                .widthIn(min = 24.dp),
+            shape = TrackShape.pill,
+            color = MaterialTheme.colorScheme.inverseSurface,
+            contentColor = MaterialTheme.colorScheme.inverseOnSurface,
+        ) {
+            Box(
+                modifier = Modifier.padding(horizontal = TrackSpacing.x1),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(
+                    text = (index + 1).toString(),
+                    style = MaterialTheme.typography.labelSmall,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.inverseOnSurface,
+                    maxLines = 1,
+                )
+            }
         }
     }
 }
@@ -3114,6 +3185,7 @@ private fun calculateInSampleSize(
 private fun MatchPill(photo: PhotoCandidate, match: PhotoMatch?) {
     when {
         photo.manualLocation != null -> StatusPill(stringResource(R.string.manual), PillTone.Warning)
+        photo.capturedAt == null -> StatusPill(stringResource(R.string.unmatched), PillTone.Warning)
         match is PhotoMatch.Matched -> StatusPill(stringResource(R.string.matched), PillTone.Success)
         match is PhotoMatch.Unmatched -> StatusPill(stringResource(R.string.unmatched), PillTone.Warning)
         else -> StatusPill(stringResource(R.string.no_track), PillTone.Neutral)
@@ -4556,12 +4628,7 @@ private fun isRecordingStale(
 private fun matchDetail(photo: PhotoCandidate, match: PhotoMatch?): String =
     when {
         photo.manualLocation != null -> {
-            String.format(
-                Locale.ROOT,
-                "%.6f, %.6f",
-                photo.manualLocation.latitude,
-                photo.manualLocation.longitude,
-            )
+            "${stringResource(R.string.manual)} · ${String.format(Locale.ROOT, "%.6f, %.6f", photo.manualLocation.latitude, photo.manualLocation.longitude)}"
         }
         match is PhotoMatch.Matched -> {
             "${sourceLabel(match.source)} · ${String.format(Locale.ROOT, "%.6f, %.6f", match.position.latitude, match.position.longitude)}"

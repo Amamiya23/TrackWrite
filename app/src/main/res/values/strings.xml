@@ -237,14 +237,15 @@
     <string name="search_hint">Search a place</string>
     <string name="search_amap">Search AMap</string>
     <string name="search_query_required">Enter a search term.</string>
-    <string name="no_location_selected">No location selected</string>
+    <string name="manual_location_back">Back to photos</string>
+    <string name="manual_location_pick_hint">Tap the map or search for a place.</string>
     <string name="confirm_selection">Confirm selection</string>
     <string name="amap_key_missing">AMap Web key is not configured. Map search is unavailable.</string>
     <string name="amap_loading">AMap is still loading. Wait a moment and search again.</string>
-    <string name="amap_ready">AMap is ready. Search or tap the map.</string>
     <string name="amap_searching">Searching AMap...</string>
-    <string name="amap_no_results_template">No results for "{query}".</string>
-    <string name="amap_search_results_found_template">Found {count} results. Select one in the map panel.</string>
+    <string name="amap_no_results_template">No results for "%1$s".</string>
+    <string name="amap_search_results_invalid">AMap returned an unreadable search response. Try again.</string>
+    <string name="amap_address_unavailable">Address unavailable</string>
     <string name="amap_script_load_failed">AMap failed to load. Check network, Web key, security code, and allowed domain settings.</string>
     <string name="amap_error_prefix">AMap error: </string>
     <string name="amap_not_initialized">AMap did not initialize. Check Web key and TRACKWRITE_AMAP_SECURITY_JS_CODE.</string>
@@ -252,7 +253,6 @@
     <string name="amap_map_tap">Map tap</string>
     <string name="amap_not_ready">AMap is not ready. Check map loading errors first.</string>
     <string name="amap_search_failed_prefix">Search failed: </string>
-    <string name="select_location_first">Select a location first</string>
     <string name="amap_selection">AMap selection</string>
     <string name="amap_error">AMap error</string>
 </resources>
