@@ -81,6 +81,14 @@ scripts/build-apk.sh v2.1 --code 21
 scripts/release-apk.sh v2.1 --code 21
 ```
 
+构建脚本会在 Gradle 默认产物旁生成用于分发的版本化 APK，例如：
+
+```text
+app/build/outputs/apk/release/TrackWrite-v2.1.apk
+```
+
+上传脚本默认使用同一命名规则，无需额外传入 `--apk`。
+
 `scripts/release-apk.sh` 会同时上传 APK 和 `trackwrite-update.json`。更新元数据包含：
 
 - `versionName`：发布版本名，例如 `v2.1`

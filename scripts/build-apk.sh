@@ -13,6 +13,11 @@ Examples:
 USAGE
 }
 
+script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+repo_root="$(cd "$script_dir/.." && pwd)"
+source "$script_dir/apk-common.sh"
+cd "$repo_root"
+
 if [[ $# -lt 1 ]]; then
     usage
     exit 1
@@ -71,3 +76,19 @@ echo "Building $gradle_task with versionName=$version_name versionCode=$version_
 ./gradlew "$gradle_task" \
     -Ptrackwrite.versionName="$version_name" \
     -Ptrackwrite.versionCode="$version_code"
+
+if ! apk_variant="$(apk_variant_for_gradle_task "$gradle_task")"; then
+    echo "Cannot determine APK output for Gradle task: $gradle_task" >&2
+    echo "Supported tasks: :app:assembleRelease and :app:assembleDebug" >&2
+    exit 1
+fi
+
+gradle_apk_path="$(apk_gradle_output_path "$apk_variant")"
+distribution_apk_path="$(apk_distribution_path "$version_name" "$apk_variant")"
+if [[ ! -f "$gradle_apk_path" ]]; then
+    echo "Gradle APK output not found: $gradle_apk_path" >&2
+    exit 1
+fi
+
+cp -f "$gradle_apk_path" "$distribution_apk_path"
+echo "APK: $distribution_apk_path"

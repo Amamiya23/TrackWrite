@@ -12,7 +12,7 @@ For an existing release, --title, --notes, --notes-file, --draft,
 --prerelease, and --target update the release before assets are uploaded.
 
 Options:
-  --apk <path>          APK to upload (default: app/build/outputs/apk/release/app-release.apk)
+  --apk <path>          APK to upload (default: app/build/outputs/apk/release/TrackWrite-<version-name>.apk)
   --code <version-code> Required Android versionCode for trackwrite-update.json
   --repo <owner/repo>   GitHub repository for gh, if not the current git remote
   --target <ref>        Branch or full commit SHA for a newly-created tag (default: GitHub default branch)
@@ -29,12 +29,13 @@ Options:
 Examples:
   scripts/build-apk.sh v2.3 --code 23
   scripts/release-apk.sh v2.3 --code 23
-  scripts/release-apk.sh v2.3 --code 23 --apk app/build/outputs/apk/debug/app-debug.apk --prerelease
+  scripts/release-apk.sh v2.3 --code 23 --apk app/build/outputs/apk/debug/TrackWrite-v2.3.apk --prerelease
 USAGE
 }
 
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 repo_root="$(cd "$script_dir/.." && pwd)"
+source "$script_dir/apk-common.sh"
 cd "$repo_root"
 
 sha256_file() {
@@ -60,7 +61,7 @@ json_escape() {
 
 version_name=""
 version_code=""
-apk_path="app/build/outputs/apk/release/app-release.apk"
+apk_path=""
 repo=""
 target=""
 title=""
@@ -200,6 +201,10 @@ fi
 if [[ -z "$version_code" ]]; then
     echo "Version code is required. Pass it with --code." >&2
     exit 1
+fi
+
+if [[ -z "$apk_path" ]]; then
+    apk_path="$(apk_distribution_path "$version_name" release)"
 fi
 
 if [[ ! -f "$apk_path" ]]; then
