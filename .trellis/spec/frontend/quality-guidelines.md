@@ -53,6 +53,88 @@ safety should be visible and easy to scan.
 
 ---
 
+## Scenario: Structured Manual AMap Search Results
+
+### 1. Scope / Trigger
+
+- Trigger: the manual location WebView searches AMap POIs and renders results in
+  the native Compose overlay.
+- Keep the WebView full-screen and provider-focused. Do not restore an HTML
+  results panel with fixed pixel offsets under the Compose search controls.
+
+### 2. Signatures
+
+- JavaScript search entry: `window.trackwriteSearch(query)`.
+- JavaScript result selection: `window.trackwriteSelectResult(lng, lat, label)`.
+- Android bridge callback: `TrackWrite.searchResults(payload: String?)`.
+- POI payload fields: `name`, `address`, `latitude`, `longitude`.
+- Selection callback remains `TrackWrite.select(latitude, longitude, label)`.
+
+### 3. Contracts
+
+- JavaScript sends a JSON array with at most eight POIs; it never sends HTML.
+- Compose owns the floating result list, loading/empty/error states, theme, touch
+  targets, and accessibility semantics.
+- Android parses the payload defensively, rejects blank names and invalid or
+  out-of-range coordinates, and accepts results only for an active search.
+- `no_data` is a successful empty search and must call `searchResults("[]")`.
+- Search-result list keys must remain unique even when the provider returns
+  duplicate POIs; include the list index or a provider-stable ID.
+- Map taps and search-result selections use the same marker/bridge path. GCJ-02
+  is converted to WGS84 only after the validated `select` callback reaches the
+  Activity.
+
+### 4. Validation & Error Matrix
+
+- Missing Web key -> disable search and show the localized configuration error.
+- Map not ready -> do not call JavaScript; show the localized loading state.
+- Blank query -> do not call JavaScript; show local validation feedback.
+- `no_data` -> render the empty-results state, not an error.
+- Malformed/null payload -> render a localized unreadable-response error.
+- Blank POI name or invalid coordinate -> filter that POI without crashing.
+- Non-`complete`/non-`no_data` provider status -> render a localized search error.
+- Duplicate POIs -> render safely with unique Compose item keys.
+
+### 5. Good/Base/Bad Cases
+
+- Good: a valid search returns structured POIs, Compose renders a bounded list,
+  and selecting an item moves the marker before returning WGS84 coordinates.
+- Base: AMap returns `no_data`; Compose shows "no results" and keeps any prior
+  manual selection unchanged.
+- Bad: HTML injects a `#panel` below a guessed `top: 112px`, or duplicate POIs
+  reuse a coordinate/name key and crash LazyColumn composition.
+
+### 6. Tests Required
+
+- Unit-test valid, empty, malformed, oversized, invalid-coordinate, and duplicate
+  POI payloads.
+- Assert generated map HTML contains the structured bridge and `no_data` branch,
+  and does not contain an HTML result panel.
+- Run `:app:compileDebugKotlin`, `testDebugUnitTest`, and `:app:lintDebug`.
+- On a device, verify keyboard search, empty results, result selection, map tap,
+  cancel, confirm, dark mode, and narrow-screen overlays.
+
+### 7. Wrong vs Correct
+
+#### Wrong
+
+```javascript
+new AMap.PlaceSearch({ panel: 'panel' });
+// Fixed HTML panel competes with the Compose overlay and cannot follow app theme.
+```
+
+#### Correct
+
+```javascript
+if (status === 'no_data') {
+  TrackWrite.searchResults('[]');
+} else if (status === 'complete') {
+  TrackWrite.searchResults(JSON.stringify(payload));
+}
+```
+
+---
+
 ## Scenario: Compose UI Settings Boundary
 
 ### 1. Scope / Trigger
@@ -317,6 +399,33 @@ uiState = uiState.copy(matches = emptyList())
 - Dismissing the sheet does not clear the batch.
 - Filtered manual-location actions still target the original photo index.
 - Default and Simplified Chinese resources cover every `UnmatchedReason`.
+
+### Convention: Keep Photo Correction Cards State-Shaped
+
+**What**: Photo rows in the batch Sheet use one stable reading order across
+automatic, manual, unmatched, and missing-EXIF states:
+
+1. thumbnail with an overlaid original batch index;
+2. filename, captured time, and localized status;
+3. one semantic detail row for source/coordinates or the unmatched reason;
+4. right-aligned, wrapping correction actions.
+
+The index must not be concatenated into the filename, and the card background
+must not carry the entire status meaning. Use theme surfaces plus localized
+status text and icons. A filtered row continues to call actions with its
+original `withIndex()` value.
+
+**Why**: A shared skeleton makes mixed batches scannable and prevents state
+changes from rebuilding the whole card. Keeping the original index visible on
+the thumbnail also matches the callback identity users see.
+
+**Actions**:
+
+- Every row may set or replace a manual location.
+- Rows with a manual location may clear it.
+- Do not add a per-photo "skip" control unless the domain model, filters, write
+  readiness, and persistence contract are explicitly designed for that state.
+  Current skipped counts remain derived from photos without a selected position.
 
 ---
 
