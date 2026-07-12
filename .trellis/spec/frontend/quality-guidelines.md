@@ -143,8 +143,9 @@ locationManager.requestLocationUpdates(provider, frequency.intervalMs, frequency
 
 - `recording.trackId` identifies the active or paused recording and is the only
   source for live point, duration, and distance metrics.
-- `tracks.firstOrNull()` is the latest saved track and may be summarized in the
-  history entry when recording is stopped.
+- `historicalTracksForRecording(tracks, recording)` is the history collection.
+  It excludes the active or paused `recording.trackId`, and includes that track
+  again only after recording reaches `Stopped`.
 - `recordTrackId` is a transient management target for export, rename, and
   delete actions. It must not drive the live recording panel.
 
@@ -156,20 +157,22 @@ points while an old selected track shows a non-zero point count directly below.
 
 - Stopped state does not render live track metrics.
 - Recording and paused states render metrics only for `recording.trackId`.
-- History summaries use the repository's newest track, independent of the
-  management target.
+- History counts, summaries, and the history sheet all use the filtered history
+  collection, independent of the management target.
+- Starting or pausing a recording must not add the active track to history or
+  change the history entry's position.
 - File-picker callbacks freeze the target track ID before launch; do not read a
   mutable global selection when the picker returns.
 
 ```kotlin
 // Correct: each context has one purpose.
 val activeTrack = state.recording.trackId?.let { id -> state.tracks.firstOrNull { it.id == id } }
-val latestTrack = state.tracks.firstOrNull()
+val historicalTracks = historicalTracksForRecording(state.tracks, state.recording)
+val latestTrack = historicalTracks.firstOrNull()
 
-if (state.recording.status != RecordingStatus.Stopped && activeTrack != null) {
-    TrackMetricsPanel(state, activeTrack)
-}
-TrackHistoryButton(latestTrack = latestTrack)
+RecordingControlDock(activeTrack = activeTrack)
+TrackHistoryButton(trackCount = historicalTracks.size, latestTrack = latestTrack)
+TrackHistorySheet(tracks = historicalTracks)
 ```
 
 ```kotlin
@@ -181,8 +184,37 @@ TrackMetricsPanel(state, displayTrack)
 **Tests and checks**:
 
 - Verify stopped, recording, and paused states bind the intended track.
+- Verify recording and paused states exclude `recording.trackId` from history,
+  while stopped state includes it.
 - Verify changing a history management target does not change current metrics.
 - Verify asynchronous export writes the track selected when the picker opened.
+
+### Convention: Keep Recording State Changes Size-Stable
+
+**What**: Render the stopped, recording, and paused controls in one fixed-height
+recording dock. Replace content inside that dock; do not insert a recording
+proof card or live metrics card into the scrollable page when recording starts.
+
+**Why**: Starting a recording can simultaneously change GPS evidence, controls,
+metrics, and repository contents. If each change inserts its own page block,
+the history content jumps even though the user's task has not changed.
+
+```kotlin
+Box(Modifier.fillMaxSize()) {
+    LazyColumn(contentPadding = PaddingValues(bottom = RecordingDockReservedSpace)) {
+        item { TrackHistoryButton(...) }
+    }
+    RecordingControlDock(
+        modifier = Modifier
+            .align(Alignment.BottomCenter)
+            .height(RecordingDockHeight),
+    )
+}
+```
+
+The stopped state shows only the start action. Active and paused states show
+the essential status and controls in the same bounds; secondary metrics belong
+in a progressively disclosed details sheet.
 
 ---
 
