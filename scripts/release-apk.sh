@@ -225,6 +225,14 @@ if ! git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
     exit 1
 fi
 
+if [[ "$target" =~ ^[0-9a-fA-F]{7,39}$ ]]; then
+    target_input="$target"
+    if ! target="$(git rev-parse --verify "${target}^{commit}" 2>/dev/null)"; then
+        echo "Target commit does not exist locally: $target_input" >&2
+        exit 1
+    fi
+fi
+
 if [[ -z "$title" ]]; then
     title="$version_name"
 fi
@@ -257,7 +265,9 @@ if [[ -n "$repo" ]]; then
 fi
 
 if ! gh auth status >/dev/null; then
-    echo "gh is not authenticated. Run: gh auth login" >&2
+    echo "gh authentication check failed." >&2
+    echo "If this command is running in a sandboxed agent, retry it outside the sandbox before logging in again." >&2
+    echo "Only if the host check also fails, run: gh auth login" >&2
     exit 1
 fi
 

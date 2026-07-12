@@ -82,6 +82,88 @@ UI, services, storage, MediaStore, EXIF, or AMap.
   search/map-tap binding. Do not hardcode Android SDK keys, Web JS keys, or Web
   JS security codes in source.
 
+## Scenario: GitHub Release Authentication and Target Boundary
+
+### 1. Scope / Trigger
+- Trigger: an agent or developer builds a versioned APK and publishes it with
+  `scripts/release-apk.sh` through GitHub CLI.
+
+### 2. Signatures
+- Build command: `scripts/build-apk.sh <version-name> --code <version-code>`.
+- Release command:
+  `scripts/release-apk.sh <version-name> --code <version-code> --target <ref>`.
+- Authentication probe: `gh auth status -h github.com`.
+- Release assets: `TrackWrite-<version-name>.apk` and
+  `trackwrite-update.json`.
+
+### 3. Contracts
+- In Codex, run `gh auth status` and the release script outside the sandbox.
+  Host GitHub credentials live under `~/.config/gh`; sandbox credential or
+  network isolation can produce a false authentication failure.
+- A sandboxed failure must be retried once outside the sandbox. Start
+  `gh auth login` only when the host-level check also fails.
+- Do not print or retrieve the raw token. Use `gh auth status` for validation.
+- The release tag must point at source that is already available on GitHub.
+  Push the relevant branch first, with explicit user authorization for shared
+  branches such as `origin/main`.
+- `--target` accepts a branch name or commit. Abbreviated local commit hashes
+  are expanded to a full 40-character SHA before calling GitHub; a commit SHA
+  must already exist on the remote.
+- `trackwrite-update.json.apkAssetName` and `.sha256` must match the uploaded
+  versioned APK exactly.
+
+### 4. Validation & Error Matrix
+- Sandboxed `gh auth status` fails -> retry outside sandbox; do not log in yet.
+- Host-level `gh auth status` fails -> stop and authenticate with
+  `gh auth login`.
+- `Release.target_commitish is invalid` -> confirm the commit was pushed and
+  retry with a branch or full 40-character SHA.
+- Release asset already exists -> use `--clobber` only when replacement is the
+  intended user action.
+- Tracked files are dirty -> commit them, or use `--skip-dirty-check` only when
+  the user explicitly accepts a release from uncommitted sources.
+- Metadata hash differs from local APK -> treat the release as invalid and
+  replace the mismatched assets before announcing success.
+
+### 5. Good/Base/Bad Cases
+- Good: host auth succeeds, `main` is pushed, the script targets the full HEAD
+  SHA, and remote metadata matches the local APK hash.
+- Base: a short local SHA is supplied; the script expands it to the full SHA
+  and GitHub accepts the already-pushed commit.
+- Bad: a sandbox auth failure triggers an unnecessary login flow and overwrites
+  a working host credential.
+- Bad: the APK is built from local commits but the Release tag targets an older
+  remote default branch.
+
+### 6. Tests Required
+- Run `bash -n scripts/apk-common.sh scripts/build-apk.sh scripts/release-apk.sh`.
+- Build a release APK and confirm the reported versioned path exists.
+- Run host-level `gh auth status -h github.com` before publishing.
+- After publishing, use `gh release view <version> --json assets,targetCommitish`
+  and read back `trackwrite-update.json`.
+- Compare the remote metadata SHA-256 with `sha256sum` of the local APK.
+
+### 7. Wrong vs Correct
+
+#### Wrong
+```bash
+# A sandbox failure is treated as authoritative and starts an unnecessary login.
+gh auth status || gh auth login
+
+# GitHub may reject the abbreviated SHA, or the commit may not exist remotely.
+scripts/release-apk.sh v2.10 --code 210 --target b5d9cd2
+```
+
+#### Correct
+```bash
+# Run both commands outside the sandbox; only log in if the host check fails.
+gh auth status -h github.com
+
+git push origin main  # only after explicit user authorization
+scripts/release-apk.sh v2.10 --code 210 \
+  --target b5d9cd253611cd0ac5aaec54ca04bede983cb438
+```
+
 ## Scenario: Manual Location Picker AMap Boundary
 
 ### 1. Scope / Trigger

@@ -89,6 +89,8 @@ app/build/outputs/apk/release/TrackWrite-v2.1.apk
 
 上传脚本默认使用同一命名规则，无需额外传入 `--apk`。
 
+通过沙箱化 AI 工具执行发布时，`gh auth status` 可能因为无法访问主机凭据或网络而误报 token 无效。不要据此立即重新登录；应先在沙箱外复查一次。发布前先推送构建所对应的源码，并为 `--target` 使用分支名或完整的 40 位提交 SHA，避免 GitHub 返回 `Release.target_commitish is invalid`。
+
 `scripts/release-apk.sh` 会同时上传 APK 和 `trackwrite-update.json`。更新元数据包含：
 
 - `versionName`：发布版本名，例如 `v2.1`
