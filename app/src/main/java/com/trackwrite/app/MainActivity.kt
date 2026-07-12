@@ -23,6 +23,7 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.documentfile.provider.DocumentFile
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -32,6 +33,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
@@ -89,9 +91,14 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
@@ -101,6 +108,7 @@ import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.DialogProperties
 import androidx.core.content.ContextCompat
@@ -155,6 +163,7 @@ private const val MAX_GPX_IMPORT_BYTES = 10 * 1024 * 1024
 private const val MAX_GPX_IMPORT_POINTS = 50_000
 private val RecordingDockHeight = 76.dp
 private val RecordingDockReservedSpace = 104.dp
+private val TrackViewportMaxHeight = 340.dp
 
 class MainActivity : ComponentActivity() {
     private lateinit var repository: TrackRepository
@@ -1239,26 +1248,41 @@ private fun RecordScreen(
     val activeTrackId = state.recording.trackId.takeIf { state.recording.status != RecordingStatus.Stopped }
     val historicalTracks = historicalTracksForRecording(state.tracks, state.recording)
     val latestTrack = historicalTracks.firstOrNull()
+    val viewportTrack = recordViewportTrack(historicalTracks, activeTrack, state.recording)
     Box(
         modifier = modifier
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background),
     ) {
-        LazyColumn(
-            modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(
-                start = 18.dp,
-                top = 6.dp,
-                end = 18.dp,
-                bottom = RecordingDockReservedSpace,
-            ),
-            verticalArrangement = Arrangement.spacedBy(14.dp),
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(
+                    start = 18.dp,
+                    top = 6.dp,
+                    end = 18.dp,
+                    bottom = RecordingDockReservedSpace,
+                ),
         ) {
-            item {
-                TrackHistoryButton(
-                    trackCount = historicalTracks.size,
-                    latestTrack = latestTrack,
-                    onClick = onShowTrackHistory,
+            TrackHistoryButton(
+                trackCount = historicalTracks.size,
+                latestTrack = latestTrack,
+                onClick = onShowTrackHistory,
+            )
+            Spacer(Modifier.height(TrackSpacing.x4))
+            BoxWithConstraints(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f),
+                contentAlignment = Alignment.Center,
+            ) {
+                TrackRouteViewport(
+                    track = viewportTrack,
+                    status = state.recording.status,
+                    onShowDetails = { showRecordingDetails = true },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(minOf(maxHeight, TrackViewportMaxHeight)),
                 )
             }
         }
@@ -1306,6 +1330,233 @@ internal fun historicalTracksForRecording(
 ): List<Track> {
     val activeTrackId = recording.trackId.takeIf { recording.status != RecordingStatus.Stopped }
     return if (activeTrackId == null) tracks else tracks.filterNot { it.id == activeTrackId }
+}
+
+internal fun recordViewportTrack(
+    historicalTracks: List<Track>,
+    activeTrack: Track?,
+    recording: RecordingSnapshot,
+): Track? = if (recording.status == RecordingStatus.Stopped) historicalTracks.firstOrNull() else activeTrack
+
+private enum class TrackViewportMode {
+    Empty,
+    Waiting,
+    Recent,
+    Recording,
+    Paused,
+}
+
+@Composable
+private fun TrackRouteViewport(
+    track: Track?,
+    status: RecordingStatus,
+    onShowDetails: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val mode = when {
+        status == RecordingStatus.Stopped && track == null -> TrackViewportMode.Empty
+        status == RecordingStatus.Stopped -> TrackViewportMode.Recent
+        status == RecordingStatus.Paused -> TrackViewportMode.Paused
+        track == null || track.points.isEmpty() -> TrackViewportMode.Waiting
+        else -> TrackViewportMode.Recording
+    }
+    val interactive = status != RecordingStatus.Stopped
+    val surfaceModifier = if (interactive) {
+        modifier
+            .clip(TrackShape.card)
+            .clickable(
+                onClickLabel = stringResource(R.string.open_recording_details),
+                onClick = onShowDetails,
+            )
+    } else {
+        modifier
+    }
+
+    Surface(
+        modifier = surfaceModifier,
+        shape = TrackShape.card,
+        color = MaterialTheme.colorScheme.surfaceContainerLow,
+        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+    ) {
+        Crossfade(
+            targetState = mode,
+            animationSpec = tween(durationMillis = 180),
+            label = "track-viewport-state",
+        ) { viewportMode ->
+            TrackRouteViewportContent(
+                mode = viewportMode,
+                track = track,
+                modifier = Modifier.fillMaxSize(),
+            )
+        }
+    }
+}
+
+@Composable
+private fun TrackRouteViewportContent(
+    mode: TrackViewportMode,
+    track: Track?,
+    modifier: Modifier = Modifier,
+) {
+    val label = when (mode) {
+        TrackViewportMode.Empty -> stringResource(R.string.no_tracks)
+        TrackViewportMode.Waiting -> stringResource(R.string.recording_waiting_title)
+        TrackViewportMode.Recent -> stringResource(R.string.track_viewport_recent)
+        TrackViewportMode.Recording -> stringResource(R.string.active_track)
+        TrackViewportMode.Paused -> stringResource(R.string.track_paused_label)
+    }
+    val icon = when (mode) {
+        TrackViewportMode.Empty,
+        TrackViewportMode.Recent,
+        -> TrackWriteIcon.History
+        TrackViewportMode.Waiting -> TrackWriteIcon.Satellite
+        TrackViewportMode.Recording -> TrackWriteIcon.Target
+        TrackViewportMode.Paused -> TrackWriteIcon.Pause
+    }
+    val routeColor = when (mode) {
+        TrackViewportMode.Recording -> MaterialTheme.colorScheme.primary
+        TrackViewportMode.Paused -> MaterialTheme.colorScheme.secondary
+        TrackViewportMode.Recent -> MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = TrackAlpha.subtle)
+        TrackViewportMode.Empty,
+        TrackViewportMode.Waiting,
+        -> MaterialTheme.colorScheme.onSurfaceVariant
+    }
+    val points = track?.points.orEmpty()
+    val positions = remember(points) { points.map { it.position } }
+
+    Box(modifier) {
+        if (points.isEmpty()) {
+            Column(
+                modifier = Modifier.align(Alignment.Center),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(TrackSpacing.x3),
+            ) {
+                TrackWriteLineIcon(
+                    icon = icon,
+                    tint = routeColor,
+                    modifier = Modifier.size(28.dp),
+                )
+                Text(
+                    text = label,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    textAlign = TextAlign.Center,
+                )
+            }
+        } else {
+            TrackRouteCanvas(
+                positions = positions,
+                routeColor = routeColor,
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(
+                        start = TrackSpacing.x4,
+                        top = 48.dp,
+                        end = TrackSpacing.x4,
+                        bottom = TrackSpacing.x4,
+                    ),
+            )
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = TrackSpacing.x4, vertical = TrackSpacing.x3),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Row(
+                    modifier = Modifier.weight(1f),
+                    horizontalArrangement = Arrangement.spacedBy(TrackSpacing.x2),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    TrackWriteLineIcon(
+                        icon = icon,
+                        tint = routeColor,
+                        modifier = Modifier.size(18.dp),
+                    )
+                    Text(
+                        text = label,
+                        style = MaterialTheme.typography.labelLarge,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+                Text(
+                    text = stringResource(R.string.track_viewport_point_count, points.size),
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun TrackRouteCanvas(
+    positions: List<GeoPoint>,
+    routeColor: Color,
+    modifier: Modifier = Modifier,
+) {
+    var viewportSize by remember { mutableStateOf(IntSize.Zero) }
+    val projected = remember(positions, viewportSize) {
+        projectRouteToViewport(
+            points = positions,
+            viewportWidth = viewportSize.width.toDouble(),
+            viewportHeight = viewportSize.height.toDouble(),
+        )
+    }
+    val gridColor = MaterialTheme.colorScheme.outlineVariant.copy(alpha = TrackAlpha.faint)
+    val startColor = MaterialTheme.colorScheme.onSurfaceVariant
+    val markerOutline = MaterialTheme.colorScheme.surfaceContainerLow
+
+    Canvas(
+        modifier = modifier.onSizeChanged { viewportSize = it },
+    ) {
+        listOf(1f / 3f, 2f / 3f).forEach { fraction ->
+            drawLine(
+                color = gridColor,
+                start = androidx.compose.ui.geometry.Offset(size.width * fraction, 0f),
+                end = androidx.compose.ui.geometry.Offset(size.width * fraction, size.height),
+                strokeWidth = 1.dp.toPx(),
+            )
+            drawLine(
+                color = gridColor,
+                start = androidx.compose.ui.geometry.Offset(0f, size.height * fraction),
+                end = androidx.compose.ui.geometry.Offset(size.width, size.height * fraction),
+                strokeWidth = 1.dp.toPx(),
+            )
+        }
+
+        if (projected.size >= 2) {
+            val path = Path().apply {
+                moveTo(projected.first().x.toFloat(), projected.first().y.toFloat())
+                projected.drop(1).forEach { point -> lineTo(point.x.toFloat(), point.y.toFloat()) }
+            }
+            drawPath(
+                path = path,
+                color = routeColor,
+                style = Stroke(
+                    width = 3.dp.toPx(),
+                    cap = StrokeCap.Round,
+                    join = StrokeJoin.Round,
+                ),
+            )
+        }
+
+        projected.firstOrNull()?.let { point ->
+            drawCircle(
+                color = startColor,
+                radius = 4.dp.toPx(),
+                center = androidx.compose.ui.geometry.Offset(point.x.toFloat(), point.y.toFloat()),
+            )
+        }
+        projected.lastOrNull()?.let { point ->
+            val center = androidx.compose.ui.geometry.Offset(point.x.toFloat(), point.y.toFloat())
+            drawCircle(color = markerOutline, radius = 7.dp.toPx(), center = center)
+            drawCircle(color = routeColor, radius = 5.dp.toPx(), center = center)
+        }
+    }
 }
 
 @Composable

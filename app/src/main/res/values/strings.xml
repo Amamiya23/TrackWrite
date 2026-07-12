@@ -47,6 +47,8 @@
     <string name="recording_dock_detail">%1$d %2$s · %3$s</string>
     <string name="recording_details">Recording details</string>
     <string name="open_recording_details">Open recording details</string>
+    <string name="track_viewport_recent">Recent track</string>
+    <string name="track_viewport_point_count">%1$d pts</string>
     <string name="latest_track_point">Latest point</string>
     <string name="location_source">Location source</string>
     <string name="recording_location_permission_required">Location permission is required to record a track.</string>

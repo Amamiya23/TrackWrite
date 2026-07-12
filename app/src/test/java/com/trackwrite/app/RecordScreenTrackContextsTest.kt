@@ -40,4 +40,37 @@ class RecordScreenTrackContextsTest {
 
         assertEquals(tracks, historical)
     }
+
+    @Test
+    fun stoppedViewportUsesLatestHistoricalTrack() {
+        val viewportTrack = recordViewportTrack(
+            historicalTracks = listOf(previousTrack),
+            activeTrack = activeTrack,
+            recording = RecordingSnapshot(trackId = activeTrack.id, status = RecordingStatus.Stopped),
+        )
+
+        assertEquals(previousTrack, viewportTrack)
+    }
+
+    @Test
+    fun recordingViewportUsesActiveTrack() {
+        val viewportTrack = recordViewportTrack(
+            historicalTracks = listOf(previousTrack),
+            activeTrack = activeTrack,
+            recording = RecordingSnapshot(trackId = activeTrack.id, status = RecordingStatus.Recording),
+        )
+
+        assertEquals(activeTrack, viewportTrack)
+    }
+
+    @Test
+    fun pausedViewportUsesActiveTrack() {
+        val viewportTrack = recordViewportTrack(
+            historicalTracks = listOf(previousTrack),
+            activeTrack = activeTrack,
+            recording = RecordingSnapshot(trackId = activeTrack.id, status = RecordingStatus.Paused),
+        )
+
+        assertEquals(activeTrack, viewportTrack)
+    }
 }
