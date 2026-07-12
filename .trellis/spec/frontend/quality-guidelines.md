@@ -216,6 +216,32 @@ The stopped state shows only the start action. Active and paused states show
 the essential status and controls in the same bounds; secondary metrics belong
 in a progressively disclosed details sheet.
 
+### Convention: Keep Expandable Bottom Sheets Anchor-Stable
+
+**What**: A `ModalBottomSheet` whose content can grow or shrink in place must
+use `rememberModalBottomSheetState(skipPartiallyExpanded = true)`. Give lazy
+list items stable keys, and animate the local reveal instead of letting a
+content remeasure move the whole sheet between expanded and partial anchors.
+
+**Why**: Material 3 recalculates sheet anchors when inline actions change the
+measured content height. If a partial anchor is available, tapping an item can
+make the entire sheet jump to half height even though the user did not drag it.
+
+```kotlin
+val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+
+ModalBottomSheet(
+    sheetState = sheetState,
+    onDismissRequest = onDismiss,
+) {
+    LazyColumn {
+        items(items = tracks, key = { it.id }) { track ->
+            TrackManagementRow(track)
+        }
+    }
+}
+```
+
 ---
 
 ## Scenario: Browser-Based App Updates

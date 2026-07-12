@@ -10,8 +10,13 @@ import android.graphics.BitmapFactory
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
@@ -62,6 +67,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.SnackbarDuration
@@ -1784,10 +1790,14 @@ private fun TrackHistorySheet(
     onDismiss: () -> Unit,
 ) {
     var expandedTrackId by remember { mutableStateOf<String?>(null) }
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     LaunchedEffect(tracks) {
         if (tracks.none { it.id == expandedTrackId }) expandedTrackId = null
     }
-    ModalBottomSheet(onDismissRequest = onDismiss) {
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = sheetState,
+    ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
@@ -1808,7 +1818,10 @@ private fun TrackHistorySheet(
                     modifier = Modifier.heightIn(max = 460.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
-                    itemsIndexed(tracks) { _, track ->
+                    itemsIndexed(
+                        items = tracks,
+                        key = { _, track -> track.id },
+                    ) { _, track ->
                         TrackManagementRow(
                             track = track,
                             expanded = track.id == expandedTrackId,
@@ -1892,26 +1905,32 @@ private fun TrackManagementRow(
                     }
                 }
             }
-            if (expanded) {
-                Spacer(Modifier.height(12.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-                    SoftActionButton(
-                        text = stringResource(R.string.export_gpx),
-                        onClick = onExportGpx,
-                        modifier = Modifier.weight(1f),
-                    )
-                    SoftActionButton(
-                        text = stringResource(R.string.rename),
-                        onClick = onRenameTrack,
-                        modifier = Modifier.weight(1f),
-                    )
-                    SoftActionButton(
-                        text = stringResource(R.string.delete),
-                        onClick = onDeleteTrack,
-                        modifier = Modifier.weight(1f),
-                        danger = true,
-                        enabled = deleteEnabled,
-                    )
+            AnimatedVisibility(
+                visible = expanded,
+                enter = expandVertically(animationSpec = tween(180)) + fadeIn(animationSpec = tween(120)),
+                exit = shrinkVertically(animationSpec = tween(160)) + fadeOut(animationSpec = tween(100)),
+            ) {
+                Column {
+                    Spacer(Modifier.height(12.dp))
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                        SoftActionButton(
+                            text = stringResource(R.string.export_gpx),
+                            onClick = onExportGpx,
+                            modifier = Modifier.weight(1f),
+                        )
+                        SoftActionButton(
+                            text = stringResource(R.string.rename),
+                            onClick = onRenameTrack,
+                            modifier = Modifier.weight(1f),
+                        )
+                        SoftActionButton(
+                            text = stringResource(R.string.delete),
+                            onClick = onDeleteTrack,
+                            modifier = Modifier.weight(1f),
+                            danger = true,
+                            enabled = deleteEnabled,
+                        )
+                    }
                 }
             }
         }
