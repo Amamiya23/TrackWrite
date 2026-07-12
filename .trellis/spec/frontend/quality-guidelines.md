@@ -201,8 +201,12 @@ the history content jumps even though the user's task has not changed.
 
 ```kotlin
 Box(Modifier.fillMaxSize()) {
-    LazyColumn(contentPadding = PaddingValues(bottom = RecordingDockReservedSpace)) {
-        item { TrackHistoryButton(...) }
+    Column(Modifier.padding(bottom = RecordingDockReservedSpace)) {
+        TrackHistoryButton(...)
+        TrackRouteViewport(
+            track = recordViewportTrack(historicalTracks, activeTrack, recording),
+            status = recording.status,
+        )
     }
     RecordingControlDock(
         modifier = Modifier
@@ -215,6 +219,29 @@ Box(Modifier.fillMaxSize()) {
 The stopped state shows only the start action. Active and paused states show
 the essential status and controls in the same bounds; secondary metrics belong
 in a progressively disclosed details sheet.
+
+The middle route viewport is also part of this size-stable contract. Its outer
+slot always exists: stopped state shows the latest historical track, while
+recording and paused states show only `activeTrack`. Replace the viewport's
+internal state with a short crossfade; never conditionally insert or remove the
+viewport when recording starts.
+
+Route projection stays Compose-independent and bounded:
+
+```kotlin
+projectRouteToViewport(
+    points = track.points.map { it.position },
+    viewportWidth = width,
+    viewportHeight = height,
+    maxDrawPoints = 600,
+)
+```
+
+The projection must preserve first/last points and four-direction extrema,
+center single or zero-span axes, keep output within the viewport, and unwrap
+longitude across the antimeridian. Unit tests cover these cases. The Canvas is
+a visualization boundary only; it must not change WGS84 storage or recording
+sampling behavior.
 
 ### Convention: Keep Expandable Bottom Sheets Anchor-Stable
 
