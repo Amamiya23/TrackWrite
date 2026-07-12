@@ -28,6 +28,7 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -119,6 +120,7 @@ import com.trackwrite.app.domain.MatchOptions
 import com.trackwrite.app.domain.MatchSource
 import com.trackwrite.app.domain.PhotoMatch
 import com.trackwrite.app.domain.Track
+import com.trackwrite.app.domain.UnmatchedReason
 import com.trackwrite.app.domain.stats
 import com.trackwrite.app.io.GpxFileActions
 import com.trackwrite.app.map.ManualLocationActivity
@@ -155,6 +157,9 @@ import kotlinx.coroutines.withContext
 import java.io.ByteArrayOutputStream
 import java.time.Duration
 import java.time.Instant
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
+import java.time.format.FormatStyle
 import java.util.Locale
 import java.util.UUID
 import kotlin.math.min
@@ -333,6 +338,7 @@ class MainActivity : ComponentActivity() {
                     onDismissTrackSource = { uiState = uiState.copy(showTrackSourceSheet = false) },
                     onShowPhotoBatch = { uiState = uiState.copy(showPhotoBatchSheet = true) },
                     onDismissPhotoBatch = { uiState = uiState.copy(showPhotoBatchSheet = false) },
+                    onClearPhotoBatch = { clearPhotoBatch() },
                     onHighlightConsumed = { uiState = uiState.copy(highlightedPhotoIndex = null) },
                     onSelectPhotos = { photoPickerLauncher.launch(arrayOf("image/*")) },
                     onSelectFolder = { folderPickerLauncher.launch(null) },
@@ -628,6 +634,19 @@ class MainActivity : ComponentActivity() {
         refresh()
     }
 
+    private fun clearPhotoBatch() {
+        if (isBulkOperationRunning) return
+        selectedPhotos = emptyList()
+        matchResults = emptyList()
+        pendingManualPhotoIndex = null
+        uiState = uiState.copy(
+            photos = emptyList(),
+            matches = emptyList(),
+            showPhotoBatchSheet = false,
+            highlightedPhotoIndex = null,
+        )
+    }
+
     private fun writeDefault() {
         if (isBulkOperationRunning) return
         val summary = writeReadiness(matchResults)
@@ -909,6 +928,7 @@ private fun TrackWriteApp(
     onDismissTrackSource: () -> Unit,
     onShowPhotoBatch: () -> Unit,
     onDismissPhotoBatch: () -> Unit,
+    onClearPhotoBatch: () -> Unit,
     onHighlightConsumed: () -> Unit,
     onSelectPhotos: () -> Unit,
     onSelectFolder: () -> Unit,
@@ -1012,6 +1032,7 @@ private fun TrackWriteApp(
                     onDismissTrackSource = onDismissTrackSource,
                     onShowPhotoBatch = onShowPhotoBatch,
                     onDismissPhotoBatch = onDismissPhotoBatch,
+                    onClearPhotoBatch = onClearPhotoBatch,
                     onHighlightConsumed = onHighlightConsumed,
                     onSelectPhotos = onSelectPhotos,
                     onSelectFolder = onSelectFolder,
@@ -2202,6 +2223,7 @@ private fun MatchScreen(
     onDismissTrackSource: () -> Unit,
     onShowPhotoBatch: () -> Unit,
     onDismissPhotoBatch: () -> Unit,
+    onClearPhotoBatch: () -> Unit,
     onHighlightConsumed: () -> Unit,
     onSelectPhotos: () -> Unit,
     onSelectFolder: () -> Unit,
@@ -2270,6 +2292,8 @@ private fun MatchScreen(
             highlightedPhotoIndex = state.highlightedPhotoIndex,
             onSetManualLocation = onSetManualLocation,
             onClearManualLocation = onClearManualLocation,
+            onClearPhotoBatch = onClearPhotoBatch,
+            clearEnabled = state.bulkOperation == null,
             onDismiss = onDismissPhotoBatch,
         )
     }
@@ -2597,9 +2621,15 @@ private fun PhotoBatchSheet(
     highlightedPhotoIndex: Int?,
     onSetManualLocation: (Int) -> Unit,
     onClearManualLocation: (Int) -> Unit,
+    onClearPhotoBatch: () -> Unit,
+    clearEnabled: Boolean,
     onDismiss: () -> Unit,
 ) {
-    ModalBottomSheet(onDismissRequest = onDismiss) {
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = sheetState,
+    ) {
         var selectedFilter by remember(matches) { mutableStateOf(PhotoBatchFilter.All) }
         val visibleMatches = remember(matches, selectedFilter) {
             matches.withIndex()
@@ -2613,12 +2643,16 @@ private fun PhotoBatchSheet(
             val manualCount = matches.count { it.photo.manualLocation != null }
             val matchedCount = matches.count { it.selectedPosition != null }
             val unmatchedCount = matches.size - matchedCount
-            DrawerHeader(
-                title = stringResource(R.string.photo_batch_count, matches.size),
-                subtitle = stringResource(R.string.photo_batch_stats, matchedCount, unmatchedCount, manualCount),
+            PhotoBatchHeader(
+                photoCount = matches.size,
+                matchedCount = matchedCount,
+                unmatchedCount = unmatchedCount,
+                manualCount = manualCount,
+                clearEnabled = clearEnabled,
+                onClear = onClearPhotoBatch,
                 onDismiss = onDismiss,
             )
-            Spacer(Modifier.height(14.dp))
+            Spacer(Modifier.height(TrackSpacing.x3))
             if (matches.isNotEmpty()) {
                 PhotoBatchFilterRow(
                     selectedFilter = selectedFilter,
@@ -2638,10 +2672,13 @@ private fun PhotoBatchSheet(
                 )
             } else {
                 LazyColumn(
-                    modifier = Modifier.heightIn(max = 470.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                    modifier = Modifier.heightIn(max = 500.dp),
+                    verticalArrangement = Arrangement.spacedBy(TrackSpacing.x3),
                 ) {
-                    itemsIndexed(visibleMatches) { _, indexedResult ->
+                    itemsIndexed(
+                        items = visibleMatches,
+                        key = { _, indexedResult -> "${indexedResult.value.photo.uri}#${indexedResult.index}" },
+                    ) { _, indexedResult ->
                         val index = indexedResult.index
                         val result = indexedResult.value
                         PhotoMatchRow(
@@ -2659,16 +2696,79 @@ private fun PhotoBatchSheet(
     }
 }
 
-@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun PhotoBatchHeader(
+    photoCount: Int,
+    matchedCount: Int,
+    unmatchedCount: Int,
+    manualCount: Int,
+    clearEnabled: Boolean,
+    onClear: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(Modifier.weight(1f)) {
+            Text(
+                text = stringResource(R.string.photo_batch_count, photoCount),
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onSurface,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Spacer(Modifier.height(TrackSpacing.x1))
+            Text(
+                text = stringResource(R.string.photo_batch_stats, matchedCount, unmatchedCount, manualCount),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+        TextButton(
+            onClick = onClear,
+            enabled = clearEnabled,
+        ) {
+            Text(
+                text = stringResource(R.string.clear_photo_batch),
+                color = MaterialTheme.colorScheme.error.copy(
+                    alpha = if (clearEnabled) 1f else TrackAlpha.disabled,
+                ),
+            )
+        }
+        Surface(
+            modifier = Modifier
+                .size(44.dp)
+                .clip(TrackShape.control)
+                .clickable(onClick = onDismiss),
+            shape = TrackShape.control,
+            color = MaterialTheme.colorScheme.surfaceVariant,
+        ) {
+            Box(contentAlignment = Alignment.Center) {
+                TrackWriteLineIcon(
+                    icon = TrackWriteIcon.Close,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    contentDescription = stringResource(R.string.close),
+                    modifier = Modifier.size(18.dp),
+                )
+            }
+        }
+    }
+}
+
 @Composable
 private fun PhotoBatchFilterRow(
     selectedFilter: PhotoBatchFilter,
     onFilterSelected: (PhotoBatchFilter) -> Unit,
 ) {
-    FlowRow(
-        modifier = Modifier.fillMaxWidth(),
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .horizontalScroll(rememberScrollState()),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         PhotoBatchFilter.entries.forEach { filter ->
             PhotoBatchFilterChip(
@@ -2698,10 +2798,19 @@ private fun PhotoBatchFilterChip(
             if (selected) MaterialTheme.colorScheme.primary.copy(alpha = 0.35f) else MaterialTheme.colorScheme.outlineVariant,
         ),
     ) {
-        Box(
-            modifier = Modifier.padding(horizontal = 13.dp),
-            contentAlignment = Alignment.Center,
+        Row(
+            modifier = Modifier.padding(horizontal = TrackSpacing.x3),
+            horizontalArrangement = Arrangement.spacedBy(TrackSpacing.x1),
+            verticalAlignment = Alignment.CenterVertically,
         ) {
+            if (selected) {
+                Icon(
+                    imageVector = Icons.Rounded.Check,
+                    contentDescription = stringResource(R.string.selected),
+                    modifier = Modifier.size(16.dp),
+                    tint = MaterialTheme.colorScheme.primary,
+                )
+            }
             Text(
                 text = label,
                 style = MaterialTheme.typography.bodyMedium,
@@ -2798,52 +2907,130 @@ private fun PhotoMatchRow(
 ) {
     val photo = result.photo
     val match = result.match
-    SurfaceCard(
-        containerColor = if (highlighted) MaterialTheme.colorScheme.tertiaryContainer else MaterialTheme.colorScheme.surface,
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = TrackShape.card,
+        color = MaterialTheme.colorScheme.surfaceContainerLow,
+        border = androidx.compose.foundation.BorderStroke(
+            1.dp,
+            if (highlighted) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant,
+        ),
     ) {
-        Row(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
-            PhotoThumbnail(photo.uri)
-            Column(modifier = Modifier.weight(1f)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
+        Column(Modifier.padding(TrackSpacing.x4)) {
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(TrackSpacing.x3),
+                verticalAlignment = Alignment.Top,
+            ) {
+                PhotoThumbnail(photo.uri)
+                Column(modifier = Modifier.weight(1f)) {
                     Text(
                         text = "${index + 1}. ${photo.displayName}",
-                        modifier = Modifier.weight(1f),
                         style = MaterialTheme.typography.bodyLarge,
-                        fontWeight = FontWeight.Normal,
-                        maxLines = 1,
+                        fontWeight = FontWeight.Medium,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        maxLines = 2,
                         overflow = TextOverflow.Ellipsis,
                     )
+                    Spacer(Modifier.height(TrackSpacing.x2))
                     MatchPill(photo, match)
                 }
-                Spacer(Modifier.height(8.dp))
-                Text(
-                    text = "${stringResource(R.string.captured)}: ${photo.capturedAt ?: stringResource(R.string.no_exif_time)}",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+            }
+            Spacer(Modifier.height(TrackSpacing.x3))
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+            Spacer(Modifier.height(TrackSpacing.x3))
+            PhotoMetadataLine(
+                label = stringResource(R.string.captured),
+                value = photo.capturedAt?.let(::formatPhotoCapturedAt)
+                    ?: stringResource(R.string.no_exif_time),
+            )
+            Spacer(Modifier.height(TrackSpacing.x2))
+            PhotoMetadataLine(
+                label = if (photo.manualLocation != null || match is PhotoMatch.Matched) {
+                    stringResource(R.string.location_prefix)
+                } else {
+                    stringResource(R.string.reason_prefix)
+                },
+                value = matchDetail(photo, match),
+            )
+            Spacer(Modifier.height(TrackSpacing.x3))
+            ActionRow {
+                PhotoRowActionButton(
+                    text = stringResource(R.string.set_location),
+                    onClick = onSetManualLocation,
                 )
-                Spacer(Modifier.height(8.dp))
-                Text(
-                    text = matchDetail(photo, match),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurface,
-                )
-                Spacer(Modifier.height(12.dp))
-                ActionRow {
-                    SoftActionButton(
-                        text = stringResource(R.string.set_location),
-                        onClick = onSetManualLocation,
-                        minHeight = 44.dp,
+                if (photo.manualLocation != null) {
+                    PhotoRowActionButton(
+                        text = stringResource(R.string.clear_manual_location),
+                        onClick = onClearManualLocation,
+                        danger = true,
                     )
-                    if (photo.manualLocation != null) {
-                        SoftActionButton(
-                            text = stringResource(R.string.clear),
-                            onClick = onClearManualLocation,
-                            danger = true,
-                            minHeight = 44.dp,
-                        )
-                    }
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun PhotoMetadataLine(label: String, value: String) {
+    Column(modifier = Modifier.fillMaxWidth()) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Spacer(Modifier.height(TrackSpacing.x1))
+        Text(
+            text = value,
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurface,
+        )
+    }
+}
+
+@Composable
+private fun PhotoRowActionButton(
+    text: String,
+    onClick: () -> Unit,
+    danger: Boolean = false,
+) {
+    val containerColor = if (danger) {
+        MaterialTheme.colorScheme.errorContainer
+    } else {
+        MaterialTheme.colorScheme.surfaceContainerHigh
+    }
+    val contentColor = if (danger) {
+        MaterialTheme.colorScheme.onErrorContainer
+    } else {
+        MaterialTheme.colorScheme.onSurface
+    }
+    val borderColor = if (danger) {
+        MaterialTheme.colorScheme.error
+    } else {
+        MaterialTheme.colorScheme.outline
+    }
+    Surface(
+        modifier = Modifier
+            .widthIn(min = 120.dp)
+            .heightIn(min = 44.dp)
+            .clip(TrackShape.control)
+            .clickable(onClick = onClick),
+        shape = TrackShape.control,
+        color = containerColor,
+        border = androidx.compose.foundation.BorderStroke(1.dp, borderColor),
+    ) {
+        Box(
+            modifier = Modifier.padding(horizontal = TrackSpacing.x3, vertical = TrackSpacing.x2),
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(
+                text = text,
+                style = MaterialTheme.typography.labelLarge,
+                fontWeight = FontWeight.SemiBold,
+                color = contentColor,
+                textAlign = TextAlign.Center,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+            )
         }
     }
 }
@@ -4369,15 +4556,37 @@ private fun isRecordingStale(
 private fun matchDetail(photo: PhotoCandidate, match: PhotoMatch?): String =
     when {
         photo.manualLocation != null -> {
-            "${stringResource(R.string.location_prefix)}: ${"%.6f".format(photo.manualLocation.latitude)}, ${"%.6f".format(photo.manualLocation.longitude)}"
+            String.format(
+                Locale.ROOT,
+                "%.6f, %.6f",
+                photo.manualLocation.latitude,
+                photo.manualLocation.longitude,
+            )
         }
         match is PhotoMatch.Matched -> {
-            "${sourceLabel(match.source)} · ${"%.6f".format(match.position.latitude)}, ${"%.6f".format(match.position.longitude)}"
+            "${sourceLabel(match.source)} · ${String.format(Locale.ROOT, "%.6f, %.6f", match.position.latitude, match.position.longitude)}"
         }
         match is PhotoMatch.Unmatched -> {
-            "${stringResource(R.string.reason_prefix)}: ${match.reason}"
+            unmatchedReasonLabel(match.reason)
         }
+        photo.capturedAt == null -> stringResource(R.string.no_exif_time_detail)
         else -> stringResource(R.string.no_selected_track_detail)
+    }
+
+private fun formatPhotoCapturedAt(capturedAt: Instant): String =
+    DateTimeFormatter
+        .ofLocalizedDateTime(FormatStyle.MEDIUM, FormatStyle.SHORT)
+        .withLocale(Locale.getDefault())
+        .withZone(ZoneId.systemDefault())
+        .format(capturedAt)
+
+@Composable
+private fun unmatchedReasonLabel(reason: UnmatchedReason): String =
+    when (reason) {
+        UnmatchedReason.EmptyTrack -> stringResource(R.string.unmatched_reason_empty_track)
+        UnmatchedReason.BeforeTrackStart -> stringResource(R.string.unmatched_reason_before_track_start)
+        UnmatchedReason.AfterTrackEnd -> stringResource(R.string.unmatched_reason_after_track_end)
+        UnmatchedReason.ExceedsMaxTimeDifference -> stringResource(R.string.unmatched_reason_exceeds_max_time_difference)
     }
 
 @Composable
