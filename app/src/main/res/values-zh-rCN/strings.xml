@@ -42,6 +42,13 @@
     <string name="stop_recording">停止记录</string>
     <string name="stop_recording_title">停止本次记录？</string>
     <string name="stop_recording_message">停止后，本次轨迹将结束且无法继续。</string>
+    <string name="recording_saved_to_history">轨迹已保存到历史。</string>
+    <string name="recording_dock_title">%1$s · %2$s</string>
+    <string name="recording_dock_detail">%1$d %2$s · %3$s</string>
+    <string name="recording_details">记录详情</string>
+    <string name="open_recording_details">打开记录详情</string>
+    <string name="latest_track_point">最近轨迹点</string>
+    <string name="location_source">定位来源</string>
     <string name="recording_location_permission_required">需要定位权限才能记录轨迹。</string>
     <string name="track_name">轨迹名称</string>
     <string name="track_name_default">记录</string>

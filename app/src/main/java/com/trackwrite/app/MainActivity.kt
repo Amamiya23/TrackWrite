@@ -10,6 +10,8 @@ import android.graphics.BitmapFactory
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import androidx.compose.animation.Crossfade
+import androidx.compose.animation.core.tween
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
@@ -20,6 +22,8 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Box
@@ -31,6 +35,7 @@ import androidx.compose.foundation.layout.FlowRowScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
@@ -142,6 +147,8 @@ import kotlin.math.min
 
 private const val MAX_GPX_IMPORT_BYTES = 10 * 1024 * 1024
 private const val MAX_GPX_IMPORT_POINTS = 50_000
+private val RecordingDockHeight = 76.dp
+private val RecordingDockReservedSpace = 104.dp
 
 class MainActivity : ComponentActivity() {
     private lateinit var repository: TrackRepository
@@ -534,6 +541,9 @@ class MainActivity : ComponentActivity() {
                 matchTrackId = stoppedTrackId?.takeIf { repository.getTrack(it) != null }
             }
             refresh()
+            if (action == TrackingService.ACTION_STOP) {
+                log(getString(R.string.recording_saved_to_history))
+            }
         }, 500)
     }
 
@@ -1160,6 +1170,8 @@ private enum class TrackWriteIcon(val imageVector: ImageVector) {
     Target(Icons.Rounded.MyLocation),
     Satellite(Icons.Rounded.SatelliteAlt),
     Pause(Icons.Rounded.Pause),
+    Play(Icons.Rounded.PlayArrow),
+    Stop(Icons.Rounded.Stop),
     Warning(Icons.Rounded.Warning),
     Lock(Icons.Rounded.Lock),
     History(Icons.Rounded.History),
@@ -1205,37 +1217,66 @@ private fun RecordScreen(
     onShowTrackHistory: () -> Unit,
     onDismissTrackHistory: () -> Unit,
 ) {
+    var showRecordingDetails by remember { mutableStateOf(false) }
     LaunchedEffect(state.recording.status, state.recording.trackId) {
         while (state.recording.status == RecordingStatus.Recording && state.recording.trackId != null) {
             onRefreshRecording()
             delay(1_000)
         }
     }
+    LaunchedEffect(state.recording.status, state.recording.trackId) {
+        if (state.recording.status == RecordingStatus.Stopped || state.recording.trackId == null) {
+            showRecordingDetails = false
+        }
+    }
     val activeTrack = state.recording.trackId?.let { id -> state.tracks.firstOrNull { it.id == id } }
-    val latestTrack = state.tracks.firstOrNull()
-    LazyColumn(
+    val activeTrackId = state.recording.trackId.takeIf { state.recording.status != RecordingStatus.Stopped }
+    val historicalTracks = historicalTracksForRecording(state.tracks, state.recording)
+    val latestTrack = historicalTracks.firstOrNull()
+    Box(
         modifier = modifier
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background),
-        contentPadding = PaddingValues(start = 18.dp, top = 6.dp, end = 18.dp, bottom = 24.dp),
-        verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
-        item {
-            RecordingPanel(state, activeTrack, onStartRecording, onPause, onResume, onStop)
+        LazyColumn(
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(
+                start = 18.dp,
+                top = 6.dp,
+                end = 18.dp,
+                bottom = RecordingDockReservedSpace,
+            ),
+            verticalArrangement = Arrangement.spacedBy(14.dp),
+        ) {
+            item {
+                TrackHistoryButton(
+                    trackCount = historicalTracks.size,
+                    latestTrack = latestTrack,
+                    onClick = onShowTrackHistory,
+                )
+            }
         }
-        item {
-            TrackHistoryButton(
-                trackCount = state.tracks.size,
-                latestTrack = latestTrack,
-                onClick = onShowTrackHistory,
-            )
-        }
+
+        RecordingControlDock(
+            state = state,
+            activeTrack = activeTrack,
+            onStartRecording = onStartRecording,
+            onPause = onPause,
+            onResume = onResume,
+            onStop = onStop,
+            onShowDetails = { showRecordingDetails = true },
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .fillMaxWidth()
+                .padding(horizontal = 18.dp, vertical = 12.dp)
+                .height(RecordingDockHeight),
+        )
     }
 
     if (state.showTrackHistorySheet) {
         TrackHistorySheet(
-            tracks = state.tracks,
-            activeTrackId = state.recording.trackId.takeIf { state.recording.status != RecordingStatus.Stopped },
+            tracks = historicalTracks,
+            activeTrackId = activeTrackId,
             onTrackSelected = onRecordTrackSelected,
             onExportGpx = onExportGpx,
             onRenameTrack = onRenameTrack,
@@ -1243,160 +1284,336 @@ private fun RecordScreen(
             onDismiss = onDismissTrackHistory,
         )
     }
+
+    if (showRecordingDetails && state.recording.status != RecordingStatus.Stopped) {
+        RecordingDetailsSheet(
+            state = state,
+            activeTrack = activeTrack,
+            onDismiss = { showRecordingDetails = false },
+        )
+    }
+}
+
+internal fun historicalTracksForRecording(
+    tracks: List<Track>,
+    recording: RecordingSnapshot,
+): List<Track> {
+    val activeTrackId = recording.trackId.takeIf { recording.status != RecordingStatus.Stopped }
+    return if (activeTrackId == null) tracks else tracks.filterNot { it.id == activeTrackId }
 }
 
 @Composable
-private fun RecordingPanel(
+private fun RecordingControlDock(
     state: MainUiState,
     activeTrack: Track?,
     onStartRecording: () -> Unit,
     onPause: () -> Unit,
     onResume: () -> Unit,
     onStop: () -> Unit,
+    onShowDetails: () -> Unit,
+    modifier: Modifier = Modifier,
 ) {
-    val tone = recordingProofTone(state.recording, state.settings, state.recordingClockMillis)
-    val isActive = tone == PillTone.Success
-    SurfaceCard(
-        containerColor = if (isActive) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface,
-        borderColor = if (isActive) MaterialTheme.colorScheme.primary.copy(alpha = 0.4f) else toneBorderColor(tone),
-    ) {
-        StatusPill(statusLabel(state.recording.status), tone)
-        Spacer(Modifier.height(12.dp))
-        Text(
-            text = recordingProofTitle(state.recording, state.settings, state.recordingClockMillis),
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.onSurface,
-        )
-        if (state.recording.status != RecordingStatus.Stopped || state.recording.issue != RecordingIssue.None) {
-            Spacer(Modifier.height(12.dp))
-            RecordingEvidenceRow(state.recording, state.settings, state.recordingClockMillis)
-        }
-        Spacer(Modifier.height(14.dp))
-        RecordingActionRow(
-            status = state.recording.status,
-            onStartRecording = onStartRecording,
-            onPause = onPause,
-            onResume = onResume,
-            onStop = onStop,
-        )
-    }
-
-    if (state.recording.status != RecordingStatus.Stopped && activeTrack != null) {
-        Spacer(Modifier.height(12.dp))
-        TrackMetricsPanel(state, activeTrack)
-    }
-}
-
-@Composable
-private fun RecordingEvidenceRow(
-    recording: RecordingSnapshot,
-    settings: AppSettings,
-    nowMillis: Long,
-) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(10.dp),
-    ) {
-        TrackWriteLineIcon(
-            icon = recordingEvidenceIcon(recording),
-            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.size(20.dp),
-        )
-        Column(Modifier.weight(1f)) {
-            Text(
-                text = recordingEvidenceTitle(recording, nowMillis),
-                style = MaterialTheme.typography.bodyLarge,
-                fontWeight = FontWeight.Normal,
-                color = MaterialTheme.colorScheme.onSurface,
+    Crossfade(
+        targetState = state.recording.status,
+        modifier = modifier,
+        animationSpec = tween(durationMillis = 180),
+        label = "recording-dock-state",
+    ) { status ->
+        when (status) {
+            RecordingStatus.Stopped -> RecordingStartDock(onStartRecording)
+            RecordingStatus.Recording,
+            RecordingStatus.Paused,
+            -> RecordingActiveDock(
+                state = state,
+                activeTrack = activeTrack,
+                onPause = onPause,
+                onResume = onResume,
+                onStop = onStop,
+                onShowDetails = onShowDetails,
             )
-            Spacer(Modifier.height(2.dp))
-            RecordingConfidenceLine(recording, settings)
         }
     }
 }
 
 @Composable
-private fun RecordingActionRow(
-    status: RecordingStatus,
+private fun RecordingStartDock(
     onStartRecording: () -> Unit,
+) {
+    Surface(
+        modifier = Modifier
+            .fillMaxSize()
+            .clip(TrackShape.card)
+            .clickable(onClick = onStartRecording),
+        shape = TrackShape.card,
+        color = MaterialTheme.colorScheme.primary,
+    ) {
+        Box(contentAlignment = Alignment.Center) {
+            Text(
+                text = stringResource(R.string.start_recording),
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onPrimary,
+            )
+        }
+    }
+}
+
+@Composable
+private fun RecordingActiveDock(
+    state: MainUiState,
+    activeTrack: Track?,
     onPause: () -> Unit,
     onResume: () -> Unit,
     onStop: () -> Unit,
+    onShowDetails: () -> Unit,
 ) {
-    when (status) {
-        RecordingStatus.Stopped -> {
-            PrimaryActionButton(
-                text = stringResource(R.string.start_recording),
-                onClick = onStartRecording,
-                modifier = Modifier.fillMaxWidth(),
+    val tone = recordingProofTone(state.recording, state.settings, state.recordingClockMillis)
+    val stats = activeTrack?.stats()
+    val duration = activeRecordingDuration(state, activeTrack) ?: stats?.duration ?: Duration.ZERO
+    val statusText = stringResource(
+        R.string.recording_dock_title,
+        statusLabel(state.recording.status),
+        formatCompactDuration(duration),
+    )
+    val evidence = recordingEvidenceTitle(state.recording, state.recordingClockMillis)
+    val detailText = stringResource(
+        R.string.recording_dock_detail,
+        activeTrack?.points?.size ?: 0,
+        stringResource(R.string.points_short),
+        evidence,
+    )
+    val stateColor = recordingToneColor(tone)
+    Surface(
+        modifier = Modifier.fillMaxSize(),
+        shape = TrackShape.card,
+        color = if (tone == PillTone.Success) {
+            MaterialTheme.colorScheme.primaryContainer
+        } else {
+            MaterialTheme.colorScheme.surfaceContainerLow
+        },
+        border = androidx.compose.foundation.BorderStroke(1.dp, toneBorderColor(tone)),
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = TrackSpacing.x3, vertical = TrackSpacing.x2),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(TrackSpacing.x2),
+        ) {
+            Row(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxHeight()
+                    .clip(TrackShape.control)
+                    .clickable(
+                        onClickLabel = stringResource(R.string.open_recording_details),
+                        onClick = onShowDetails,
+                    )
+                    .padding(horizontal = TrackSpacing.x1),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(TrackSpacing.x2),
+            ) {
+                TrackWriteLineIcon(
+                    icon = recordingEvidenceIcon(state.recording),
+                    tint = stateColor,
+                    modifier = Modifier.size(22.dp),
+                )
+                Column(Modifier.weight(1f)) {
+                    Text(
+                        text = statusText,
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    Spacer(Modifier.height(TrackSpacing.x1))
+                    Text(
+                        text = detailText,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = if (tone == PillTone.Error || tone == PillTone.Warning) {
+                            stateColor
+                        } else {
+                            MaterialTheme.colorScheme.onSurfaceVariant
+                        },
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+            }
+            RecordingDockIconButton(
+                icon = if (state.recording.status == RecordingStatus.Paused) TrackWriteIcon.Play else TrackWriteIcon.Pause,
+                contentDescription = stringResource(
+                    if (state.recording.status == RecordingStatus.Paused) R.string.resume else R.string.pause,
+                ),
+                onClick = if (state.recording.status == RecordingStatus.Paused) onResume else onPause,
             )
-        }
-        RecordingStatus.Recording -> {
-            Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
-                PrimaryActionButton(
-                    text = stringResource(R.string.pause),
-                    onClick = onPause,
-                    modifier = Modifier.weight(1f),
-                )
-                DangerActionButton(
-                    text = stringResource(R.string.stop),
-                    onClick = onStop,
-                )
-            }
-        }
-        RecordingStatus.Paused -> {
-            Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
-                PrimaryActionButton(
-                    text = stringResource(R.string.resume),
-                    onClick = onResume,
-                    modifier = Modifier.weight(1f),
-                )
-                DangerActionButton(
-                    text = stringResource(R.string.stop),
-                    onClick = onStop,
-                )
-            }
+            RecordingDockIconButton(
+                icon = TrackWriteIcon.Stop,
+                contentDescription = stringResource(R.string.stop_recording),
+                onClick = onStop,
+                danger = true,
+            )
         }
     }
 }
 
 @Composable
-private fun TrackMetricsPanel(
-    state: MainUiState,
-    activeTrack: Track,
+private fun RecordingDockIconButton(
+    icon: TrackWriteIcon,
+    contentDescription: String,
+    onClick: () -> Unit,
+    danger: Boolean = false,
 ) {
-    SurfaceCard(containerColor = MaterialTheme.colorScheme.surfaceContainerLow) {
-        val stats = activeTrack.stats()
-        val duration = activeRecordingDuration(state, activeTrack) ?: stats.duration
-        Text(
-            text = activeTrack.name,
-            style = MaterialTheme.typography.bodyLarge,
-            fontWeight = FontWeight.Medium,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-        )
-        Spacer(Modifier.height(TrackSpacing.x3))
-        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            CompactMetric(
-                label = stringResource(R.string.points_captured),
-                value = activeTrack.points.size.toString(),
-                modifier = Modifier.weight(1f),
-            )
-            MetricDivider()
-            CompactMetric(
-                label = stringResource(R.string.duration),
-                value = formatCompactDuration(duration),
-                modifier = Modifier.weight(1f),
-            )
-            MetricDivider()
-            CompactMetric(
-                label = stringResource(R.string.distance),
-                value = formatDistance(stats.distanceMeters),
-                modifier = Modifier.weight(1f),
+    Surface(
+        modifier = Modifier
+            .size(48.dp)
+            .clip(TrackShape.control)
+            .clickable(onClick = onClick),
+        shape = TrackShape.control,
+        color = if (danger) MaterialTheme.colorScheme.errorContainer else MaterialTheme.colorScheme.surfaceVariant,
+        border = androidx.compose.foundation.BorderStroke(
+            1.dp,
+            if (danger) MaterialTheme.colorScheme.error.copy(alpha = TrackAlpha.faint) else MaterialTheme.colorScheme.outlineVariant,
+        ),
+    ) {
+        Box(contentAlignment = Alignment.Center) {
+            TrackWriteLineIcon(
+                icon = icon,
+                tint = if (danger) MaterialTheme.colorScheme.onErrorContainer else MaterialTheme.colorScheme.onSurfaceVariant,
+                contentDescription = contentDescription,
+                modifier = Modifier.size(22.dp),
             )
         }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun RecordingDetailsSheet(
+    state: MainUiState,
+    activeTrack: Track?,
+    onDismiss: () -> Unit,
+) {
+    val tone = recordingProofTone(state.recording, state.settings, state.recordingClockMillis)
+    val stats = activeTrack?.stats()
+    val duration = activeRecordingDuration(state, activeTrack) ?: stats?.duration ?: Duration.ZERO
+    val provider = state.recording.provider?.uppercase(Locale.ROOT) ?: stringResource(R.string.provider_unknown)
+    ModalBottomSheet(onDismissRequest = onDismiss) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 18.dp, vertical = 10.dp),
+        ) {
+            DrawerHeader(
+                title = stringResource(R.string.recording_details),
+                subtitle = activeTrack?.name,
+                onDismiss = onDismiss,
+            )
+            Spacer(Modifier.height(TrackSpacing.x4))
+            Surface(
+                modifier = Modifier.fillMaxWidth(),
+                shape = TrackShape.card,
+                color = MaterialTheme.colorScheme.surfaceContainerLow,
+                border = androidx.compose.foundation.BorderStroke(1.dp, toneBorderColor(tone)),
+            ) {
+                Column(Modifier.padding(TrackSpacing.x5)) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(TrackSpacing.x3),
+                    ) {
+                        TrackWriteLineIcon(
+                            icon = recordingEvidenceIcon(state.recording),
+                            tint = recordingToneColor(tone),
+                            modifier = Modifier.size(24.dp),
+                        )
+                        Column(Modifier.weight(1f)) {
+                            Text(
+                                text = recordingProofTitle(state.recording, state.settings, state.recordingClockMillis),
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.SemiBold,
+                            )
+                            Spacer(Modifier.height(TrackSpacing.x1))
+                            Text(
+                                text = recordingConfidenceText(state.recording, state.settings),
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    }
+                    Spacer(Modifier.height(TrackSpacing.x5))
+                    Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                        CompactMetric(
+                            label = stringResource(R.string.points_captured),
+                            value = (activeTrack?.points?.size ?: 0).toString(),
+                            modifier = Modifier.weight(1f),
+                        )
+                        MetricDivider()
+                        CompactMetric(
+                            label = stringResource(R.string.duration),
+                            value = formatCompactDuration(duration),
+                            modifier = Modifier.weight(1f),
+                        )
+                        MetricDivider()
+                        CompactMetric(
+                            label = stringResource(R.string.distance),
+                            value = formatDistance(stats?.distanceMeters ?: 0.0),
+                            modifier = Modifier.weight(1f),
+                        )
+                    }
+                    Spacer(Modifier.height(TrackSpacing.x5))
+                    RecordingDetailRow(
+                        label = stringResource(R.string.latest_track_point),
+                        value = recordingEvidenceTitle(state.recording, state.recordingClockMillis),
+                    )
+                    HorizontalDivider(
+                        modifier = Modifier.padding(vertical = TrackSpacing.x3),
+                        color = MaterialTheme.colorScheme.outlineVariant,
+                    )
+                    RecordingDetailRow(
+                        label = stringResource(R.string.location_source),
+                        value = provider,
+                    )
+                    if (activeTrack == null) {
+                        HorizontalDivider(
+                            modifier = Modifier.padding(vertical = TrackSpacing.x3),
+                            color = MaterialTheme.colorScheme.outlineVariant,
+                        )
+                        RecordingDetailRow(
+                            label = stringResource(R.string.active_track),
+                            value = stringResource(R.string.recording_track_unavailable),
+                        )
+                    }
+                }
+            }
+            Spacer(Modifier.height(TrackSpacing.x6))
+        }
+    }
+}
+
+@Composable
+private fun RecordingDetailRow(
+    label: String,
+    value: String,
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(TrackSpacing.x4),
+        verticalAlignment = Alignment.Top,
+    ) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.width(92.dp),
+        )
+        Text(
+            text = value,
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurface,
+            modifier = Modifier.weight(1f),
+        )
     }
 }
 
@@ -1435,20 +1652,6 @@ private fun MetricDivider() {
             .width(1.dp)
             .height(44.dp)
             .background(MaterialTheme.colorScheme.outlineVariant),
-    )
-}
-
-@Composable
-private fun RecordingConfidenceLine(recording: RecordingSnapshot, settings: AppSettings) {
-    val detail = recordingConfidenceText(recording, settings)
-    Text(
-        text = detail,
-        style = MaterialTheme.typography.bodyMedium,
-        color = when (recordingProofTone(recording, settings, System.currentTimeMillis())) {
-            PillTone.Error -> MaterialTheme.colorScheme.error
-            PillTone.Warning -> MaterialTheme.colorScheme.tertiary
-            else -> MaterialTheme.colorScheme.onSurfaceVariant
-        },
     )
 }
 
@@ -3830,6 +4033,15 @@ private fun toneBorderColor(tone: PillTone): Color =
         PillTone.Warning -> MaterialTheme.colorScheme.tertiary.copy(alpha = TrackAlpha.subtle)
         PillTone.Error -> MaterialTheme.colorScheme.error.copy(alpha = TrackAlpha.subtle)
         PillTone.Neutral -> MaterialTheme.colorScheme.outlineVariant
+    }
+
+@Composable
+private fun recordingToneColor(tone: PillTone): Color =
+    when (tone) {
+        PillTone.Success -> MaterialTheme.colorScheme.primary
+        PillTone.Warning -> MaterialTheme.colorScheme.tertiary
+        PillTone.Error -> MaterialTheme.colorScheme.error
+        PillTone.Neutral -> MaterialTheme.colorScheme.onSurfaceVariant
     }
 
 private fun activeRecordingDuration(state: MainUiState, track: Track?): Duration? {
