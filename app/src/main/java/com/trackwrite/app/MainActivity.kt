@@ -161,9 +161,9 @@ import kotlin.math.min
 
 private const val MAX_GPX_IMPORT_BYTES = 10 * 1024 * 1024
 private const val MAX_GPX_IMPORT_POINTS = 50_000
+private const val TRACK_VIEWPORT_ASPECT_RATIO = 3f / 2f
 private val RecordingDockHeight = 76.dp
 private val RecordingDockReservedSpace = 104.dp
-private val TrackViewportMaxHeight = 340.dp
 
 class MainActivity : ComponentActivity() {
     private lateinit var repository: TrackRepository
@@ -1258,9 +1258,9 @@ private fun RecordScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(
-                    start = 18.dp,
-                    top = 6.dp,
-                    end = 18.dp,
+                    start = TrackSpacing.x5,
+                    top = TrackSpacing.x2,
+                    end = TrackSpacing.x5,
                     bottom = RecordingDockReservedSpace,
                 ),
         ) {
@@ -1269,20 +1269,23 @@ private fun RecordScreen(
                 latestTrack = latestTrack,
                 onClick = onShowTrackHistory,
             )
-            Spacer(Modifier.height(TrackSpacing.x4))
+            Spacer(Modifier.height(TrackSpacing.x5))
             BoxWithConstraints(
                 modifier = Modifier
                     .fillMaxWidth()
                     .weight(1f),
-                contentAlignment = Alignment.Center,
+                contentAlignment = Alignment.TopCenter,
             ) {
+                val preferredHeight = maxWidth / TRACK_VIEWPORT_ASPECT_RATIO
+                val viewportHeight = minOf(maxHeight, preferredHeight)
+                val viewportWidth = minOf(maxWidth, viewportHeight * TRACK_VIEWPORT_ASPECT_RATIO)
                 TrackRouteViewport(
                     track = viewportTrack,
                     status = state.recording.status,
                     onShowDetails = { showRecordingDetails = true },
                     modifier = Modifier
-                        .fillMaxWidth()
-                        .height(minOf(maxHeight, TrackViewportMaxHeight)),
+                        .width(viewportWidth)
+                        .height(viewportHeight),
                 )
             }
         }
@@ -1298,7 +1301,7 @@ private fun RecordScreen(
             modifier = Modifier
                 .align(Alignment.BottomCenter)
                 .fillMaxWidth()
-                .padding(horizontal = 18.dp, vertical = 12.dp)
+                .padding(horizontal = TrackSpacing.x5, vertical = TrackSpacing.x3)
                 .height(RecordingDockHeight),
         )
     }
