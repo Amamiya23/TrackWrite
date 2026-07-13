@@ -27,9 +27,12 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.PaddingValues
@@ -103,6 +106,7 @@ import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.TextFieldValue
@@ -1220,6 +1224,8 @@ private enum class TrackWriteIcon(val imageVector: ImageVector) {
     Empty(Icons.Rounded.DeleteOutline),
     Close(Icons.Rounded.Close),
     More(Icons.Rounded.MoreVert),
+    ChevronDown(Icons.Rounded.KeyboardArrowDown),
+    ChevronUp(Icons.Rounded.KeyboardArrowUp),
 }
 
 @Composable
@@ -2625,7 +2631,7 @@ private fun PhotoBatchSheet(
     clearEnabled: Boolean,
     onDismiss: () -> Unit,
 ) {
-    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = false)
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
@@ -2638,6 +2644,7 @@ private fun PhotoBatchSheet(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
+                .fillMaxHeight()
                 .padding(horizontal = 18.dp, vertical = 10.dp),
         ) {
             val manualCount = matches.count { it.photo.manualLocation != null }
@@ -2672,8 +2679,8 @@ private fun PhotoBatchSheet(
                 )
             } else {
                 LazyColumn(
-                    modifier = Modifier.heightIn(max = 500.dp),
-                    verticalArrangement = Arrangement.spacedBy(TrackSpacing.x3),
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(TrackSpacing.x2),
                 ) {
                     itemsIndexed(
                         items = visibleMatches,
@@ -2907,8 +2914,32 @@ private fun PhotoMatchRow(
 ) {
     val photo = result.photo
     val match = result.match
+    var expanded by remember(photo.uri) { mutableStateOf(false) }
+    val hasPosition = photo.manualLocation != null || match is PhotoMatch.Matched
+    val isWarning = !hasPosition && (photo.capturedAt == null || match is PhotoMatch.Unmatched)
+    val statusIcon = when {
+        hasPosition -> TrackWriteIcon.Target
+        isWarning -> TrackWriteIcon.Warning
+        else -> TrackWriteIcon.Route
+    }
+    val statusContainer = when {
+        hasPosition -> MaterialTheme.colorScheme.primaryContainer
+        isWarning -> MaterialTheme.colorScheme.tertiaryContainer
+        else -> MaterialTheme.colorScheme.surfaceVariant
+    }
+    val statusOnColor = when {
+        hasPosition -> MaterialTheme.colorScheme.onPrimaryContainer
+        isWarning -> MaterialTheme.colorScheme.onTertiaryContainer
+        else -> MaterialTheme.colorScheme.onSurfaceVariant
+    }
     Surface(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .toggleable(
+                value = expanded,
+                role = Role.Switch,
+                onValueChange = { expanded = it },
+            ),
         shape = TrackShape.card,
         color = MaterialTheme.colorScheme.surfaceContainer,
         border = if (highlighted) {
@@ -2917,10 +2948,14 @@ private fun PhotoMatchRow(
             null
         },
     ) {
-        Column(Modifier.padding(TrackSpacing.x4)) {
+        Column(
+            Modifier
+                .padding(TrackSpacing.x3)
+                .animateContentSize(animationSpec = tween()),
+        ) {
             Row(
                 horizontalArrangement = Arrangement.spacedBy(TrackSpacing.x3),
-                verticalAlignment = Alignment.Top,
+                verticalAlignment = Alignment.CenterVertically,
             ) {
                 PhotoThumbnail(
                     uri = photo.uri,
@@ -2929,52 +2964,75 @@ private fun PhotoMatchRow(
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
                         text = photo.displayName,
-                        style = MaterialTheme.typography.bodyLarge,
+                        style = MaterialTheme.typography.bodyMedium,
                         fontWeight = FontWeight.Medium,
                         color = MaterialTheme.colorScheme.onSurface,
-                        maxLines = 2,
+                        maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                     )
                     Spacer(Modifier.height(TrackSpacing.x1))
-                    Text(
-                        text = photo.capturedAt?.let(::formatPhotoCapturedAt)
-                            ?: stringResource(R.string.no_exif_time),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                    Spacer(Modifier.height(TrackSpacing.x2))
-                    MatchPill(photo, match)
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(TrackSpacing.x2),
+                    ) {
+                        Text(
+                            text = photo.capturedAt?.let(::formatPhotoCapturedAt)
+                                ?: stringResource(R.string.no_exif_time),
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f),
+                        )
+                        MatchPill(photo, match)
+                    }
                 }
-            }
-            Spacer(Modifier.height(TrackSpacing.x3))
-            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-            Spacer(Modifier.height(TrackSpacing.x3))
-            PhotoMatchDetail(
-                photo = photo,
-                match = match,
-            )
-            Spacer(Modifier.height(TrackSpacing.x3))
-            PhotoActionRow {
-                if (photo.manualLocation != null) {
-                    PhotoRowActionButton(
-                        text = stringResource(R.string.clear_manual_location),
-                        onClick = onClearManualLocation,
-                        danger = true,
-                    )
+                Surface(
+                    modifier = Modifier.size(28.dp),
+                    shape = TrackShape.control,
+                    color = statusContainer,
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        TrackWriteLineIcon(
+                            icon = statusIcon,
+                            tint = statusOnColor,
+                            modifier = Modifier.size(16.dp),
+                        )
+                    }
                 }
-                PhotoRowActionButton(
-                    text = stringResource(R.string.set_location),
-                    onClick = onSetManualLocation,
+                TrackWriteLineIcon(
+                    icon = if (expanded) TrackWriteIcon.ChevronUp else TrackWriteIcon.ChevronDown,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(24.dp),
                 )
+            }
+            if (expanded) {
+                Spacer(Modifier.height(TrackSpacing.x3))
+                PhotoMatchDetailCompact(
+                    photo = photo,
+                    match = match,
+                )
+                Spacer(Modifier.height(TrackSpacing.x3))
+                PhotoActionRow {
+                    if (photo.manualLocation != null) {
+                        PhotoRowActionButton(
+                            text = stringResource(R.string.clear_manual_location),
+                            onClick = onClearManualLocation,
+                            danger = true,
+                        )
+                    }
+                    PhotoRowActionButton(
+                        text = stringResource(R.string.set_location),
+                        onClick = onSetManualLocation,
+                    )
+                }
             }
         }
     }
 }
 
 @Composable
-private fun PhotoMatchDetail(
+private fun PhotoMatchDetailCompact(
     photo: PhotoCandidate,
     match: PhotoMatch?,
 ) {
@@ -2985,39 +3043,28 @@ private fun PhotoMatchDetail(
         isWarning -> TrackWriteIcon.Warning
         else -> TrackWriteIcon.Route
     }
-    val containerColor = when {
-        hasPosition -> MaterialTheme.colorScheme.primaryContainer
-        isWarning -> MaterialTheme.colorScheme.tertiaryContainer
-        else -> MaterialTheme.colorScheme.surfaceVariant
-    }
-    val contentColor = when {
-        hasPosition -> MaterialTheme.colorScheme.onPrimaryContainer
-        isWarning -> MaterialTheme.colorScheme.onTertiaryContainer
+    val iconTint = when {
+        hasPosition -> MaterialTheme.colorScheme.primary
+        isWarning -> MaterialTheme.colorScheme.tertiary
         else -> MaterialTheme.colorScheme.onSurfaceVariant
     }
     Row(
         modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(TrackSpacing.x3),
+        horizontalArrangement = Arrangement.spacedBy(TrackSpacing.x2),
         verticalAlignment = Alignment.Top,
     ) {
-        Surface(
-            modifier = Modifier.size(36.dp),
-            shape = TrackShape.control,
-            color = containerColor,
-        ) {
-            Box(contentAlignment = Alignment.Center) {
-                TrackWriteLineIcon(
-                    icon = icon,
-                    tint = contentColor,
-                    modifier = Modifier.size(18.dp),
-                )
-            }
-        }
+        TrackWriteLineIcon(
+            icon = icon,
+            tint = iconTint,
+            modifier = Modifier
+                .padding(top = 2.dp)
+                .size(16.dp),
+        )
         Text(
             text = matchDetail(photo, match),
             modifier = Modifier.weight(1f),
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurface,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
     }
 }
@@ -3051,8 +3098,8 @@ private fun PhotoRowActionButton(
     }
     Surface(
         modifier = Modifier
-            .widthIn(min = 112.dp)
-            .heightIn(min = 44.dp)
+            .widthIn(min = 88.dp)
+            .heightIn(min = 36.dp)
             .clip(TrackShape.control)
             .clickable(onClick = onClick),
         shape = TrackShape.control,
@@ -3064,12 +3111,12 @@ private fun PhotoRowActionButton(
         },
     ) {
         Box(
-            modifier = Modifier.padding(horizontal = TrackSpacing.x3, vertical = TrackSpacing.x2),
+            modifier = Modifier.padding(horizontal = TrackSpacing.x3, vertical = TrackSpacing.x1),
             contentAlignment = Alignment.Center,
         ) {
             Text(
                 text = text,
-                style = MaterialTheme.typography.labelLarge,
+                style = MaterialTheme.typography.labelMedium,
                 fontWeight = FontWeight.SemiBold,
                 color = contentColor,
                 textAlign = TextAlign.Center,
@@ -3086,7 +3133,7 @@ private fun PhotoThumbnail(
     index: Int,
 ) {
     val context = LocalContext.current
-    val targetSizePx = with(LocalDensity.current) { 88.dp.roundToPx() }
+    val targetSizePx = with(LocalDensity.current) { 56.dp.roundToPx() }
     var bitmap by remember(uri) { mutableStateOf<androidx.compose.ui.graphics.ImageBitmap?>(null) }
     LaunchedEffect(uri) {
         bitmap = withContext(Dispatchers.IO) {
@@ -3101,7 +3148,7 @@ private fun PhotoThumbnail(
     }
     Box(
         modifier = Modifier
-            .size(88.dp)
+            .size(56.dp)
             .clip(TrackShape.control)
             .background(MaterialTheme.colorScheme.surfaceVariant),
         contentAlignment = Alignment.Center,
@@ -3118,15 +3165,15 @@ private fun PhotoThumbnail(
             TrackWriteLineIcon(
                 icon = TrackWriteIcon.Photo,
                 tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.size(22.dp),
+                modifier = Modifier.size(18.dp),
             )
         }
         Surface(
             modifier = Modifier
                 .align(Alignment.TopStart)
-                .padding(TrackSpacing.x1)
-                .heightIn(min = 24.dp)
-                .widthIn(min = 24.dp),
+                .padding(2.dp)
+                .heightIn(min = 18.dp)
+                .widthIn(min = 18.dp),
             shape = TrackShape.pill,
             color = MaterialTheme.colorScheme.inverseSurface,
             contentColor = MaterialTheme.colorScheme.inverseOnSurface,

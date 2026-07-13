@@ -32,10 +32,16 @@ safety should be visible and easy to scan.
 
 - Compose-only screens use `ComponentActivity.setContent { TrackWriteTheme(...) { ... } }`.
 - Manual AMap picker screens may use a native `FrameLayout` root with a full-size
-  native `WebView`, a top search `ComposeView`, and a bottom selection
-  `ComposeView`. Keep the controls inside `TrackWriteTheme`; do not embed the
-  interactive AMap WebView inside a scrollable Compose card via `AndroidView`,
-  because that can leave the map blank or incorrectly measured.
+  native `WebView` and bounded Compose overlays. Keep controls inside
+  `TrackWriteTheme`; do not embed the interactive AMap WebView inside a
+  scrollable Compose card via `AndroidView`, because that can leave the map blank
+  or incorrectly measured.
+- A transparent Compose overlay still participates in Android touch dispatch.
+  Never place a full-screen transparent `ComposeView` above an interactive
+  `WebView`. Size persistent overlays to their controls: the top search surface
+  may use `MATCH_PARENT x WRAP_CONTENT`, while a bottom-end confirm control uses
+  `WRAP_CONTENT x WRAP_CONTENT`. Conditional feedback must measure to zero when
+  absent so empty padding does not block map taps or drags.
 - Compose Material components must be rendered inside `TrackWriteTheme`, which
   wraps Material 3 `MaterialTheme`.
 - Use Android string resources for default and Simplified Chinese UI copy:
@@ -336,6 +342,13 @@ content remeasure move the whole sheet between expanded and partial anchors.
 measured content height. If a partial anchor is available, tapping an item can
 make the entire sheet jump to half height even though the user did not drag it.
 
+**Photo-batch exception**: the photo review sheet intentionally defaults to the
+partial anchor, so it uses `skipPartiallyExpanded = false`. Keep its outer
+`Column` full-height and its `LazyColumn` weighted; expanding a compact photo row
+then changes list content inside fixed sheet bounds instead of changing the
+sheet's measured height. Do not apply this exception to management sheets whose
+content defines the sheet height.
+
 ```kotlin
 val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
@@ -407,13 +420,16 @@ automatic, manual, unmatched, and missing-EXIF states:
 
 1. thumbnail with an overlaid original batch index;
 2. filename, captured time, and localized status;
-3. one semantic detail row for source/coordinates or the unmatched reason;
-4. right-aligned, wrapping correction actions.
+3. an always-visible localized status pill and state icon;
+4. progressively disclosed source/coordinates or unmatched reason, followed by
+   right-aligned, wrapping correction actions.
 
-The index must not be concatenated into the filename, and the card background
-must not carry the entire status meaning. Use theme surfaces plus localized
-status text and icons. A filtered row continues to call actions with its
-original `withIndex()` value.
+The compact default row shows the thumbnail, filename, captured time, status,
+and disclosure affordance. Detail copy such as excessive track-point time
+difference stays collapsed until the user opens the row. The index must not be
+concatenated into the filename, and the card background must not carry the
+entire status meaning. Use theme surfaces plus localized status text and icons.
+A filtered row continues to call actions with its original `withIndex()` value.
 
 **Why**: A shared skeleton makes mixed batches scannable and prevents state
 changes from rebuilding the whole card. Keeping the original index visible on

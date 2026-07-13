@@ -17,8 +17,15 @@ import android.webkit.WebViewClient
 import android.widget.FrameLayout
 import androidx.activity.ComponentActivity
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -28,6 +35,7 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.text.KeyboardActions
@@ -36,7 +44,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.ErrorOutline
-import androidx.compose.material.icons.rounded.LocationOn
 import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilledIconButton
@@ -50,8 +57,10 @@ import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.ExperimentalComposeUiApi
@@ -65,6 +74,7 @@ import androidx.compose.ui.platform.SoftwareKeyboardController
 import androidx.compose.ui.platform.ViewCompositionStrategy
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -75,6 +85,7 @@ import com.trackwrite.app.ui.TrackAlpha
 import com.trackwrite.app.ui.TrackShape
 import com.trackwrite.app.ui.TrackSpacing
 import com.trackwrite.app.ui.TrackWriteTheme
+import kotlinx.coroutines.delay
 import org.json.JSONArray
 import org.json.JSONObject
 import java.util.Locale
@@ -105,7 +116,7 @@ class ManualLocationActivity : ComponentActivity() {
 
         root.addView(
             composeOverlay {
-                ManualLocationSearchOverlay(
+                MapPickerTopOverlay(
                     state = uiState,
                     onBack = ::cancel,
                     onQueryChanged = ::updateQuery,
@@ -119,18 +130,18 @@ class ManualLocationActivity : ComponentActivity() {
                 Gravity.TOP,
             ),
         )
-
         root.addView(
             composeOverlay {
-                ManualLocationSelectionOverlay(
+                MapPickerConfirmOverlay(
                     selection = uiState.selection,
+                    selectionEventId = uiState.selectionEventId,
                     onConfirm = ::confirm,
                 )
             },
             FrameLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.WRAP_CONTENT,
-                Gravity.BOTTOM,
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                Gravity.BOTTOM or Gravity.END,
             ),
         )
         setContentView(root)
@@ -264,6 +275,7 @@ class ManualLocationActivity : ComponentActivity() {
                 longitude = longitude,
                 label = label,
             ),
+            selectionEventId = uiState.selectionEventId + 1,
             searchState = ManualLocationSearchState.Idle,
         )
     }
@@ -401,6 +413,7 @@ private data class ManualLocationUiState(
     val query: String = "",
     val searchState: ManualLocationSearchState = ManualLocationSearchState.Idle,
     val selection: ManualLocationSelection? = null,
+    val selectionEventId: Long = 0,
 )
 
 private sealed interface ManualLocationSearchState {
@@ -419,43 +432,72 @@ private data class ManualLocationSelection(
 
 @OptIn(ExperimentalComposeUiApi::class)
 @Composable
-private fun ManualLocationSearchOverlay(
+private fun MapPickerTopOverlay(
     state: ManualLocationUiState,
     onBack: () -> Unit,
     onQueryChanged: (String) -> Unit,
     onSearch: () -> Unit,
     onResultSelected: (AmapSearchResult) -> Unit,
 ) {
+    Column(modifier = Modifier.fillMaxWidth()) {
+        MapPickerTopBar(
+            state = state,
+            onBack = onBack,
+            onQueryChanged = onQueryChanged,
+            onSearch = onSearch,
+        )
+        ManualLocationSearchFeedback(
+            state = state,
+            onResultSelected = onResultSelected,
+            modifier = Modifier.padding(
+                start = TrackSpacing.x3,
+                top = TrackSpacing.x2,
+                end = TrackSpacing.x3,
+            ),
+        )
+    }
+}
+
+@OptIn(ExperimentalComposeUiApi::class)
+@Composable
+private fun MapPickerTopBar(
+    state: ManualLocationUiState,
+    onBack: () -> Unit,
+    onQueryChanged: (String) -> Unit,
+    onSearch: () -> Unit,
+) {
     val focusManager = LocalFocusManager.current
     val keyboardController = LocalSoftwareKeyboardController.current
     val searching = state.searchState is ManualLocationSearchState.Searching
     val searchEnabled = state.hasAmapKey && state.mapReady && state.query.isNotBlank() && !searching
 
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .statusBarsPadding()
-            .padding(TrackSpacing.x3),
-        verticalArrangement = Arrangement.spacedBy(TrackSpacing.x2),
-    ) {
+    Surface(color = MaterialTheme.colorScheme.background) {
         Row(
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier
+                .fillMaxWidth()
+                .statusBarsPadding()
+                .padding(horizontal = TrackSpacing.x3, vertical = TrackSpacing.x2),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(TrackSpacing.x2),
         ) {
-            FilledIconButton(
-                onClick = onBack,
-                modifier = Modifier.size(48.dp),
+            Surface(
+                modifier = Modifier
+                    .size(48.dp)
+                    .clickable(role = Role.Button, onClick = onBack),
                 shape = TrackShape.control,
-                colors = IconButtonDefaults.filledIconButtonColors(
-                    containerColor = MaterialTheme.colorScheme.surface,
-                    contentColor = MaterialTheme.colorScheme.onSurface,
+                color = MaterialTheme.colorScheme.surface,
+                border = androidx.compose.foundation.BorderStroke(
+                    1.dp,
+                    MaterialTheme.colorScheme.outlineVariant,
                 ),
             ) {
-                Icon(
-                    imageVector = Icons.AutoMirrored.Rounded.ArrowBack,
-                    contentDescription = stringResource(R.string.manual_location_back),
-                )
+                Box(contentAlignment = Alignment.Center) {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Rounded.ArrowBack,
+                        contentDescription = stringResource(R.string.manual_location_back),
+                        modifier = Modifier.size(22.dp),
+                    )
+                }
             }
             OutlinedTextField(
                 value = state.query,
@@ -498,11 +540,6 @@ private fun ManualLocationSearchOverlay(
                 ),
             )
         }
-
-        ManualLocationSearchFeedback(
-            state = state,
-            onResultSelected = onResultSelected,
-        )
     }
 }
 
@@ -520,30 +557,37 @@ private fun submitSearch(
 private fun ManualLocationSearchFeedback(
     state: ManualLocationUiState,
     onResultSelected: (AmapSearchResult) -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     when {
         !state.hasAmapKey -> SearchFeedbackPanel(
             text = stringResource(R.string.amap_key_missing),
             isError = true,
+            modifier = modifier,
         )
         state.searchState is ManualLocationSearchState.Error -> SearchFeedbackPanel(
             text = state.searchState.message,
             isError = true,
+            modifier = modifier,
         )
         !state.mapReady -> SearchFeedbackPanel(
             text = stringResource(R.string.amap_loading),
             loading = true,
+            modifier = modifier,
         )
         state.searchState is ManualLocationSearchState.Searching -> SearchFeedbackPanel(
             text = stringResource(R.string.amap_searching),
             loading = true,
+            modifier = modifier,
         )
         state.searchState is ManualLocationSearchState.Empty -> SearchFeedbackPanel(
             text = stringResource(R.string.amap_no_results_template, state.query),
+            modifier = modifier,
         )
         state.searchState is ManualLocationSearchState.Results -> SearchResultsPanel(
             results = state.searchState.items,
             onResultSelected = onResultSelected,
+            modifier = modifier,
         )
         else -> Unit
     }
@@ -552,11 +596,12 @@ private fun ManualLocationSearchFeedback(
 @Composable
 private fun SearchFeedbackPanel(
     text: String,
+    modifier: Modifier = Modifier,
     isError: Boolean = false,
     loading: Boolean = false,
 ) {
     Surface(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = modifier.fillMaxWidth(),
         shape = TrackShape.control,
         color = if (isError) MaterialTheme.colorScheme.errorContainer else MaterialTheme.colorScheme.surface,
         shadowElevation = 3.dp,
@@ -594,10 +639,11 @@ private fun SearchFeedbackPanel(
 private fun SearchResultsPanel(
     results: List<AmapSearchResult>,
     onResultSelected: (AmapSearchResult) -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     val maxHeight = LocalConfiguration.current.screenHeightDp.dp * 0.34f
     Surface(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = modifier.fillMaxWidth(),
         shape = TrackShape.card,
         color = MaterialTheme.colorScheme.surface,
         shadowElevation = 4.dp,
@@ -643,52 +689,59 @@ private fun SearchResultsPanel(
 }
 
 @Composable
-private fun ManualLocationSelectionOverlay(
+private fun MapPickerConfirmOverlay(
     selection: ManualLocationSelection?,
+    selectionEventId: Long,
     onConfirm: () -> Unit,
 ) {
     val selectionAvailable = selection != null
-    Row(
+    var feedbackVisible by remember { mutableStateOf(false) }
+    LaunchedEffect(selectionEventId, selection) {
+        feedbackVisible = selection != null
+        if (selection != null) {
+            delay(1_800)
+            feedbackVisible = false
+        }
+    }
+
+    Column(
         modifier = Modifier
-            .fillMaxWidth()
             .navigationBarsPadding()
-            .padding(TrackSpacing.x3),
-        verticalAlignment = Alignment.Bottom,
-        horizontalArrangement = Arrangement.spacedBy(TrackSpacing.x3),
+            .padding(end = TrackSpacing.x3, bottom = TrackSpacing.x3),
+        horizontalAlignment = Alignment.End,
+        verticalArrangement = Arrangement.spacedBy(TrackSpacing.x2),
     ) {
-        Surface(
-            modifier = Modifier
-                .weight(1f)
-                .heightIn(min = 56.dp),
-            shape = TrackShape.control,
-            color = MaterialTheme.colorScheme.surface,
-            shadowElevation = 3.dp,
+        val currentSelection = selection
+        AnimatedVisibility(
+            visible = feedbackVisible && currentSelection != null,
+            modifier = Modifier.widthIn(max = 280.dp),
+            enter = fadeIn(tween(150)) + slideInVertically(tween(180)) { it / 3 },
+            exit = fadeOut(tween(120)) + slideOutVertically(tween(150)) { it / 4 },
         ) {
-            Row(
-                modifier = Modifier.padding(horizontal = TrackSpacing.x3, vertical = TrackSpacing.x2),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(TrackSpacing.x2),
-            ) {
-                Icon(
-                    imageVector = Icons.Rounded.LocationOn,
-                    contentDescription = null,
-                    tint = if (selectionAvailable) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = selection?.label ?: stringResource(R.string.manual_location_pick_hint),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurface,
-                        maxLines = if (selectionAvailable) 1 else 2,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                    if (selection != null) {
+            if (currentSelection != null) {
+                Surface(
+                    shape = TrackShape.control,
+                    color = MaterialTheme.colorScheme.inverseSurface,
+                    contentColor = MaterialTheme.colorScheme.inverseOnSurface,
+                    shadowElevation = 4.dp,
+                ) {
+                    Column(
+                        modifier = Modifier.padding(horizontal = TrackSpacing.x3, vertical = TrackSpacing.x2),
+                        verticalArrangement = Arrangement.spacedBy(2.dp),
+                    ) {
                         Text(
-                            text = formatManualLocationCoordinate(selection),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            text = currentSelection.label,
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.inverseOnSurface,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
+                        )
+                        Text(
+                            text = formatManualLocationCoordinate(currentSelection),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.inverseOnSurface,
+                            maxLines = 1,
                         )
                     }
                 }
@@ -697,7 +750,7 @@ private fun ManualLocationSelectionOverlay(
         FilledIconButton(
             onClick = onConfirm,
             enabled = selectionAvailable,
-            modifier = Modifier.size(56.dp),
+            modifier = Modifier.size(52.dp),
             shape = TrackShape.control,
             colors = IconButtonDefaults.filledIconButtonColors(
                 containerColor = MaterialTheme.colorScheme.primary,
@@ -716,4 +769,4 @@ private fun ManualLocationSelectionOverlay(
 }
 
 private fun formatManualLocationCoordinate(selection: ManualLocationSelection): String =
-    String.format(Locale.ROOT, "%.6f, %.6f", selection.latitude, selection.longitude)
+    String.format(Locale.ROOT, "%.5f, %.5f", selection.latitude, selection.longitude)
