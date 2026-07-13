@@ -100,6 +100,8 @@
     <string name="photo_batch_count">%1$d photos selected</string>
     <string name="photo_batch_stats">%1$d matched · %2$d unmatched · %3$d manual</string>
     <string name="clear_photo_batch">Clear</string>
+    <string name="preview_photo">Preview photo: %1$s</string>
+    <string name="photo_preview_unavailable">This photo could not be previewed.</string>
     <string name="photos_need_attention">%1$d need attention</string>
     <string name="photo_filter_all">All</string>
     <string name="photo_filter_unmatched">Unmatched</string>

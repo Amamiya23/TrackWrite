@@ -6,7 +6,7 @@ import android.content.ActivityNotFoundException
 import android.content.ContentResolver
 import android.content.Intent
 import android.content.pm.PackageManager
-import android.graphics.BitmapFactory
+import android.graphics.ImageDecoder
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
@@ -50,6 +50,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
@@ -95,6 +96,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
@@ -107,6 +109,8 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.TextFieldValue
@@ -115,6 +119,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
@@ -2632,6 +2637,7 @@ private fun PhotoBatchSheet(
     onDismiss: () -> Unit,
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = false)
+    var previewPhoto by remember(matches) { mutableStateOf<PhotoCandidate?>(null) }
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
@@ -2689,9 +2695,9 @@ private fun PhotoBatchSheet(
                         val index = indexedResult.index
                         val result = indexedResult.value
                         PhotoMatchRow(
-                            index = index,
                             result = result,
                             highlighted = index == highlightedPhotoIndex,
+                            onPreviewPhoto = { previewPhoto = result.photo },
                             onSetManualLocation = { onSetManualLocation(index) },
                             onClearManualLocation = { onClearManualLocation(index) },
                         )
@@ -2700,6 +2706,12 @@ private fun PhotoBatchSheet(
             }
             Spacer(Modifier.height(18.dp))
         }
+    }
+    previewPhoto?.let { photo ->
+        PhotoPreviewDialog(
+            photo = photo,
+            onDismiss = { previewPhoto = null },
+        )
     }
 }
 
@@ -2735,17 +2747,12 @@ private fun PhotoBatchHeader(
                 overflow = TextOverflow.Ellipsis,
             )
         }
-        TextButton(
-            onClick = onClear,
+        Spacer(Modifier.width(TrackSpacing.x2))
+        PhotoBatchClearButton(
             enabled = clearEnabled,
-        ) {
-            Text(
-                text = stringResource(R.string.clear_photo_batch),
-                color = MaterialTheme.colorScheme.error.copy(
-                    alpha = if (clearEnabled) 1f else TrackAlpha.disabled,
-                ),
-            )
-        }
+            onClick = onClear,
+        )
+        Spacer(Modifier.width(TrackSpacing.x2))
         Surface(
             modifier = Modifier
                 .size(44.dp)
@@ -2762,6 +2769,49 @@ private fun PhotoBatchHeader(
                     modifier = Modifier.size(18.dp),
                 )
             }
+        }
+    }
+}
+
+@Composable
+private fun PhotoBatchClearButton(
+    enabled: Boolean,
+    onClick: () -> Unit,
+) {
+    val actionColor = MaterialTheme.colorScheme.error.copy(
+        alpha = if (enabled) 1f else TrackAlpha.disabled,
+    )
+    Surface(
+        modifier = Modifier
+            .heightIn(min = 48.dp)
+            .clip(TrackShape.control)
+            .clickable(
+                enabled = enabled,
+                role = Role.Button,
+                onClick = onClick,
+            ),
+        shape = TrackShape.control,
+        color = MaterialTheme.colorScheme.surfaceContainerLow,
+        border = androidx.compose.foundation.BorderStroke(1.dp, actionColor),
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = TrackSpacing.x3),
+            horizontalArrangement = Arrangement.spacedBy(TrackSpacing.x1),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            TrackWriteLineIcon(
+                icon = TrackWriteIcon.Empty,
+                tint = actionColor,
+                modifier = Modifier.size(18.dp),
+            )
+            Text(
+                text = stringResource(R.string.clear_photo_batch),
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = FontWeight.SemiBold,
+                color = actionColor,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
         }
     }
 }
@@ -2906,9 +2956,9 @@ private fun WriteActionPanel(
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun PhotoMatchRow(
-    index: Int,
     result: PhotoMatchResult,
     highlighted: Boolean,
+    onPreviewPhoto: () -> Unit,
     onSetManualLocation: () -> Unit,
     onClearManualLocation: () -> Unit,
 ) {
@@ -2959,7 +3009,8 @@ private fun PhotoMatchRow(
             ) {
                 PhotoThumbnail(
                     uri = photo.uri,
-                    index = index,
+                    displayName = photo.displayName,
+                    onClick = onPreviewPhoto,
                 )
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
@@ -3130,15 +3181,23 @@ private fun PhotoRowActionButton(
 @Composable
 private fun PhotoThumbnail(
     uri: Uri,
-    index: Int,
+    displayName: String,
+    onClick: () -> Unit,
 ) {
     val context = LocalContext.current
     val targetSizePx = with(LocalDensity.current) { 56.dp.roundToPx() }
-    var bitmap by remember(uri) { mutableStateOf<androidx.compose.ui.graphics.ImageBitmap?>(null) }
-    LaunchedEffect(uri) {
+    val previewDescription = stringResource(R.string.preview_photo, displayName)
+    var bitmap by remember(uri) { mutableStateOf<ImageBitmap?>(null) }
+    LaunchedEffect(uri, targetSizePx) {
         bitmap = withContext(Dispatchers.IO) {
             try {
-                decodeSampledThumbnail(context.contentResolver, uri, targetSizePx)
+                decodeSampledImage(
+                    resolver = context.contentResolver,
+                    uri = uri,
+                    targetWidthPx = targetSizePx,
+                    targetHeightPx = targetSizePx,
+                    scaleToFill = true,
+                )
             } catch (error: CancellationException) {
                 throw error
             } catch (_: Exception) {
@@ -3150,6 +3209,11 @@ private fun PhotoThumbnail(
         modifier = Modifier
             .size(56.dp)
             .clip(TrackShape.control)
+            .clickable(
+                role = Role.Button,
+                onClick = onClick,
+            )
+            .semantics { contentDescription = previewDescription }
             .background(MaterialTheme.colorScheme.surfaceVariant),
         contentAlignment = Alignment.Center,
     ) {
@@ -3168,64 +3232,172 @@ private fun PhotoThumbnail(
                 modifier = Modifier.size(18.dp),
             )
         }
+    }
+}
+
+private sealed interface PhotoPreviewLoadState {
+    data object Loading : PhotoPreviewLoadState
+    data class Loaded(val bitmap: ImageBitmap) : PhotoPreviewLoadState
+    data object Failed : PhotoPreviewLoadState
+}
+
+@Composable
+private fun PhotoPreviewDialog(
+    photo: PhotoCandidate,
+    onDismiss: () -> Unit,
+) {
+    val resolver = LocalContext.current.contentResolver
+    val closeDescription = stringResource(R.string.close)
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(
+            usePlatformDefaultWidth = false,
+            decorFitsSystemWindows = false,
+        ),
+    ) {
         Surface(
-            modifier = Modifier
-                .align(Alignment.TopStart)
-                .padding(2.dp)
-                .heightIn(min = 18.dp)
-                .widthIn(min = 18.dp),
-            shape = TrackShape.pill,
-            color = MaterialTheme.colorScheme.inverseSurface,
-            contentColor = MaterialTheme.colorScheme.inverseOnSurface,
+            modifier = Modifier.fillMaxSize(),
+            color = Color.Black,
+            contentColor = Color.White,
         ) {
-            Box(
-                modifier = Modifier.padding(horizontal = TrackSpacing.x1),
-                contentAlignment = Alignment.Center,
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .statusBarsPadding()
+                    .navigationBarsPadding(),
             ) {
-                Text(
-                    text = (index + 1).toString(),
-                    style = MaterialTheme.typography.labelSmall,
-                    fontWeight = FontWeight.SemiBold,
-                    color = MaterialTheme.colorScheme.inverseOnSurface,
-                    maxLines = 1,
-                )
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = 56.dp)
+                        .padding(horizontal = TrackSpacing.x2),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Surface(
+                        modifier = Modifier
+                            .size(48.dp)
+                            .clip(TrackShape.control)
+                            .clickable(
+                                role = Role.Button,
+                                onClick = onDismiss,
+                            )
+                            .semantics { contentDescription = closeDescription },
+                        shape = TrackShape.control,
+                        color = Color.Transparent,
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            TrackWriteLineIcon(
+                                icon = TrackWriteIcon.Close,
+                                tint = Color.White,
+                                modifier = Modifier.size(22.dp),
+                            )
+                        }
+                    }
+                    Spacer(Modifier.width(TrackSpacing.x2))
+                    Text(
+                        text = photo.displayName,
+                        modifier = Modifier.weight(1f),
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        color = Color.White,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+                BoxWithConstraints(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f)
+                        .padding(TrackSpacing.x4),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    val density = LocalDensity.current
+                    val targetWidthPx = with(density) { maxWidth.roundToPx() }.coerceAtLeast(1)
+                    val targetHeightPx = with(density) { maxHeight.roundToPx() }.coerceAtLeast(1)
+                    var loadState by remember(photo.uri, targetWidthPx, targetHeightPx) {
+                        mutableStateOf<PhotoPreviewLoadState>(PhotoPreviewLoadState.Loading)
+                    }
+                    LaunchedEffect(photo.uri, targetWidthPx, targetHeightPx) {
+                        val bitmap = withContext(Dispatchers.IO) {
+                            try {
+                                decodeSampledImage(
+                                    resolver = resolver,
+                                    uri = photo.uri,
+                                    targetWidthPx = targetWidthPx,
+                                    targetHeightPx = targetHeightPx,
+                                )
+                            } catch (error: CancellationException) {
+                                throw error
+                            } catch (_: Exception) {
+                                null
+                            }
+                        }
+                        loadState = bitmap?.let(PhotoPreviewLoadState::Loaded)
+                            ?: PhotoPreviewLoadState.Failed
+                    }
+                    when (val state = loadState) {
+                        PhotoPreviewLoadState.Loading -> TrackWriteLineIcon(
+                            icon = TrackWriteIcon.Photo,
+                            tint = Color.White.copy(alpha = TrackAlpha.subtle),
+                            modifier = Modifier.size(32.dp),
+                        )
+                        is PhotoPreviewLoadState.Loaded -> Image(
+                            bitmap = state.bitmap,
+                            contentDescription = photo.displayName,
+                            modifier = Modifier.fillMaxSize(),
+                            contentScale = ContentScale.Fit,
+                        )
+                        PhotoPreviewLoadState.Failed -> Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(TrackSpacing.x3),
+                        ) {
+                            TrackWriteLineIcon(
+                                icon = TrackWriteIcon.Warning,
+                                tint = Color.White.copy(alpha = TrackAlpha.subtle),
+                                modifier = Modifier.size(32.dp),
+                            )
+                            Text(
+                                text = stringResource(R.string.photo_preview_unavailable),
+                                style = MaterialTheme.typography.bodyLarge,
+                                color = Color.White.copy(alpha = TrackAlpha.subtle),
+                                textAlign = TextAlign.Center,
+                            )
+                        }
+                    }
+                }
             }
         }
     }
 }
 
-private fun decodeSampledThumbnail(
+private fun decodeSampledImage(
     resolver: ContentResolver,
     uri: Uri,
-    targetSizePx: Int,
-): androidx.compose.ui.graphics.ImageBitmap? {
-    val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
-    resolver.openInputStream(uri)?.use { input ->
-        BitmapFactory.decodeStream(input, null, bounds)
-    }
-    val sampleSize = calculateInSampleSize(bounds, targetSizePx, targetSizePx)
-    val decodeOptions = BitmapFactory.Options().apply { inSampleSize = sampleSize }
-    return resolver.openInputStream(uri)?.use { input ->
-        BitmapFactory.decodeStream(input, null, decodeOptions)?.asImageBitmap()
-    }
-}
-
-private fun calculateInSampleSize(
-    options: BitmapFactory.Options,
-    targetWidth: Int,
-    targetHeight: Int,
-): Int {
-    val height = options.outHeight
-    val width = options.outWidth
-    var sampleSize = 1
-    if (height > targetHeight || width > targetWidth) {
-        var halfHeight = height / 2
-        var halfWidth = width / 2
-        while (halfHeight / sampleSize >= targetHeight && halfWidth / sampleSize >= targetWidth) {
-            sampleSize *= 2
+    targetWidthPx: Int,
+    targetHeightPx: Int,
+    scaleToFill: Boolean = false,
+): ImageBitmap? {
+    val source = ImageDecoder.createSource(resolver, uri)
+    return ImageDecoder.decodeBitmap(source) { decoder, info, _ ->
+        val sourceWidth = info.size.width
+        val sourceHeight = info.size.height
+        if (sourceWidth > 0 && sourceHeight > 0) {
+            val widthScale = targetWidthPx.toFloat() / sourceWidth
+            val heightScale = targetHeightPx.toFloat() / sourceHeight
+            val targetScale = if (scaleToFill) {
+                maxOf(widthScale, heightScale)
+            } else {
+                minOf(widthScale, heightScale)
+            }.coerceAtMost(1f)
+            if (targetScale < 1f) {
+                decoder.setTargetSize(
+                    (sourceWidth * targetScale).toInt().coerceAtLeast(1),
+                    (sourceHeight * targetScale).toInt().coerceAtLeast(1),
+                )
+            }
         }
-    }
-    return sampleSize.coerceAtLeast(1)
+        decoder.allocator = ImageDecoder.ALLOCATOR_SOFTWARE
+    }.asImageBitmap()
 }
 
 @Composable

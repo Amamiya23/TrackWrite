@@ -100,6 +100,8 @@
     <string name="photo_batch_count">已选择 %1$d 张照片</string>
     <string name="photo_batch_stats">%1$d 已匹配 · %2$d 未匹配 · %3$d 手动</string>
     <string name="clear_photo_batch">清空</string>
+    <string name="preview_photo">预览照片：%1$s</string>
+    <string name="photo_preview_unavailable">无法预览这张照片。</string>
     <string name="photos_need_attention">%1$d 张需要处理</string>
     <string name="photo_filter_all">全部</string>
     <string name="photo_filter_unmatched">未匹配</string>

@@ -418,22 +418,24 @@ uiState = uiState.copy(matches = emptyList())
 **What**: Photo rows in the batch Sheet use one stable reading order across
 automatic, manual, unmatched, and missing-EXIF states:
 
-1. thumbnail with an overlaid original batch index;
+1. previewable thumbnail without a batch-index overlay;
 2. filename, captured time, and localized status;
 3. an always-visible localized status pill and state icon;
 4. progressively disclosed source/coordinates or unmatched reason, followed by
    right-aligned, wrapping correction actions.
 
 The compact default row shows the thumbnail, filename, captured time, status,
-and disclosure affordance. Detail copy such as excessive track-point time
-difference stays collapsed until the user opens the row. The index must not be
-concatenated into the filename, and the card background must not carry the
-entire status meaning. Use theme surfaces plus localized status text and icons.
-A filtered row continues to call actions with its original `withIndex()` value.
+and disclosure affordance. Pressing the thumbnail opens an aspect-fit, view-only
+preview without toggling row disclosure. Detail copy such as excessive
+track-point time difference stays collapsed until the user opens the row. The
+internal index must not be rendered on the thumbnail or concatenated into the
+filename, and the card background must not carry the entire status meaning. Use
+theme surfaces plus localized status text and icons. A filtered row continues
+to call actions with its original `withIndex()` value.
 
 **Why**: A shared skeleton makes mixed batches scannable and prevents state
-changes from rebuilding the whole card. Keeping the original index visible on
-the thumbnail also matches the callback identity users see.
+changes from rebuilding the whole card. Keeping callback identity internal
+preserves filtered action correctness without obscuring the image.
 
 **Actions**:
 
