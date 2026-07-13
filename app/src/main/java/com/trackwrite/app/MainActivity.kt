@@ -50,7 +50,6 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
@@ -2046,7 +2045,7 @@ private fun DrawerHeader(
         }
         Surface(
             modifier = Modifier
-                .size(44.dp)
+                .size(48.dp)
                 .clip(TrackShape.control)
                 .clickable(onClick = onDismiss),
             shape = TrackShape.control,
@@ -3257,112 +3256,87 @@ private fun PhotoPreviewDialog(
     ) {
         Surface(
             modifier = Modifier.fillMaxSize(),
-            color = Color.Black,
-            contentColor = Color.White,
+            color = Color(0xFF121416),
+            contentColor = Color(0xFFF4F5F7),
         ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .statusBarsPadding()
-                    .navigationBarsPadding(),
+            BoxWithConstraints(
+                modifier = Modifier.fillMaxSize(),
+                contentAlignment = Alignment.Center,
             ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .heightIn(min = 56.dp)
-                        .padding(horizontal = TrackSpacing.x2),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Surface(
-                        modifier = Modifier
-                            .size(48.dp)
-                            .clip(TrackShape.control)
-                            .clickable(
-                                role = Role.Button,
-                                onClick = onDismiss,
-                            )
-                            .semantics { contentDescription = closeDescription },
-                        shape = TrackShape.control,
-                        color = Color.Transparent,
-                    ) {
-                        Box(contentAlignment = Alignment.Center) {
-                            TrackWriteLineIcon(
-                                icon = TrackWriteIcon.Close,
-                                tint = Color.White,
-                                modifier = Modifier.size(22.dp),
-                            )
-                        }
-                    }
-                    Spacer(Modifier.width(TrackSpacing.x2))
-                    Text(
-                        text = photo.displayName,
-                        modifier = Modifier.weight(1f),
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.SemiBold,
-                        color = Color.White,
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis,
-                    )
+                val density = LocalDensity.current
+                val targetWidthPx = with(density) { maxWidth.roundToPx() }.coerceAtLeast(1)
+                val targetHeightPx = with(density) { maxHeight.roundToPx() }.coerceAtLeast(1)
+                var loadState by remember(photo.uri, targetWidthPx, targetHeightPx) {
+                    mutableStateOf<PhotoPreviewLoadState>(PhotoPreviewLoadState.Loading)
                 }
-                BoxWithConstraints(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .weight(1f)
-                        .padding(TrackSpacing.x4),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    val density = LocalDensity.current
-                    val targetWidthPx = with(density) { maxWidth.roundToPx() }.coerceAtLeast(1)
-                    val targetHeightPx = with(density) { maxHeight.roundToPx() }.coerceAtLeast(1)
-                    var loadState by remember(photo.uri, targetWidthPx, targetHeightPx) {
-                        mutableStateOf<PhotoPreviewLoadState>(PhotoPreviewLoadState.Loading)
-                    }
-                    LaunchedEffect(photo.uri, targetWidthPx, targetHeightPx) {
-                        val bitmap = withContext(Dispatchers.IO) {
-                            try {
-                                decodeSampledImage(
-                                    resolver = resolver,
-                                    uri = photo.uri,
-                                    targetWidthPx = targetWidthPx,
-                                    targetHeightPx = targetHeightPx,
-                                )
-                            } catch (error: CancellationException) {
-                                throw error
-                            } catch (_: Exception) {
-                                null
-                            }
+                LaunchedEffect(photo.uri, targetWidthPx, targetHeightPx) {
+                    val bitmap = withContext(Dispatchers.IO) {
+                        try {
+                            decodeSampledImage(
+                                resolver = resolver,
+                                uri = photo.uri,
+                                targetWidthPx = targetWidthPx,
+                                targetHeightPx = targetHeightPx,
+                            )
+                        } catch (error: CancellationException) {
+                            throw error
+                        } catch (_: Exception) {
+                            null
                         }
-                        loadState = bitmap?.let(PhotoPreviewLoadState::Loaded)
-                            ?: PhotoPreviewLoadState.Failed
                     }
-                    when (val state = loadState) {
-                        PhotoPreviewLoadState.Loading -> TrackWriteLineIcon(
-                            icon = TrackWriteIcon.Photo,
-                            tint = Color.White.copy(alpha = TrackAlpha.subtle),
+                    loadState = bitmap?.let(PhotoPreviewLoadState::Loaded)
+                        ?: PhotoPreviewLoadState.Failed
+                }
+                when (val state = loadState) {
+                    PhotoPreviewLoadState.Loading -> TrackWriteLineIcon(
+                        icon = TrackWriteIcon.Photo,
+                        tint = Color(0xFFF4F5F7).copy(alpha = TrackAlpha.faint),
+                        modifier = Modifier.size(32.dp),
+                    )
+                    is PhotoPreviewLoadState.Loaded -> Image(
+                        bitmap = state.bitmap,
+                        contentDescription = photo.displayName,
+                        modifier = Modifier.fillMaxSize(),
+                        contentScale = ContentScale.Fit,
+                    )
+                    PhotoPreviewLoadState.Failed -> Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(TrackSpacing.x3),
+                    ) {
+                        TrackWriteLineIcon(
+                            icon = TrackWriteIcon.Warning,
+                            tint = Color(0xFFF4F5F7).copy(alpha = TrackAlpha.subtle),
                             modifier = Modifier.size(32.dp),
                         )
-                        is PhotoPreviewLoadState.Loaded -> Image(
-                            bitmap = state.bitmap,
-                            contentDescription = photo.displayName,
-                            modifier = Modifier.fillMaxSize(),
-                            contentScale = ContentScale.Fit,
+                        Text(
+                            text = stringResource(R.string.photo_preview_unavailable),
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = Color(0xFFF4F5F7).copy(alpha = TrackAlpha.subtle),
+                            textAlign = TextAlign.Center,
                         )
-                        PhotoPreviewLoadState.Failed -> Column(
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.spacedBy(TrackSpacing.x3),
-                        ) {
-                            TrackWriteLineIcon(
-                                icon = TrackWriteIcon.Warning,
-                                tint = Color.White.copy(alpha = TrackAlpha.subtle),
-                                modifier = Modifier.size(32.dp),
-                            )
-                            Text(
-                                text = stringResource(R.string.photo_preview_unavailable),
-                                style = MaterialTheme.typography.bodyLarge,
-                                color = Color.White.copy(alpha = TrackAlpha.subtle),
-                                textAlign = TextAlign.Center,
-                            )
-                        }
+                    }
+                }
+                Surface(
+                    modifier = Modifier
+                        .align(Alignment.TopStart)
+                        .statusBarsPadding()
+                        .padding(start = TrackSpacing.x3, top = TrackSpacing.x2)
+                        .size(48.dp)
+                        .clip(TrackShape.pill)
+                        .clickable(
+                            role = Role.Button,
+                            onClick = onDismiss,
+                        )
+                        .semantics { contentDescription = closeDescription },
+                    shape = TrackShape.pill,
+                    color = Color(0xFF292D31),
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        TrackWriteLineIcon(
+                            icon = TrackWriteIcon.Close,
+                            tint = Color(0xFFF4F5F7),
+                            modifier = Modifier.size(22.dp),
+                        )
                     }
                 }
             }
