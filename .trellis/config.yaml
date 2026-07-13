@@ -30,7 +30,7 @@ max_journal_lines: 2000
 #
 # Accepts: true / false / yes / no / 1 / 0 / on / off (case-insensitive).
 #
-session_auto_commit: false
+# session_auto_commit: true
 
 #-------------------------------------------------------------------------------
 # Task Lifecycle Hooks
@@ -106,5 +106,5 @@ channel:
 # (main agent spawns trellis-implement / trellis-check / trellis-research
 # sub-agents).
 #
-codex:
-  dispatch_mode: sub-agent  #inline  # or "sub-agent" to dispatch trellis-* sub-agents
+# codex:
+#   dispatch_mode: inline  # or "sub-agent" to dispatch trellis-* sub-agents

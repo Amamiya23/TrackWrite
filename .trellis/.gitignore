@@ -7,10 +7,6 @@
 # Session/window scoped runtime state
 .runtime/
 
-# Session/task memory is local by default for this repo
-tasks/
-workspace/
-
 # Ralph Loop state file
 .ralph-state.json
 
@@ -27,9 +23,6 @@ workspace/
 
 # Update backup directories
 .backup-*
-
-# Template hash bookkeeping
-.template-hashes.json
 
 # Conflict resolution temp files
 *.new
