@@ -1,9 +1,11 @@
 package com.trackwrite.app.media
 
 import android.content.ContentResolver
+import android.content.ContentValues
 import android.content.Context
 import android.graphics.BitmapFactory
 import android.net.Uri
+import android.os.Environment
 import android.provider.MediaStore
 import android.provider.OpenableColumns
 import androidx.documentfile.provider.DocumentFile
@@ -35,6 +37,7 @@ private const val MIME_TYPE_ANY_IMAGE = "image/*"
 private const val MIME_TYPE_OCTET_STREAM = "application/octet-stream"
 private const val GPS_COORDINATE_VERIFY_TOLERANCE = 0.000001
 private const val GPS_ALTITUDE_VERIFY_TOLERANCE = 0.001
+private val DEFAULT_EXPORT_RELATIVE_PATH = "${Environment.DIRECTORY_PICTURES}/TrackWrite"
 
 private const val GPS_EXIF_VERSION_2_3_0_0 = "2,3,0,0"
 
@@ -116,38 +119,79 @@ class PhotoGeotagging(private val context: Context) {
         val folder = DocumentFile.fromTreeUri(context, targetFolderUri)
             ?: return listOf(PhotoWriteOutcome("Export folder", PhotoWriteOutcome.Status.Failed, "Export folder is not available."))
 
-        return results.mapIndexed { index, result ->
-            val position = result.selectedPosition
-            val writableMimeType = result.photo.writableGpsMimeType()
-            val outcome = when {
-                position == null -> {
-                    PhotoWriteOutcome(result.photo.displayName, PhotoWriteOutcome.Status.Skipped, "no location")
-                }
-                writableMimeType == null -> {
-                    PhotoWriteOutcome(
-                        result.photo.displayName,
-                        PhotoWriteOutcome.Status.Failed,
-                        context.getString(R.string.photo_write_unsupported_format),
-                    )
-                }
-                else -> runCatchingStorage {
-                    val output = folder.createFile(writableMimeType, result.photo.displayName)
-                        ?: error("Could not create output file.")
-                    val sourceTemp = copyUriToTemp(result.photo.uri, writableMimeType, "trackwrite-copy-")
-                    try {
-                        writeUriFromFile(output.uri, sourceTemp)
-                    } finally {
-                        sourceTemp.delete()
-                    }
-                    writeGps(output.uri, position, writableMimeType)
-                    PhotoWriteOutcome(result.photo.displayName, PhotoWriteOutcome.Status.Written)
-                }.getOrElse { error ->
-                    PhotoWriteOutcome(result.photo.displayName, PhotoWriteOutcome.Status.Failed, error.message ?: "export failed")
-                }
+        return exportCopiesToUris(
+            results = results,
+            onProgress = onProgress,
+            createOutput = { result, mimeType ->
+                folder.createFile(mimeType, result.photo.displayName)?.uri
+                    ?: error("Could not create output file.")
+            },
+        )
+    }
+
+    fun exportCopiesToDefaultFolder(
+        results: List<PhotoMatchResult>,
+        onProgress: (processed: Int) -> Unit = {},
+    ): List<PhotoWriteOutcome> = exportCopiesToUris(
+        results = results,
+        onProgress = onProgress,
+        createOutput = { result, mimeType ->
+            val values = ContentValues().apply {
+                put(MediaStore.Images.Media.DISPLAY_NAME, result.photo.displayName)
+                put(MediaStore.Images.Media.MIME_TYPE, mimeType)
+                put(MediaStore.Images.Media.RELATIVE_PATH, DEFAULT_EXPORT_RELATIVE_PATH)
+                put(MediaStore.Images.Media.IS_PENDING, 1)
             }
-            onProgress(index + 1)
-            outcome
+            resolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values)
+                ?: error("Could not create output file.")
+        },
+        publishOutput = { outputUri ->
+            check(
+                resolver.update(
+                    outputUri,
+                    ContentValues().apply { put(MediaStore.Images.Media.IS_PENDING, 0) },
+                    null,
+                    null,
+                ) == 1,
+            ) { "Could not publish output file." }
+        },
+    )
+
+    private fun exportCopiesToUris(
+        results: List<PhotoMatchResult>,
+        onProgress: (processed: Int) -> Unit,
+        createOutput: (PhotoMatchResult, mimeType: String) -> Uri,
+        publishOutput: (Uri) -> Unit = {},
+    ): List<PhotoWriteOutcome> = results.mapIndexed { index, result ->
+        val position = result.selectedPosition
+        val writableMimeType = result.photo.writableGpsMimeType()
+        val outcome = when {
+            position == null -> {
+                PhotoWriteOutcome(result.photo.displayName, PhotoWriteOutcome.Status.Skipped, "no location")
+            }
+            writableMimeType == null -> {
+                PhotoWriteOutcome(
+                    result.photo.displayName,
+                    PhotoWriteOutcome.Status.Failed,
+                    context.getString(R.string.photo_write_unsupported_format),
+                )
+            }
+            else -> runCatchingStorage {
+                val outputUri = createOutput(result, writableMimeType)
+                try {
+                    writeCopy(result.photo.uri, outputUri, position, writableMimeType)
+                    publishOutput(outputUri)
+                } catch (error: Throwable) {
+                    runCatching { resolver.delete(outputUri, null, null) }
+                    throw error
+                }
+                PhotoWriteOutcome(result.photo.displayName, PhotoWriteOutcome.Status.Written)
+            }.getOrElse { error ->
+                PhotoWriteOutcome(result.photo.displayName, PhotoWriteOutcome.Status.Failed, error.message ?: "export failed")
+            }
         }
+        onProgress(index + 1)
+        outcome
     }
 
     fun writeInPlace(
@@ -185,6 +229,21 @@ class PhotoGeotagging(private val context: Context) {
 
     private fun PhotoCandidate.writableGpsMimeType(): String? =
         gpsWritableMimeType(resolver.getType(uri), displayName)
+
+    private fun writeCopy(
+        sourceUri: Uri,
+        outputUri: Uri,
+        position: GeoPoint,
+        mimeType: String,
+    ) {
+        val sourceTemp = copyUriToTemp(sourceUri, mimeType, "trackwrite-copy-")
+        try {
+            writeUriFromFile(outputUri, sourceTemp)
+        } finally {
+            sourceTemp.delete()
+        }
+        writeGps(outputUri, position, mimeType)
+    }
 
     private fun readCapturedAt(uri: Uri): Instant? =
         runCatching {

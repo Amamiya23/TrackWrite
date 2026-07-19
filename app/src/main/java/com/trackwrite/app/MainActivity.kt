@@ -191,7 +191,6 @@ class MainActivity : ComponentActivity() {
     private var selectedPhotos: List<PhotoCandidate> = emptyList()
     private var matchResults: List<PhotoMatchResult> = emptyList()
     private var pendingManualPhotoIndex: Int? = null
-    private var pendingExportMode: ExportFolderMode? = null
     private var pendingGpxExportTrackId: String? = null
     private var pendingMediaLocationAction: (() -> Unit)? = null
     private var pendingRecordingPermissionAction: (() -> Unit)? = null
@@ -255,26 +254,13 @@ class MainActivity : ComponentActivity() {
     private val exportFolderLauncher = registerForActivityResult(
         ActivityResultContracts.OpenDocumentTree(),
     ) { uri ->
-        val mode = pendingExportMode
-        pendingExportMode = null
-        if (uri != null && mode != null) {
+        if (uri != null) {
             persistTreePermission(uri)
-            when (mode) {
-                ExportFolderMode.SaveDefault -> {
-                    settingsStore.setDefaultExportFolderUri(uri.toString())
-                    uiState = uiState.copy(
-                        settings = settingsStore.current(),
-                        logMessage = getString(R.string.export_folder_saved),
-                    )
-                }
-                ExportFolderMode.WriteCopies -> {
-                    settingsStore.setDefaultExportFolderUri(uri.toString())
-                    uiState = uiState.copy(settings = settingsStore.current())
-                    writeCopies(uri)
-                }
-            }
-        } else if (mode == ExportFolderMode.WriteCopies) {
-            log(getString(R.string.export_folder_required))
+            settingsStore.setDefaultExportFolderUri(uri.toString())
+            uiState = uiState.copy(
+                settings = settingsStore.current(),
+                logMessage = getString(R.string.export_folder_saved),
+            )
         }
     }
 
@@ -370,7 +356,6 @@ class MainActivity : ComponentActivity() {
                         persistSettings(newSettings)
                     },
                     onChooseExportFolder = {
-                        pendingExportMode = ExportFolderMode.SaveDefault
                         exportFolderLauncher.launch(null)
                     },
                     onCheckForUpdates = { checkForUpdates() },
@@ -677,8 +662,13 @@ class MainActivity : ComponentActivity() {
             writeCopies(folderUri)
             return
         }
-        pendingExportMode = ExportFolderMode.WriteCopies
-        exportFolderLauncher.launch(null)
+        if (folderUri != null) {
+            settingsStore.setDefaultExportFolderUri(null)
+            uiState = uiState.copy(settings = settingsStore.current())
+        }
+        writePhotos(BulkOperation.WritingCopies, WriteMode.Copies) { results, onProgress ->
+            geotagging.exportCopiesToDefaultFolder(results, onProgress)
+        }
     }
 
     private fun writeCopies(uri: Uri) {
@@ -881,11 +871,6 @@ private data class WriteResultState(
 private enum class MainTab {
     Record,
     Match,
-}
-
-private enum class ExportFolderMode {
-    SaveDefault,
-    WriteCopies,
 }
 
 private enum class WriteMode {
@@ -3805,11 +3790,16 @@ private fun SettingsScreen(
                         onSelectCopies = { onSettingsChanged(settings.copy(preferExportCopies = true)) },
                         onSelectOriginals = { onSettingsChanged(settings.copy(preferExportCopies = false)) },
                     )
-                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant, modifier = Modifier.padding(horizontal = 16.dp))
-                    ExportFolderRow(
-                        folderUri = settings.defaultExportFolderUri,
-                        onChooseExportFolder = onChooseExportFolder,
-                    )
+                    if (settings.preferExportCopies) {
+                        HorizontalDivider(
+                            color = MaterialTheme.colorScheme.outlineVariant,
+                            modifier = Modifier.padding(horizontal = 16.dp),
+                        )
+                        ExportFolderRow(
+                            folderUri = settings.defaultExportFolderUri,
+                            onChooseExportFolder = onChooseExportFolder,
+                        )
+                    }
                 }
             }
         }
@@ -4283,7 +4273,7 @@ private fun ExportFolderRow(
     onChooseExportFolder: () -> Unit,
 ) {
     val folderLabel = remember(folderUri) { folderUri?.let(::displayTreeUri) }
-    val subtitle = folderLabel ?: stringResource(R.string.export_folder_unconfigured)
+    val subtitle = folderLabel ?: stringResource(R.string.default_export_folder_path)
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -4302,7 +4292,7 @@ private fun ExportFolderRow(
             Text(
                 text = subtitle,
                 style = MaterialTheme.typography.bodyMedium,
-                color = if (folderLabel == null) MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.onSurfaceVariant,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )

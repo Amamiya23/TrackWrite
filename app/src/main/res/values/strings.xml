@@ -178,14 +178,11 @@
     <string name="export_settings">Export</string>
     <string name="prefer_export_copies">Prefer exported copies</string>
     <string name="write_copies_default_desc">Create geotagged copies in the default export folder.</string>
-    <string name="write_originals_default_desc">Modify source files in place. Use Write copies if you want separate files.</string>
+    <string name="write_originals_default_desc">Writing directly to source files may damage originals on some devices. Test it first.</string>
     <string name="default_export_folder">Default export-copy folder</string>
-    <string name="export_folder_unconfigured">No folder configured. You will choose one when writing copies.</string>
-    <string name="export_folder_configured">Folder configured.</string>
+    <string name="default_export_folder_path">Pictures/TrackWrite</string>
     <string name="choose_folder">Choose folder</string>
     <string name="export_folder_saved">Export folder saved.</string>
-    <string name="export_folder_cleared">Export folder cleared.</string>
-    <string name="export_folder_required">Choose an export folder to write copies.</string>
     <string name="about">About</string>
     <string name="check_for_updates">Check for updates</string>
     <string name="open_release_page">Go to download</string>

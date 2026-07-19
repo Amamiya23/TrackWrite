@@ -178,14 +178,11 @@
     <string name="export_settings">导出</string>
     <string name="prefer_export_copies">优先导出副本</string>
     <string name="write_copies_default_desc">在默认导出文件夹中创建带位置的副本。</string>
-    <string name="write_originals_default_desc">直接修改源文件。如需保留独立文件，请使用写入副本。</string>
+    <string name="write_originals_default_desc">直接修改源文件在部分机型上可能损坏原图，请先做测试。</string>
     <string name="default_export_folder">默认副本导出文件夹</string>
-    <string name="export_folder_unconfigured">尚未设置文件夹。写入副本时会要求选择。</string>
-    <string name="export_folder_configured">已设置文件夹。</string>
+    <string name="default_export_folder_path">Pictures/TrackWrite</string>
     <string name="choose_folder">选择文件夹</string>
     <string name="export_folder_saved">导出文件夹已保存。</string>
-    <string name="export_folder_cleared">导出文件夹已清除。</string>
-    <string name="export_folder_required">请选择导出文件夹以写入副本。</string>
     <string name="about">关于</string>
     <string name="check_for_updates">检查更新</string>
     <string name="open_release_page">前往下载</string>
