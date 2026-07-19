@@ -663,7 +663,9 @@ class MainActivity : ComponentActivity() {
             return
         }
         if (uiState.settings.preferExportCopies) {
-            writeCopiesUsingDefaultFolder()
+            requestMediaLocationPermissionThen {
+                writeCopiesUsingDefaultFolder()
+            }
         } else {
             uiState = uiState.copy(showWriteDialog = true)
         }
@@ -4648,11 +4650,14 @@ private fun WriteResultSheet(
                     )
                 }
             }
-            PrimaryActionButton(
-                text = stringResource(R.string.close),
-                onClick = onDismiss,
+            Row(
                 modifier = Modifier.fillMaxWidth(),
-            )
+                horizontalArrangement = Arrangement.End,
+            ) {
+                TextButton(onClick = onDismiss) {
+                    Text(stringResource(R.string.close))
+                }
+            }
             Spacer(Modifier.height(12.dp))
         }
     }
